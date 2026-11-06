@@ -2,10 +2,18 @@
 // copy of the plan. It reads the plan from the document for each frame, and it changes the plan
 // only through transactions of the document.
 
+import {
+  chimneyOutline,
+  chimneysThrough,
+  defaultWallHeight,
+  stairRise,
+  stairShape,
+  storyBelow,
+} from "../model/building";
 import { dimensionShape, openingShape, wallOutline } from "../model/drawing";
+import { roofLines } from "../model/roof";
 import {
   add,
-  centroid,
   clamp,
   closestOnSegment,
   distance,
@@ -17,8 +25,10 @@ import {
 } from "../model/geometry";
 import type { PlanDocument } from "../model/history";
 import {
+  addChimney,
   addDimension,
   addOpening,
+  addStair,
   addVertex,
   addWall,
   copyItems,
@@ -37,10 +47,11 @@ import {
   splitWall,
   wallEnds,
   wallMoveTargets,
+  WALL_DEFAULTS,
   type MoveOrigin,
 } from "../model/plan";
-import { findRooms } from "../model/rooms";
-import type { Clip, Id, Item, ItemKind, OpeningKind, Plan, Point } from "../model/types";
+import { findRooms, pointInPolygon, roomLabel } from "../model/rooms";
+import type { Chimney, Clip, Id, Item, ItemKind, OpeningKind, Plan, Point } from "../model/types";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const GRID_STEP = 0.05;
@@ -56,7 +67,16 @@ const SHIFT_ANGLE_STEP = 45;
 /** The height in pixels of the strip under the tool palette, which `fit` keeps free. */
 const FIT_TOP_INSET = 56;
 
-export type Tool = "select" | "wall" | "door" | "window" | "dimension" | "calibrate" | "rectify";
+export type Tool =
+  | "select"
+  | "wall"
+  | "door"
+  | "window"
+  | "dimension"
+  | "stair"
+  | "chimney"
+  | "calibrate"
+  | "rectify";
 export type Selection = Item[];
 
 /** A point that the pointer snaps to. It can be an existing vertex or a point on a wall. */
@@ -68,7 +88,7 @@ interface Snap {
 
 type Drag =
   | { kind: "pan"; startScreen: Point; startOffset: Point }
-  | { kind: "marquee"; start: Point; end: Point; base: Item[] }
+  | { kind: "marquee"; start: Point; end: Point; base: Item[]; room: string | null }
   | { kind: "vertex"; id: Id; target: Snap | null }
   | { kind: "wall"; id: Id; startWorld: Point; origin: [Point, Point] }
   | { kind: "opening"; id: Id }
@@ -180,6 +200,8 @@ export class Editor2D {
       ...plan.walls.map((w) => ({ kind: "wall" as const, id: w.id })),
       ...plan.openings.map((o) => ({ kind: "opening" as const, id: o.id })),
       ...plan.dimensions.map((d) => ({ kind: "dimension" as const, id: d.id })),
+      ...plan.stairs.map((s) => ({ kind: "stair" as const, id: s.id })),
+      ...plan.chimneys.map((c) => ({ kind: "chimney" as const, id: c.id })),
       ...plan.vertices.map((v) => ({ kind: "vertex" as const, id: v.id })),
     ]);
   }
@@ -224,7 +246,12 @@ export class Editor2D {
   paste(): void {
     const clip = this.clipboard;
     if (!clip) return;
-    const ends = [...clip.vertices, ...clip.dimensions.flatMap((d) => [d.a, d.b])];
+    const ends = [
+      ...clip.vertices,
+      ...clip.dimensions.flatMap((d) => [d.a, d.b]),
+      ...clip.stairs.flatMap((s) => [s.a, s.b]),
+      ...clip.chimneys,
+    ];
     if (ends.length === 0) return;
     const center = scale(ends.reduce(add, { x: 0, y: 0 }), 1 / ends.length);
     const delta = this.cursor
@@ -356,8 +383,16 @@ export class Editor2D {
         this.placeOpening(this.currentTool, world);
         break;
       case "dimension":
+      case "stair":
         this.addMeasurePoint(world, e);
         break;
+      case "chimney": {
+        const point = this.snap(world, e).point;
+        let id: Id = "";
+        this.doc.edit((plan) => (id = addChimney(plan, point).id));
+        this.select({ kind: "chimney", id });
+        break;
+      }
       case "calibrate":
         this.calibration.push(world);
         if (this.calibration.length === 2) {
@@ -394,7 +429,9 @@ export class Editor2D {
       }
       const base = e.shiftKey ? this.items : [];
       if (!e.shiftKey) this.select(null);
-      this.drag = { kind: "marquee", start: world, end: world, base };
+      // A click without a drag on a room selects the room. A drag selects with a box.
+      const room = findRooms(this.doc.plan).find((r) => pointInPolygon(world, r.polygon));
+      this.drag = { kind: "marquee", start: world, end: world, base, room: room?.key ?? null };
       return;
     }
     if (e.shiftKey) {
@@ -405,7 +442,7 @@ export class Editor2D {
     if (!this.items.some((i) => sameItem(i, hit))) this.select(hit);
 
     this.doc.begin();
-    if (this.items.length > 1) {
+    if (this.items.length > 1 || hit.kind === "stair" || hit.kind === "chimney") {
       this.drag = {
         kind: "move",
         startWorld: world,
@@ -435,7 +472,7 @@ export class Editor2D {
     const world = this.toWorld(e);
     const drag = this.drag;
     if (!drag) {
-      const snapping = this.currentTool === "wall" || this.currentTool === "dimension";
+      const snapping = ["wall", "dimension", "stair", "chimney"].includes(this.currentTool);
       this.cursor = snapping ? this.snap(world, e) : { point: world };
       this.render();
       return;
@@ -521,6 +558,12 @@ export class Editor2D {
     this.drag = null;
     if (!drag || drag.kind === "pan") return;
     if (drag.kind === "marquee") {
+      const pixels = distance(drag.start, drag.end) * this.zoom;
+      if (pixels < 4 && drag.room) {
+        const room: Item = { kind: "room", id: drag.room };
+        this.select(drag.base.length > 0 ? [...drag.base, room] : room);
+        return;
+      }
       this.render();
       return;
     }
@@ -570,6 +613,12 @@ export class Editor2D {
         items.push({ kind: "dimension", id: dimension.id });
       }
     }
+    for (const stair of plan.stairs) {
+      if (inside(stair.a) && inside(stair.b)) items.push({ kind: "stair", id: stair.id });
+    }
+    for (const chimney of plan.chimneys) {
+      if (inside(chimney)) items.push({ kind: "chimney", id: chimney.id });
+    }
     // A vertex of a selected wall moves with the wall, so only lone vertices go in.
     for (const vertex of plan.vertices) {
       if (!inside(vertex)) continue;
@@ -594,7 +643,8 @@ export class Editor2D {
     const start =
       this.currentTool === "wall"
         ? this.chain?.point
-        : this.currentTool === "dimension" && this.measure.length === 1
+        : (this.currentTool === "dimension" || this.currentTool === "stair") &&
+            this.measure.length === 1
           ? this.measure[0]
           : undefined;
 
@@ -679,7 +729,10 @@ export class Editor2D {
     this.doc.edit((plan) => {
       const a = this.resolve(plan, start);
       end = this.resolve(plan, target);
-      addWall(plan, a, end);
+      addWall(plan, a, end, {
+        thickness: WALL_DEFAULTS.thickness,
+        height: defaultWallHeight(plan),
+      });
     });
     this.chain = target.vertexId || target.wallId ? null : { point: target.point, vertexId: end };
     this.render();
@@ -700,6 +753,15 @@ export class Editor2D {
       const point = this.snap(world, e).point;
       if (this.measure.length === 1 && distance(this.measure[0], point) < 1e-6) return;
       this.measure.push(point);
+      if (this.currentTool === "stair" && this.measure.length === 2) {
+        // The stair tool needs only the start and the end of the run.
+        const [a, b] = this.measure;
+        let id: Id = "";
+        this.doc.edit((plan) => (id = addStair(plan, a, b).id));
+        this.measure = [];
+        this.select({ kind: "stair", id });
+        return;
+      }
       this.render();
       return;
     }
@@ -750,9 +812,13 @@ export class Editor2D {
     this.content.replaceChildren();
     this.renderGrid();
     this.renderRooms(plan);
+    this.renderStoryBelow();
     this.renderWalls(plan);
     this.renderOpenings(plan);
+    this.renderStairs(plan);
+    this.renderChimneys(plan);
     this.renderDimensions(plan);
+    this.renderRoof();
     if (this.currentTool === "select" || this.currentTool === "wall") this.renderVertices(plan);
     for (const draw of this.overlays.values()) {
       draw(svg("g", { class: "extra" }, this.content), this.zoom);
@@ -798,9 +864,18 @@ export class Editor2D {
   private renderRooms(plan: Plan): void {
     const group = svg("g", { class: "rooms" }, this.content);
     for (const room of findRooms(plan)) {
-      svg("polygon", { points: points(room.polygon) }, group);
-      const center = centroid(room.polygon);
-      this.label(group, center, `${room.area.toFixed(2)} m²`, "room-label");
+      const selected = this.isSelected("room", room.key);
+      svg("polygon", { points: points(room.polygon), class: selected ? "selected" : "" }, group);
+      const lines = roomLabel(room);
+      lines.forEach((text, i) => {
+        // The lines stack around the label point. The name is bold.
+        const at = {
+          x: room.labelAt.x,
+          y: room.labelAt.y + ((i - (lines.length - 1) / 2) * 15) / this.zoom,
+        };
+        const element = this.label(group, at, text, "room-label");
+        if (room.info?.name && i === 0) element.classList.add("name");
+      });
     }
   }
 
@@ -852,6 +927,97 @@ export class Editor2D {
         const [start, end] = shape.glass;
         svg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "glass" }, element);
       }
+    }
+  }
+
+  /**
+   * The walls of the story below, and its stairs that come up into this story, in a light color.
+   * They help to put the walls of this story on top of the walls below.
+   */
+  private renderStoryBelow(): void {
+    const building = this.doc.building;
+    const story = this.doc.plan;
+    const below = storyBelow(building, story);
+    if (!below) return;
+    const group = svg("g", { class: "below" }, this.content);
+    for (const wall of below.walls) {
+      const outline = wallOutline(below, wall);
+      if (outline.length > 0) svg("polygon", { points: points(outline) }, group);
+    }
+    for (const stair of below.stairs) {
+      const shape = stairShape(stair, stairRise(building, below));
+      svg("polygon", { points: points(shape.outline), class: "stair-hole" }, group);
+    }
+  }
+
+  /** The lines of the roof, as dashed lines on the story under the roof. */
+  private renderRoof(): void {
+    const building = this.doc.building;
+    if (building.roof?.storyId !== this.doc.plan.id) return;
+    const group = svg("g", { class: "roof-lines" }, this.content);
+    for (const [p, q] of roofLines(building)) {
+      svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y }, group);
+    }
+  }
+
+  private renderStairs(plan: Plan): void {
+    const group = svg("g", { class: "stairs" }, this.content);
+    const rise = stairRise(this.doc.building, this.doc.plan);
+    for (const stair of plan.stairs) {
+      const shape = stairShape(stair, rise);
+      const element = svg(
+        "g",
+        {
+          class: this.isSelected("stair", stair.id) ? "stair selected" : "stair",
+          "data-kind": "stair",
+          "data-id": stair.id,
+        },
+        group,
+      );
+      this.drawStair(element, shape, stair.width);
+    }
+  }
+
+  private drawStair(element: Element, shape: ReturnType<typeof stairShape>, width: number): void {
+    svg("polygon", { points: points(shape.outline), class: "outline" }, element);
+    shape.steps.forEach((step, i) => {
+      const className = i === shape.landing ? "step landing" : "step";
+      svg("polygon", { points: points(step), class: className }, element);
+    });
+    svg("polyline", { points: points(shape.arrow), class: "walk" }, element);
+    const start = shape.arrow[0];
+    svg("circle", { cx: start.x, cy: start.y, r: 3 / this.zoom, class: "walk-start" }, element);
+    const [from, to] = shape.arrow.slice(-2);
+    // The head of the arrow: two short lines at the top end.
+    const length = distance(from, to);
+    if (length === 0) return;
+    const dir = scale(sub(to, from), 1 / length);
+    const size = Math.min(width / 3, 0.25);
+    const back = sub(to, scale(dir, size));
+    const side = scale(perpendicular(dir), size / 1.6);
+    for (const tip of [add(back, side), sub(back, side)]) {
+      svg("line", { x1: tip.x, y1: tip.y, x2: to.x, y2: to.y, class: "walk" }, element);
+    }
+  }
+
+  private renderChimneys(plan: Plan): void {
+    const group = svg("g", { class: "chimneys" }, this.content);
+    const draw = (chimney: Chimney, attributes: Attributes) => {
+      const element = svg("g", attributes, group);
+      const [a, b, c, d] = chimneyOutline(chimney);
+      svg("polygon", { points: points([a, b, c, d]), class: "outline" }, element);
+      svg("line", { x1: a.x, y1: a.y, x2: c.x, y2: c.y, class: "cross" }, element);
+      svg("line", { x1: b.x, y1: b.y, x2: d.x, y2: d.y, class: "cross" }, element);
+    };
+    for (const { chimney } of chimneysThrough(this.doc.building, this.doc.plan)) {
+      draw(chimney, { class: "chimney through" });
+    }
+    for (const chimney of plan.chimneys) {
+      draw(chimney, {
+        class: this.isSelected("chimney", chimney.id) ? "chimney selected" : "chimney",
+        "data-kind": "chimney",
+        "data-id": chimney.id,
+      });
     }
   }
 
@@ -956,6 +1122,24 @@ export class Editor2D {
         const offset = cursor ? this.measureOffset(a, b, cursor.point, false) : 0;
         const preview = svg("g", { class: "dimension-line preview-dimension" }, group);
         this.drawDimension(preview, dimensionShape({ id: "", a, b, offset }));
+      }
+    }
+    if (this.currentTool === "stair" || this.currentTool === "chimney") {
+      const cursor = this.cursor;
+      if (cursor) marker(cursor.point, cursor.vertexId ? "on-vertex" : "");
+      const [a] = this.measure;
+      if (a && cursor && this.currentTool === "stair") {
+        const shape = stairShape(
+          { id: "", a, b: cursor.point, width: 1, kind: "straight", turn: 1, run2: 1 },
+          stairRise(this.doc.building, this.doc.plan),
+        );
+        this.drawStair(svg("g", { class: "stair preview-stair" }, group), shape, 1);
+        this.label(
+          group,
+          scale(add(a, cursor.point), 0.5),
+          `${shape.count} steps · ${(shape.stepHeight * 100).toFixed(1)} cm`,
+          "dimension",
+        );
       }
     }
     if (this.currentTool === "rectify") {

@@ -21,8 +21,17 @@ _Grundriss_ is the German word for a floor plan.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
    the selection.
-8. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
-   model.
+8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
+   the stories. The walls of the story below show as dashed lines, so you can draw on top of
+   them. Each story has its own background.
+9. Select **Stair** and click the bottom and the top of the run. The stair goes up to the next
+   story. The panel changes it to an L stair or a U stair with a landing. Select **Chimney**
+   and click where it goes.
+10. Click in a room to give it a name and its own clear height.
+11. Without a selection, the panel shows the story, the north direction, and the roof. Drag the
+    compass at the top right to turn north.
+12. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
+    model.
 
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |
@@ -48,10 +57,10 @@ The wall tool snaps the direction of a wall to multiples of 15° when it is near
 
 A plan is a `.grundriss` file. It is a ZIP file that contains:
 
-- `plan.json`: the plan.
-- The background image as a separate file.
-- `exports/`: a PDF, an SVG, a DXF, and a glTF model of the plan, so that other programs can use
-  them without Grundriss.
+- `plan.json`: the building with its stories.
+- `backgrounds/`: the background image of each story as a separate file.
+- `exports/`: a PDF with a page for each story, an SVG for each story, a DXF, and a glTF model,
+  so that other programs can use them without Grundriss.
 
 The app also opens and saves a plan as one `.json` file. That file contains the background image
 as a data URL.

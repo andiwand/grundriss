@@ -3,17 +3,22 @@
 // the JSON file with a data URL. This module has no DOM, so the tests can run in Node.
 //
 // The layout of a package:
-//   plan.json          The plan. `background.image` is the path of the image in the package.
-//   background.<ext>   The background image, if the plan has one.
-//   exports/...        Exports for other programs, for example plan.pdf or model.glb.
+//   plan.json                      The building. The `background.image` of each story is the
+//                                  path of the image in the package.
+//   backgrounds/<storyId>.<ext>    The background image of each story that has one.
+//   exports/...                    Exports for other programs, for example plan.pdf.
+//
+// Old packages (version 1) had one plan with the image at "background.<ext>". readPackage reads
+// them too.
 
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
-import { parsePlan, serializePlan } from "../model/file";
-import type { Plan } from "../model/types";
+import { parseBuilding, serializeBuilding } from "../model/file";
+import type { Building } from "../model/types";
 
 export const PACKAGE_EXTENSION = ".grundriss";
 export const PLAN_ENTRY = "plan.json";
 export const EXPORTS_FOLDER = "exports/";
+export const BACKGROUNDS_FOLDER = "backgrounds/";
 
 const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -63,31 +68,57 @@ export function encodeDataUrl(mime: string, bytes: Uint8Array): string {
 }
 
 /**
- * Writes the plan and the exports as a package. The keys of `exports` are file names in the
+ * Writes the building and the exports as a package. The keys of `exports` are file names in the
  * folder "exports/". A string value goes into the package as UTF-8.
  */
 export function writePackage(
-  plan: Plan,
+  building: Building,
   exports: Record<string, Uint8Array | string> = {},
 ): Uint8Array {
   const files: Zippable = {};
-  let stored = plan;
-  if (plan.background) {
-    const { mime, bytes } = decodeDataUrl(plan.background.image);
-    const name = `background.${EXTENSIONS[mime] ?? "bin"}`;
+  const stories = building.stories.map((story) => {
+    if (!story.background) return story;
+    const { mime, bytes } = decodeDataUrl(story.background.image);
+    const name = `${BACKGROUNDS_FOLDER}${story.id}.${EXTENSIONS[mime] ?? "bin"}`;
     // Images are compressed already, so the package stores them without compression.
     files[name] = [bytes, { level: 0 }];
-    stored = { ...plan, background: { ...plan.background, image: name } };
-  }
-  files[PLAN_ENTRY] = strToU8(serializePlan(stored));
+    return { ...story, background: { ...story.background, image: name } };
+  });
+  files[PLAN_ENTRY] = strToU8(serializeBuilding({ ...building, stories }));
   for (const [name, content] of Object.entries(exports)) {
     files[EXPORTS_FOLDER + name] = typeof content === "string" ? strToU8(content) : content;
   }
   return zipSync(files, { level: 6 });
 }
 
-/** Reads a plan from a package. It throws an Error with a message for the user. */
-export function readPackage(bytes: Uint8Array): Plan {
+type Raw = Record<string, unknown>;
+const isObject = (value: unknown): value is Raw =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The MIME type of an image by the extension of its name. */
+function mimeOf(name: string): string {
+  const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+  return (
+    Object.entries(EXTENSIONS).find(([, value]) => value === extension)?.[0] ??
+    (extension === "jpeg" ? "image/jpeg" : "application/octet-stream")
+  );
+}
+
+/** Puts the image of the package back into the background as a data URL. */
+function inlineImage(owner: Raw, files: Record<string, Uint8Array>): void {
+  const background = owner.background;
+  if (!isObject(background) || typeof background.image !== "string") return;
+  const name = background.image;
+  if (name.startsWith("data:")) return;
+  const image = files[name];
+  if (!image) {
+    throw new Error(`The package is damaged: the background image "${name}" is missing.`);
+  }
+  background.image = encodeDataUrl(mimeOf(name), image);
+}
+
+/** Reads a building from a package. It throws an Error with a message for the user. */
+export function readPackage(bytes: Uint8Array): Building {
   let files: Record<string, Uint8Array>;
   try {
     files = unzipSync(bytes);
@@ -96,25 +127,25 @@ export function readPackage(bytes: Uint8Array): Plan {
   }
   const entry = files[PLAN_ENTRY];
   if (!entry) throw new Error(`The package is damaged: it has no "${PLAN_ENTRY}".`);
-  const plan = parsePlan(strFromU8(entry));
-  if (plan.background) {
-    const name = plan.background.image;
-    const image = files[name];
-    if (!image) {
-      throw new Error(`The package is damaged: the background image "${name}" is missing.`);
-    }
-    const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-    const mime =
-      Object.entries(EXTENSIONS).find(([, value]) => value === extension)?.[0] ??
-      (extension === "jpeg" ? "image/jpeg" : "application/octet-stream");
-    plan.background.image = encodeDataUrl(mime, image);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(strFromU8(entry));
+  } catch {
+    throw new Error(`The package is damaged: "${PLAN_ENTRY}" is not valid JSON.`);
   }
-  return plan;
+  if (isObject(raw)) {
+    // Version 1 has the background at the top level. Version 2 has one in each story.
+    inlineImage(raw, files);
+    if (Array.isArray(raw.stories)) {
+      for (const story of raw.stories) if (isObject(story)) inlineImage(story, files);
+    }
+  }
+  return parseBuilding(JSON.stringify(raw));
 }
 
-/** Reads a plan from the bytes of a package or of a JSON file. */
-export function readPlanFile(bytes: Uint8Array): Plan {
-  return isPackage(bytes) ? readPackage(bytes) : parsePlan(strFromU8(bytes));
+/** Reads a building from the bytes of a package or of a JSON file. */
+export function readBuildingFile(bytes: Uint8Array): Building {
+  return isPackage(bytes) ? readPackage(bytes) : parseBuilding(strFromU8(bytes));
 }
 
 /** The format of a plan file by its name: a package, or else JSON. */

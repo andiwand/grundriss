@@ -13,7 +13,14 @@ the browser and has no server. It reads and writes plans as JSON files.
 
 One document model is the single source of truth. The 2D editor and the 3D view only show it.
 
-- `PlanDocument` (`src/model/history.ts`) holds the plan and the undo history.
+- A `Building` has stories, one roof, and the north direction. A `Story` is a `Plan` (the floor
+  plan of one story) with an id, a name, an elevation, and a height. Stairs and chimneys belong
+  to the story where they start. A stair goes up to the next story. A chimney goes up through
+  the stories above.
+
+- `PlanDocument` (`src/model/history.ts`) holds the building, the active story, and the undo
+  history. `doc.plan` is the active story. `doc.edit` changes the active story, and
+  `doc.editBuilding` changes the building. The choice of the active story is not in the history.
 - Each change goes through a transaction: `doc.edit(fn)` for one change, or `doc.begin()`,
   `doc.update(fn)`, and `doc.commit()` for a drag. The history keeps snapshots of the plan, so
   an undo is always correct. A transaction copies the plan, so do not keep a reference to an
@@ -25,7 +32,10 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - Dimension lines (`Dimension`) have their own two points. They do not follow the walls.
 - The selection of the editor is a list of `Item` (a kind and an id). The functions in
   `src/model/plan.ts` copy, paste, move, and remove items.
-- Rooms are not stored. `findRooms` calculates them from the cycles of the wall graph.
+- Rooms are not stored. `findRooms` calculates them from the cycles of the wall graph. The data
+  that the user gives to a room (`RoomInfo`: a name and a height) has the key of the room (its
+  vertex ids) and a point inside it. `normalize` updates both after each change, so the data
+  follows the room.
 - The plan uses meters and screen axes (y points down). The 3D view maps the plan y to the
   world z.
 
@@ -36,6 +46,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/types.ts`     | The types of the plan.                                            |
 | `src/model/geometry.ts`  | Vector and polygon functions.                                     |
 | `src/model/plan.ts`      | The operations on a plan: add, split, merge, and remove.          |
+| `src/model/building.ts`  | Stories, stairs, chimneys, and the frame of the roof.             |
+| `src/model/roof.ts`      | The faces of the roof for 3D, and its lines for 2D.               |
 | `src/model/rooms.ts`     | The rooms from the faces of the wall graph.                       |
 | `src/model/history.ts`   | `PlanDocument`: transactions, undo, redo, and the dirty state.    |
 | `src/model/file.ts`      | The file format: `serializePlan` and `parsePlan` with validation. |

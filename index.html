@@ -65,6 +65,12 @@
           <button data-tool="dimension" data-icon="dimension" title="Draw a dimension line (M)">
             Measure<kbd>M</kbd>
           </button>
+          <button data-tool="stair" data-icon="stair" title="Draw a stair up to the next story (S)">
+            Stair<kbd>S</kbd>
+          </button>
+          <button data-tool="chimney" data-icon="chimney" title="Put a chimney (H)">
+            Chimney<kbd>H</kbd>
+          </button>
           <span class="divider"></span>
           <button id="background" data-icon="image" title="Load a scan or a photo of a plan">
             Background
@@ -76,6 +82,17 @@
           >
             Scale<kbd>C</kbd>
           </button>
+        </div>
+        <div class="stories" id="stories" aria-label="Stories"></div>
+        <div class="compass" id="compass" title="North. Drag to turn it.">
+          <svg viewBox="-24 -24 48 48" aria-hidden="true">
+            <circle r="21" class="ring" />
+            <g class="needle">
+              <path d="M0 -16 L5 0 L-5 0 Z" class="north" />
+              <path d="M0 16 L5 0 L-5 0 Z" class="south" />
+              <text y="-17" class="letter">N</text>
+            </g>
+          </svg>
         </div>
         <div class="empty-state" id="empty-state" hidden>
           <h2>Start a floor plan</h2>
@@ -94,6 +111,9 @@
       </section>
       <section id="plan-3d" class="pane">
         <span class="pane-label">3D · drag to orbit, scroll to zoom</span>
+        <button class="pill-toggle" id="show-above" title="Show the stories above the active story">
+          All stories
+        </button>
         <button
           class="icon-button fit"
           data-fit
@@ -104,6 +124,17 @@
       <aside id="panel"></aside>
     </main>
     <footer id="status"></footer>
+    <div class="menu" id="story-menu" role="menu" hidden>
+      <button data-add-story="top" role="menuitem">
+        <span>Story on top</span><small>A full story above the highest story</small>
+      </button>
+      <button data-add-story="attic" role="menuitem">
+        <span>Attic</span><small>A story with low knee walls under the roof</small>
+      </button>
+      <button data-add-story="cellar" role="menuitem">
+        <span>Cellar</span><small>A story under the lowest story</small>
+      </button>
+    </div>
     <div class="menu" id="export-menu" role="menu" hidden>
       <button data-export="pdf" role="menuitem">
         <span>PDF</span><small>Print at a standard scale</small>

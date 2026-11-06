@@ -2,7 +2,9 @@
 // PlanDocument, so that undo works.
 
 import { add, clamp, closestOnSegment, distance, scale, sub } from "./geometry";
+import { anchorRoomInfo, findRoom } from "./rooms";
 import type {
+  Chimney,
   Clip,
   Dimension,
   Id,
@@ -11,6 +13,7 @@ import type {
   OpeningKind,
   Plan,
   Point,
+  Stair,
   Vertex,
   Wall,
 } from "./types";
@@ -30,7 +33,16 @@ export function newId(prefix: string): Id {
 }
 
 export function emptyPlan(): Plan {
-  return { vertices: [], walls: [], openings: [], dimensions: [], background: null };
+  return {
+    vertices: [],
+    walls: [],
+    openings: [],
+    dimensions: [],
+    stairs: [],
+    chimneys: [],
+    rooms: [],
+    background: null,
+  };
 }
 
 export const findVertex = (plan: Plan, id: Id): Vertex | undefined =>
@@ -41,6 +53,10 @@ export const findOpening = (plan: Plan, id: Id): Opening | undefined =>
   plan.openings.find((o) => o.id === id);
 export const findDimension = (plan: Plan, id: Id): Dimension | undefined =>
   plan.dimensions.find((d) => d.id === id);
+export const findStair = (plan: Plan, id: Id): Stair | undefined =>
+  plan.stairs.find((s) => s.id === id);
+export const findChimney = (plan: Plan, id: Id): Chimney | undefined =>
+  plan.chimneys.find((c) => c.id === id);
 
 export function getVertex(plan: Plan, id: Id): Vertex {
   const vertex = findVertex(plan, id);
@@ -151,6 +167,29 @@ export function addDimension(plan: Plan, a: Point, b: Point, offset: number): Di
   return dimension;
 }
 
+export const STAIR_DEFAULTS = { width: 1.0 };
+export const CHIMNEY_DEFAULTS = { width: 0.4, depth: 0.4 };
+
+export function addStair(plan: Plan, a: Point, b: Point, width = STAIR_DEFAULTS.width): Stair {
+  const stair: Stair = {
+    id: newId("s"),
+    a: { ...a },
+    b: { ...b },
+    width,
+    kind: "straight",
+    turn: 1,
+    run2: distance(a, b) / 2,
+  };
+  plan.stairs.push(stair);
+  return stair;
+}
+
+export function addChimney(plan: Plan, p: Point): Chimney {
+  const chimney = { id: newId("c"), x: p.x, y: p.y, ...CHIMNEY_DEFAULTS, top: null };
+  plan.chimneys.push(chimney);
+  return chimney;
+}
+
 export function removeDimension(plan: Plan, id: Id): void {
   plan.dimensions = plan.dimensions.filter((d) => d.id !== id);
 }
@@ -219,10 +258,14 @@ export function clampOpening(plan: Plan, opening: Opening): void {
   opening.offset = length < opening.width ? length / 2 : clamp(opening.offset, half, length - half);
 }
 
-/** Removes the openings without a wall and keeps the others inside their walls. */
+/**
+ * Removes the openings without a wall and keeps the others inside their walls. It also moves the
+ * data of each room to the middle of its room, so that the data follows the walls.
+ */
 export function normalize(plan: Plan): void {
   plan.openings = plan.openings.filter((o) => findWall(plan, o.wallId));
   for (const opening of plan.openings) clampOpening(plan, opening);
+  anchorRoomInfo(plan);
 }
 
 /** Changes the length of a wall. The vertex `b` moves along the wall. */
@@ -243,6 +286,9 @@ export function itemExists(plan: Plan, item: Item): boolean {
   if (item.kind === "vertex") return !!findVertex(plan, item.id);
   if (item.kind === "wall") return !!findWall(plan, item.id);
   if (item.kind === "opening") return !!findOpening(plan, item.id);
+  if (item.kind === "stair") return !!findStair(plan, item.id);
+  if (item.kind === "chimney") return !!findChimney(plan, item.id);
+  if (item.kind === "room") return !!findRoom(plan, item.id);
   return !!findDimension(plan, item.id);
 }
 
@@ -253,6 +299,8 @@ export function removeItems(plan: Plan, items: Item[]): void {
     if (item.kind === "wall") removeWall(plan, item.id);
     if (item.kind === "opening") removeOpening(plan, item.id);
     if (item.kind === "dimension") removeDimension(plan, item.id);
+    if (item.kind === "stair") plan.stairs = plan.stairs.filter((s) => s.id !== item.id);
+    if (item.kind === "chimney") plan.chimneys = plan.chimneys.filter((c) => c.id !== item.id);
   }
 }
 
@@ -275,7 +323,10 @@ export function itemVertices(plan: Plan, items: Item[]): Set<Id> {
  */
 export interface MoveOrigin {
   vertices: Map<Id, Point>;
+  /** The two points of the dimension lines and the stairs. */
   dimensions: Map<Id, { a: Point; b: Point }>;
+  stairs: Map<Id, { a: Point; b: Point }>;
+  chimneys: Map<Id, Point>;
 }
 
 export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
@@ -289,7 +340,15 @@ export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
     const dimension = item.kind === "dimension" ? findDimension(plan, item.id) : undefined;
     if (dimension) dimensions.set(dimension.id, { a: { ...dimension.a }, b: { ...dimension.b } });
   }
-  return { vertices, dimensions };
+  const stairs = new Map<Id, { a: Point; b: Point }>();
+  const chimneys = new Map<Id, Point>();
+  for (const item of items) {
+    const stair = item.kind === "stair" ? findStair(plan, item.id) : undefined;
+    if (stair) stairs.set(stair.id, { a: { ...stair.a }, b: { ...stair.b } });
+    const chimney = item.kind === "chimney" ? findChimney(plan, item.id) : undefined;
+    if (chimney) chimneys.set(chimney.id, { x: chimney.x, y: chimney.y });
+  }
+  return { vertices, dimensions, stairs, chimneys };
 }
 
 /** Puts the points of `origin` at their start position plus `delta`. */
@@ -303,6 +362,16 @@ export function moveFromOrigin(plan: Plan, origin: MoveOrigin, delta: Point): vo
     if (!dimension) continue;
     dimension.a = add(start.a, delta);
     dimension.b = add(start.b, delta);
+  }
+  for (const [id, start] of origin.stairs) {
+    const stair = findStair(plan, id);
+    if (!stair) continue;
+    stair.a = add(start.a, delta);
+    stair.b = add(start.b, delta);
+  }
+  for (const [id, start] of origin.chimneys) {
+    const chimney = findChimney(plan, id);
+    if (chimney) Object.assign(chimney, add(start, delta));
   }
 }
 
@@ -326,6 +395,8 @@ export function copyItems(plan: Plan, items: Item[]): Clip {
     dimensions: plan.dimensions.filter((d) =>
       items.some((i) => i.kind === "dimension" && i.id === d.id),
     ),
+    stairs: plan.stairs.filter((x) => items.some((i) => i.kind === "stair" && i.id === x.id)),
+    chimneys: plan.chimneys.filter((x) => items.some((i) => i.kind === "chimney" && i.id === x.id)),
   });
 }
 
@@ -357,6 +428,15 @@ export function pasteClip(plan: Plan, clip: Clip, delta: Point): Item[] {
       dimension.offset,
     );
     items.push({ kind: "dimension", id: copy.id });
+  }
+  for (const stair of clip.stairs) {
+    const copy = addStair(plan, add(stair.a, delta), add(stair.b, delta), stair.width);
+    items.push({ kind: "stair", id: copy.id });
+  }
+  for (const chimney of clip.chimneys) {
+    const copy = { ...chimney, id: newId("c"), ...add(chimney, delta) };
+    plan.chimneys.push(copy);
+    items.push({ kind: "chimney", id: copy.id });
   }
   return items;
 }

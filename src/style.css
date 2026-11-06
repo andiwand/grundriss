@@ -714,12 +714,15 @@ button.ghost:hover:not(:disabled) {
 .editor2d[data-tool="door"],
 .editor2d[data-tool="window"],
 .editor2d[data-tool="dimension"],
+.editor2d[data-tool="stair"],
+.editor2d[data-tool="chimney"],
 .editor2d[data-tool="rectify"],
 .editor2d[data-tool="calibrate"] {
   cursor: crosshair;
 }
 
 .editor2d line,
+.editor2d polyline,
 .editor2d path,
 .editor2d polygon,
 .editor2d circle {
@@ -739,6 +742,18 @@ button.ghost:hover:not(:disabled) {
   fill: var(--room);
   fill-opacity: 0.7;
   pointer-events: none;
+}
+
+.rooms polygon.selected {
+  fill: var(--accent-soft);
+  fill-opacity: 1;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.room-label.name {
+  font-weight: 700;
 }
 
 .room-label,
@@ -957,4 +972,241 @@ button.ghost:hover:not(:disabled) {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* The story below the active story, in a light color. */
+
+.below polygon {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.below .stair-hole {
+  stroke: var(--accent);
+  stroke-dasharray: 6 3;
+  opacity: 0.7;
+}
+
+/* Stairs. The arrow shows the walking direction up. */
+
+.stair {
+  cursor: move;
+}
+
+.stair .outline {
+  fill: var(--paper);
+  stroke: var(--wall);
+  stroke-width: 1.5;
+}
+
+.stair .step {
+  stroke: var(--wall);
+  stroke-width: 1;
+}
+
+.stair .walk {
+  fill: none;
+  stroke: var(--wall);
+  stroke-width: 1.2;
+}
+
+.stair .step {
+  fill: none;
+}
+
+.stair .landing {
+  fill: var(--surface-2);
+}
+
+.stair .walk-start {
+  fill: var(--wall);
+}
+
+.stair:hover .outline,
+.stair.selected .outline {
+  stroke: var(--accent);
+}
+
+.stair.selected .outline {
+  fill: var(--accent-soft);
+}
+
+.preview-stair {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Chimneys: the outline with two diagonals. */
+
+.chimney {
+  cursor: move;
+}
+
+.chimney .outline {
+  fill: #c2593f;
+  fill-opacity: 0.25;
+  stroke: #9c3d27;
+  stroke-width: 1.5;
+}
+
+.chimney .cross {
+  stroke: #9c3d27;
+  stroke-width: 1;
+}
+
+.chimney.through {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.chimney.selected .outline {
+  stroke: var(--accent);
+  fill: var(--accent-soft);
+}
+
+/* The lines of the roof over its story. */
+
+.roof-lines line {
+  stroke: #b0532f;
+  stroke-width: 1.2;
+  stroke-dasharray: 8 4;
+  pointer-events: none;
+}
+
+/* The list of stories, at the bottom left of the 2D editor. */
+
+.stories {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 168px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+
+.stories .story {
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.stories .story small {
+  color: var(--ink-3);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.stories .story.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stories .story.active small {
+  color: var(--accent);
+}
+
+.stories .ground {
+  height: 1px;
+  margin: 2px 6px;
+  background: var(--line-strong);
+}
+
+.stories .add {
+  height: 28px;
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--ink-3);
+}
+
+/* The compass at the top right of the 2D editor. A drag turns it. */
+
+.compass {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+  touch-action: none;
+}
+
+.compass svg {
+  width: 100%;
+  height: 100%;
+}
+
+.compass .ring {
+  fill: none;
+  stroke: var(--line-strong);
+}
+
+.compass .north {
+  fill: var(--danger);
+}
+
+.compass .south {
+  fill: var(--ink-3);
+}
+
+.compass .letter {
+  font-size: 8px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--ink);
+}
+
+/* In a narrow 2D pane, the compass goes below the palette. */
+@container (max-width: 640px) {
+  .compass {
+    top: 60px;
+  }
+}
+
+/* A toggle at the top right of the 3D view. */
+
+.pill-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.pill-toggle.active,
+.pill-toggle.active:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+#panel input[type="text"] {
+  font: inherit;
 }

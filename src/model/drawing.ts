@@ -3,8 +3,9 @@
 // This module has no DOM and no Three.js.
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
+import { chimneyOutline, stairShape, type StairShape } from "./building";
 import { findWall, wallEnds, wallExtents } from "./plan";
-import type { Dimension, Opening, Plan, Point, Wall } from "./types";
+import type { Chimney, Dimension, Opening, Plan, Point, Stair, Wall } from "./types";
 
 /** The four corners of the body of a wall, in order around the body. */
 export function wallOutline(plan: Plan, wall: Wall): Point[] {
@@ -155,11 +156,79 @@ export function planBounds(
     const shape = dimensionShape(dimension);
     points.push(...shape.extensions.flat());
   }
+  // The rise does not change the outline of a stair, so any rise works here.
+  for (const stair of plan.stairs ?? []) points.push(...stairShape(stair, 1).outline);
+  for (const chimney of plan.chimneys ?? []) points.push(...chimneyOutline(chimney));
   if (points.length === 0) return null;
   return {
     minX: Math.min(...points.map((p) => p.x)),
     minY: Math.min(...points.map((p) => p.y)),
     maxX: Math.max(...points.map((p) => p.x)),
     maxY: Math.max(...points.map((p) => p.y)),
+  };
+}
+
+// ----- Stairs and chimneys -----
+
+export interface StairDrawing extends StairShape {
+  /** The two short lines of the arrow head at the top end of the walking line. */
+  head: [Point, Point][];
+}
+
+/** The plan symbol of a stair: the steps, the outline, and the walking line with an arrow. */
+export function stairDrawing(stair: Stair, rise: number): StairDrawing {
+  const shape = stairShape(stair, rise);
+  const [from, to] = shape.arrow.slice(-2);
+  const length = distance(from, to);
+  const dir = length === 0 ? { x: 1, y: 0 } : scale(sub(to, from), 1 / length);
+  const size = Math.min(0.25, stair.width / 4);
+  const back = scale(dir, -size);
+  const side = scale(perpendicular(dir), size * 0.6);
+  return {
+    ...shape,
+    head: [
+      [to, add(add(to, back), side)],
+      [to, sub(add(to, back), side)],
+    ],
+  };
+}
+
+export interface ChimneySymbol {
+  outline: Point[];
+  /** The two diagonals: the usual plan symbol of a shaft. */
+  diagonals: [Point, Point][];
+}
+
+export function chimneySymbol(chimney: Chimney): ChimneySymbol {
+  const outline = chimneyOutline(chimney);
+  return {
+    outline,
+    diagonals: [
+      [outline[0], outline[2]],
+      [outline[1], outline[3]],
+    ],
+  };
+}
+
+export interface NorthArrow {
+  /** The arrow: a triangle with a notch at the back, pointing to north. */
+  arrow: Point[];
+  /** The middle of the letter "N", in front of the tip. */
+  label: Point;
+}
+
+/**
+ * The north arrow at `at`, `size` meters long. `north` is the direction of north in degrees,
+ * clockwise from the top of the plan (the -y axis).
+ */
+export function northArrow(at: Point, size: number, north: number): NorthArrow {
+  const angle = (north * Math.PI) / 180;
+  const dir = { x: Math.sin(angle), y: -Math.cos(angle) };
+  const side = scale(perpendicular(dir), size * 0.4);
+  const tip = add(at, scale(dir, size / 2));
+  const back = add(at, scale(dir, -size / 2));
+  return {
+    arrow: [tip, add(back, side), add(at, scale(dir, -size / 4)), sub(back, side)],
+    label: add(at, scale(dir, size * 0.95)),
   };
 }

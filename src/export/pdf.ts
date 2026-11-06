@@ -1,10 +1,20 @@
 // Exports the plan as a vector PDF at a standard scale. A small writer makes the PDF, so the app
-// needs no PDF library. The page is A4 or A3, in portrait or landscape.
+// needs no PDF library. The page is A4 or A3, in portrait or landscape. A building gets one page
+// for each story, all at the same scale on the same paper.
 
-import { centroid } from "../model/geometry";
-import { dimensionShape, openingShape, planBounds, wallOutline, type Arc } from "../model/drawing";
-import { findRooms } from "../model/rooms";
-import type { Plan, Point } from "../model/types";
+import {
+  chimneySymbol,
+  dimensionShape,
+  northArrow,
+  openingShape,
+  planBounds,
+  stairDrawing,
+  wallOutline,
+  type Arc,
+} from "../model/drawing";
+import { findRooms, roomLabel } from "../model/rooms";
+import type { Building, Plan, Point } from "../model/types";
+import { isEmptyStory, riseOf, storyExtras, type StoryExtras } from "./context";
 
 const MM = 72 / 25.4;
 const MARGIN = 15 * MM;
@@ -109,11 +119,84 @@ function arcCurve(arc: Arc, map: (p: Point) => Point): string {
   return `${n(p1.x)} ${n(p1.y)} ${n(p2.x)} ${n(p2.y)} ${n(p3.x)} ${n(p3.y)} c`;
 }
 
-export function planToPdf(plan: Plan): Uint8Array {
-  const box = planBounds(plan) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+type Box = { minX: number; minY: number; maxX: number; maxY: number };
+
+/** The box around the plan and around the chimneys that pass through it. */
+function storyBounds(plan: Plan, extras: StoryExtras): Box | null {
+  const box = planBounds(plan);
+  const points = (extras.through ?? []).flatMap((c) => chimneySymbol(c).outline);
+  if (points.length === 0) return box;
+  const all = box
+    ? [...points, { x: box.minX, y: box.minY }, { x: box.maxX, y: box.maxY }]
+    : points;
+  return {
+    minX: Math.min(...all.map((p) => p.x)),
+    minY: Math.min(...all.map((p) => p.y)),
+    maxX: Math.max(...all.map((p) => p.x)),
+    maxY: Math.max(...all.map((p) => p.y)),
+  };
+}
+
+/** Exports one story as a PDF with one page. */
+export function planToPdf(plan: Plan, extras: StoryExtras = {}): Uint8Array {
+  const box = storyBounds(plan, extras) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const layout = chooseLayout(box.maxX - box.minX, box.maxY - box.minY);
+  const title = `Grundriss · 1:${layout.denominator} · ${layout.paper}`;
+  return writePdfPages(
+    [pageContent(plan, extras, box, layout, title)],
+    layout.width,
+    layout.height,
+  );
+}
+
+/**
+ * Exports the building as a PDF with one page for each story, from the bottom to the top. All
+ * pages have the same scale and paper, and the same place on the page for the same point of the
+ * plan. A story without objects gets no page, but the PDF has at least one page.
+ */
+export function buildingToPdf(building: Building): Uint8Array {
+  const pages = building.stories
+    .map((story) => ({ story, extras: storyExtras(building, story) }))
+    .filter(({ story, extras }) => !isEmptyStory(story, extras));
+  if (pages.length === 0) {
+    const story = building.stories[0];
+    pages.push({ story, extras: storyExtras(building, story) });
+  }
+  const boxes = pages
+    .map(({ story, extras }) => storyBounds(story, extras))
+    .filter((box): box is Box => box !== null);
+  const box =
+    boxes.length === 0
+      ? { minX: 0, minY: 0, maxX: 1, maxY: 1 }
+      : {
+          minX: Math.min(...boxes.map((b) => b.minX)),
+          minY: Math.min(...boxes.map((b) => b.minY)),
+          maxX: Math.max(...boxes.map((b) => b.maxX)),
+          maxY: Math.max(...boxes.map((b) => b.maxY)),
+        };
+  const layout = chooseLayout(box.maxX - box.minX, box.maxY - box.minY);
+  const contents = pages.map(({ story, extras }) =>
+    pageContent(
+      story,
+      extras,
+      box,
+      layout,
+      `Grundriss · ${story.name} · 1:${layout.denominator} · ${layout.paper}`,
+    ),
+  );
+  return writePdfPages(contents, layout.width, layout.height);
+}
+
+/** The content stream of one page: the plan in the box, at the scale of the layout. */
+function pageContent(
+  plan: Plan,
+  extras: StoryExtras,
+  box: Box,
+  layout: PageLayout,
+  title: string,
+): string {
   const planWidth = box.maxX - box.minX;
   const planHeight = box.maxY - box.minY;
-  const layout = chooseLayout(planWidth, planHeight);
   const k = (1000 * MM) / layout.denominator;
   // The plan is in the middle of the drawing area. The PDF y axis points up.
   const areaWidth = layout.width - 2 * MARGIN;
@@ -188,7 +271,14 @@ export function planToPdf(plan: Plan): Uint8Array {
   }
 
   ops.push("0.478 0.396 0.259 rg");
-  for (const room of rooms) text(centroid(room.polygon), `${room.area.toFixed(2)} m²`, TEXT_SIZE);
+  for (const room of rooms) {
+    const lines = roomLabel(room);
+    lines.forEach((t, i) => {
+      // The y of the plan points down, so a later line has a larger y.
+      const y = room.labelAt.y + (i - (lines.length - 1) / 2) * TEXT_SIZE * 1.3;
+      text({ x: room.labelAt.x, y }, t, TEXT_SIZE);
+    });
+  }
 
   ops.push("0.184 0.420 1 RG 0.184 0.420 1 rg 0.4 w");
   for (const dimension of plan.dimensions) {
@@ -203,22 +293,78 @@ export function planToPdf(plan: Plan): Uint8Array {
     text(at, shape.text, TEXT_SIZE, shape.angle);
   }
 
-  const title = `Grundriss · 1:${layout.denominator} · ${layout.paper}`;
+  if (plan.stairs.length > 0) {
+    ops.push("0.294 0.325 0.388 RG 0.4 w 1 j");
+    for (const stair of plan.stairs) {
+      const shape = stairDrawing(stair, riseOf(plan, stair, extras));
+      ops.push("1 g");
+      polygon(shape.outline);
+      ops.push("B");
+      for (const step of shape.steps) {
+        polygon(step);
+        ops.push("S");
+      }
+      ops.push("0.6 w");
+      for (let i = 1; i < shape.arrow.length; i++) line(shape.arrow[i - 1], shape.arrow[i]);
+      for (const [a, b] of shape.head) line(a, b);
+      ops.push("0.4 w");
+    }
+  }
+
+  const chimneys = [
+    ...(extras.through ?? []).map((chimney) => ({ chimney, color: "0.604 0.631 0.678" })),
+    ...plan.chimneys.map((chimney) => ({ chimney, color: "0.149 0.173 0.220" })),
+  ];
+  for (const { chimney, color } of chimneys) {
+    const symbol = chimneySymbol(chimney);
+    ops.push(`1 g ${color} RG 0.7 w`);
+    polygon(symbol.outline);
+    ops.push("B");
+    for (const [a, b] of symbol.diagonals) line(a, b);
+  }
+
+  if (extras.north !== undefined) {
+    // The north arrow is 12 mm long, in the top right corner of the drawing area.
+    const size = (12 * MM) / k;
+    const corner = {
+      x: box.minX + (layout.width - MARGIN - left) / k - size,
+      y: box.minY + (top - (layout.height - MARGIN)) / k + size,
+    };
+    const shape = northArrow(corner, size, extras.north);
+    ops.push("0.149 0.173 0.220 rg");
+    polygon(shape.arrow);
+    ops.push("f");
+    text(shape.label, "N", TITLE_SIZE);
+  }
+
   ops.push(`0.4 g BT /F1 ${TITLE_SIZE} Tf ${n(MARGIN)} ${n(MARGIN)} Td ${literal(title)} Tj ET`);
 
-  return writePdf(ops.join("\n"), layout.width, layout.height);
+  return ops.join("\n");
 }
 
 /** Writes a PDF with one page and the font Helvetica. The text must be in Latin-1. */
 export function writePdf(content: string, width: number, height: number): Uint8Array {
+  return writePdfPages([content], width, height);
+}
+
+/** Writes a PDF with one page for each content stream, all of the same size. */
+export function writePdfPages(contents: string[], width: number, height: number): Uint8Array {
+  // Object 1 is the catalog, 2 the page tree, 3 the font. Each page has two objects after that:
+  // the page and its content stream.
+  const pageId = (i: number) => 4 + 2 * i;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(width)} ${n(height)}] ` +
-      "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    `<< /Type /Pages /Kids [${contents.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] ` +
+      `/Count ${contents.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
   ];
+  contents.forEach((content, i) => {
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(width)} ${n(height)}] ` +
+        `/Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId(i) + 1} 0 R >>`,
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    );
+  });
   // The header has a comment with bytes above 127, so that programs treat the file as binary.
   let pdf = "%PDF-1.4\n%âãÏÓ\n";
   const offsets: number[] = [];

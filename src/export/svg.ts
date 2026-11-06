@@ -1,9 +1,18 @@
 // Exports the plan as a standalone SVG file. The units of the drawing are meters, and the styles
 // are inline, so the file looks the same in each program.
 
-import { centroid } from "../model/geometry";
-import { dimensionShape, openingShape, planBounds, wallOutline } from "../model/drawing";
-import { findRooms } from "../model/rooms";
+import {
+  chimneySymbol,
+  dimensionShape,
+  northArrow,
+  openingShape,
+  planBounds,
+  stairDrawing,
+  wallOutline,
+} from "../model/drawing";
+import { riseOf, type StoryExtras } from "./context";
+import { findRooms, roomLabel } from "../model/rooms";
+
 import type { Plan, Point } from "../model/types";
 
 const MARGIN = 0.5;
@@ -14,6 +23,9 @@ const COLORS = {
   glass: "#3a8ee6",
   dimension: "#2f6bff",
   paper: "#ffffff",
+  stair: "#4b5363",
+  /** A chimney of a story below that passes through. */
+  through: "#9aa1ad",
 };
 
 const n = (value: number) => String(Math.round(value * 1e4) / 1e4);
@@ -29,8 +41,21 @@ export function textSize(plan: Plan): number {
   return Math.min(0.6, Math.max(0.15, size / 60));
 }
 
-export function planToSvg(plan: Plan, options: { background?: boolean } = {}): string {
+export interface SvgOptions extends StoryExtras {
+  background?: boolean;
+}
+
+export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
   const box = planBounds(plan) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const through = options.through ?? [];
+  for (const chimney of through) {
+    for (const p of chimneySymbol(chimney).outline) {
+      box.minX = Math.min(box.minX, p.x);
+      box.minY = Math.min(box.minY, p.y);
+      box.maxX = Math.max(box.maxX, p.x);
+      box.maxY = Math.max(box.maxY, p.y);
+    }
+  }
   const background = options.background ? plan.background : null;
   if (background) {
     box.minX = Math.min(box.minX, background.x);
@@ -38,12 +63,16 @@ export function planToSvg(plan: Plan, options: { background?: boolean } = {}): s
     box.maxX = Math.max(box.maxX, background.x + background.width * background.scale);
     box.maxY = Math.max(box.maxY, background.y + background.height * background.scale);
   }
+  const font = textSize(plan);
+  const line = font / 12;
+  // The north arrow stands in a column on the right of the plan.
+  const arrowSize = font * 3;
+  if (options.north !== undefined) box.maxX += arrowSize * 2;
+  const plainRight = box.maxX - (options.north !== undefined ? arrowSize * 2 : 0);
   const x = box.minX - MARGIN;
   const y = box.minY - MARGIN;
   const width = box.maxX - box.minX + 2 * MARGIN;
   const height = box.maxY - box.minY + 2 * MARGIN;
-  const font = textSize(plan);
-  const line = font / 12;
   const out: string[] = [];
 
   out.push(
@@ -109,8 +138,12 @@ export function planToSvg(plan: Plan, options: { background?: boolean } = {}): s
       `dominant-baseline="middle">`,
   );
   for (const room of rooms) {
-    const c = centroid(room.polygon);
-    out.push(`<text x="${n(c.x)}" y="${n(c.y)}">${room.area.toFixed(2)} m²</text>`);
+    const lines = roomLabel(room);
+    lines.forEach((text, i) => {
+      // The lines stack around the label point, one line height apart.
+      const y = room.labelAt.y + (i - (lines.length - 1) / 2) * font * 1.25;
+      out.push(`<text x="${n(room.labelAt.x)}" y="${n(y)}">${escape(text)}</text>`);
+    });
   }
   out.push(`</g>`);
 
@@ -135,6 +168,58 @@ export function planToSvg(plan: Plan, options: { background?: boolean } = {}): s
     );
   }
   out.push(`</g>`);
+
+  if (plan.stairs.length > 0) {
+    out.push(
+      `<g id="stairs" fill="none" stroke="${COLORS.stair}" stroke-width="${n(line)}" ` +
+        `stroke-linecap="round" stroke-linejoin="round">`,
+    );
+    for (const stair of plan.stairs) {
+      const shape = stairDrawing(stair, riseOf(plan, stair, options));
+      out.push(`<polygon points="${points(shape.outline)}" fill="${COLORS.paper}"/>`);
+      for (const step of shape.steps) out.push(`<polygon points="${points(step)}"/>`);
+      out.push(`<polyline points="${points(shape.arrow)}" stroke-width="${n(line * 1.5)}"/>`);
+      for (const [a, b] of shape.head) {
+        out.push(
+          `<line x1="${n(a.x)}" y1="${n(a.y)}" x2="${n(b.x)}" y2="${n(b.y)}" ` +
+            `stroke-width="${n(line * 1.5)}"/>`,
+        );
+      }
+    }
+    out.push(`</g>`);
+  }
+
+  const chimneys = [
+    ...through.map((chimney) => ({ chimney, color: COLORS.through })),
+    ...plan.chimneys.map((chimney) => ({ chimney, color: COLORS.wall })),
+  ];
+  if (chimneys.length > 0) {
+    out.push(`<g id="chimneys" stroke-width="${n(line * 1.5)}">`);
+    for (const { chimney, color } of chimneys) {
+      const symbol = chimneySymbol(chimney);
+      out.push(
+        `<polygon points="${points(symbol.outline)}" fill="${COLORS.paper}" stroke="${color}"/>`,
+      );
+      for (const [a, b] of symbol.diagonals) {
+        out.push(
+          `<line x1="${n(a.x)}" y1="${n(a.y)}" x2="${n(b.x)}" y2="${n(b.y)}" stroke="${color}"/>`,
+        );
+      }
+    }
+    out.push(`</g>`);
+  }
+
+  if (options.north !== undefined) {
+    const at = { x: plainRight + arrowSize, y: box.minY + arrowSize };
+    const shape = northArrow(at, arrowSize, options.north);
+    out.push(
+      `<g id="north" fill="${COLORS.wall}" font-size="${n(font)}" text-anchor="middle" ` +
+        `dominant-baseline="middle">`,
+    );
+    out.push(`<polygon points="${points(shape.arrow)}"/>`);
+    out.push(`<text x="${n(shape.label.x)}" y="${n(shape.label.y)}">N</text>`);
+    out.push(`</g>`);
+  }
 
   out.push(`</svg>`);
   return out.join("\n") + "\n";

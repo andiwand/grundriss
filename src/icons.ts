@@ -33,6 +33,15 @@ const ICONS = {
     '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  stair: '<path d="M4 20h4v-4h4v-4h4V8h4"/><path d="M4 20V4"/>',
+  chimney: '<path d="M3 21V11l9-7 9 7v10z"/><path d="M15 7V3h3v6.3"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  roof: '<path d="m2 12 10-8 10 8"/><path d="M5 10v10h14V10"/>',
+  compass:
+    '<circle cx="12" cy="12" r="9"/><path d="m12 5 3 7h-6z" fill="currentColor"/><path d="m9 12 3 7 3-7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="m6 15 6-6 6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

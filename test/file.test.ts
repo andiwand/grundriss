@@ -1,6 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { parsePlan, serializePlan } from "../src/model/file";
-import { addDimension, addOpening, addVertex, addWall, emptyPlan } from "../src/model/plan";
+import { addCellar, addStoryOnTop, defaultRoof, emptyBuilding } from "../src/model/building";
+import { parseBuilding, serializeBuilding } from "../src/model/file";
+import type { Plan } from "../src/model/types";
+
+/** Reads a file of version 1 and gives the plan of its only story. */
+function parsePlan(text: string): Plan {
+  const building = parseBuilding(text);
+  expect(building.stories).toHaveLength(1);
+  const {
+    id: _id,
+    name: _name,
+    elevation: _elevation,
+    height: _height,
+    ...plan
+  } = building.stories[0];
+  return plan;
+}
+
+/** Writes the plan as a file of version 1, as the old app did. */
+const serializePlan = (plan: Plan) => JSON.stringify({ format: "grundriss", version: 1, ...plan });
+import {
+  addChimney,
+  addDimension,
+  addOpening,
+  addStair,
+  addVertex,
+  addWall,
+  emptyPlan,
+} from "../src/model/plan";
 
 describe("file format", () => {
   it("reads what it writes", () => {
@@ -42,6 +69,27 @@ describe("file format", () => {
     const plan = parsePlan(text);
     expect(plan.openings[0]).toMatchObject({ hinge: "a", swing: 1 });
     expect(plan.dimensions).toEqual([]);
+  });
+
+  it("reads what it writes for a building with stories, stairs, chimneys, and a roof", () => {
+    const building = emptyBuilding();
+    const ground = building.stories[0];
+    const a = addVertex(ground, { x: 0, y: 0 });
+    const b = addVertex(ground, { x: 6, y: 0 });
+    addWall(ground, a.id, b.id);
+    addStair(ground, { x: 1, y: 1 }, { x: 4, y: 1 });
+    addChimney(ground, { x: 3, y: 3 });
+    addCellar(building);
+    addStoryOnTop(building, true);
+    building.roof = defaultRoof(building);
+    building.north = 30;
+    expect(parseBuilding(serializeBuilding(building))).toEqual(building);
+  });
+
+  it("rejects a roof on a story that does not exist", () => {
+    const building = emptyBuilding();
+    building.roof = { ...defaultRoof(building), storyId: "nothing" };
+    expect(() => parseBuilding(serializeBuilding(building))).toThrow("does not exist");
   });
 
   it("rejects a file that is not JSON", () => {

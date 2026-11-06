@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { dimensionShape, openingShape, planBounds, wallOutline } from "../src/model/drawing";
+import {
+  chimneySymbol,
+  dimensionShape,
+  northArrow,
+  openingShape,
+  planBounds,
+  stairDrawing,
+  wallOutline,
+} from "../src/model/drawing";
 import { addOpening, addVertex, addWall, emptyPlan } from "../src/model/plan";
 
 function wallPlan() {
@@ -86,5 +94,45 @@ describe("drawing shapes", () => {
     expect(box.maxX).toBeCloseTo(4);
     expect(box.minY).toBeCloseTo(-0.1);
     expect(box.maxY).toBeCloseTo(0.1);
+  });
+});
+
+describe("stairs, chimneys, and the north arrow", () => {
+  it("draws a stair with an arrow head at the top", () => {
+    const shape = stairDrawing(
+      {
+        id: "s",
+        a: { x: 0, y: 0 },
+        b: { x: 3, y: 0 },
+        width: 1,
+        kind: "straight",
+        turn: 1,
+        run2: 1,
+      },
+      2.7,
+    );
+    expect(shape.count).toBe(15);
+    const [, to] = shape.arrow;
+    for (const [a, b] of shape.head) {
+      expect(a).toEqual(to);
+      // The head points back, to the bottom of the stair.
+      expect(b.x).toBeLessThan(to.x);
+    }
+  });
+
+  it("draws a chimney with two diagonals", () => {
+    const symbol = chimneySymbol({ id: "c", x: 1, y: 1, width: 0.4, depth: 0.6, top: null });
+    expect(symbol.outline[0]).toEqual({ x: 0.8, y: 0.7 });
+    expect(symbol.diagonals[0]).toEqual([symbol.outline[0], symbol.outline[2]]);
+  });
+
+  it("turns the north arrow clockwise", () => {
+    const up = northArrow({ x: 0, y: 0 }, 1, 0);
+    expect(up.arrow[0].x).toBeCloseTo(0);
+    expect(up.arrow[0].y).toBeCloseTo(-0.5);
+    const east = northArrow({ x: 0, y: 0 }, 1, 90);
+    expect(east.arrow[0].x).toBeCloseTo(0.5);
+    expect(east.arrow[0].y).toBeCloseTo(0);
+    expect(east.label.x).toBeGreaterThan(0.5);
   });
 });

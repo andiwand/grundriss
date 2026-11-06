@@ -10,7 +10,7 @@
 4. **Assisted tracing** (done, first version): OpenCV.js (WASM) corrects the perspective of a photo, removes noise,
    and suggests wall lines. The user accepts or corrects them.
 5. **Furniture**: a catalog of glTF models, with position and rotation in the plan.
-6. **The whole building**: more than one story, a cellar and an attic as stories, stairs that
+6. **The whole building** (done, first version): more than one story, a cellar and an attic as stories, stairs that
    connect two stories, a roof (gable, hip, flat, and shed), chimneys, and the orientation of
    the plan to north. The 3D view stacks the stories. This milestone changes the file format.
 7. **Building services**: layers on the plan for photovoltaic panels on the roof, heating

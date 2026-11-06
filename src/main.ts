@@ -1,8 +1,10 @@
 import { Editor2D, type Tool } from "./editor/editor2d";
 import { fillIcons, icon, type IconName } from "./icons";
 import { exportGlb } from "./export/gltf";
-import { planToDxf } from "./export/dxf";
-import { planToPdf } from "./export/pdf";
+import { buildingExports } from "./export/building";
+import { slug, storyExtras } from "./export/context";
+import { buildingToDxf } from "./export/dxf";
+import { buildingToPdf } from "./export/pdf";
 import { planToSvg } from "./export/svg";
 import {
   EXPORT_TYPES,
@@ -12,15 +14,28 @@ import {
   saveBlob,
   savePlanFile,
 } from "./io/files";
-import { isPackageName, readPlanFile, writePackage } from "./io/package";
+import { isPackageName, readBuildingFile, writePackage } from "./io/package";
 import { distance } from "./model/geometry";
-import { serializePlan } from "./model/file";
+import {
+  addCellar,
+  addStoryOnTop,
+  chimneyExtent,
+  defaultWallHeight,
+  defaultRoof,
+  emptyBuilding,
+  findStory,
+  sortStories,
+  stairRise,
+  stairShape,
+} from "./model/building";
+import { serializeBuilding } from "./model/file";
 import { PlanDocument } from "./model/history";
 import {
   WALL_DEFAULTS,
-  emptyPlan,
+  findChimney,
   findDimension,
   findOpening,
+  findStair,
   findVertex,
   findWall,
   getVertex,
@@ -30,10 +45,18 @@ import {
   setWallLength,
   wallLength,
 } from "./model/plan";
-import { findRooms } from "./model/rooms";
-import type { Opening, OpeningKind, Plan, Point } from "./model/types";
+import { editRoomInfo, findRoom, findRooms } from "./model/rooms";
+import type {
+  Building,
+  Opening,
+  OpeningKind,
+  Point,
+  RoofKind,
+  RoomInfo,
+  StairKind,
+} from "./model/types";
 import { addWallSegments, toWorld, type WallSegment } from "./tracing/segments";
-import { View3D } from "./view3d/view3d";
+import { buildModel, View3D } from "./view3d/view3d";
 import "./style.css";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
@@ -53,12 +76,15 @@ let calibration: { a: Point; b: Point } | null = null;
 
 const HINTS: Record<Tool, string> = {
   select:
-    "Click to select, Shift+click to add. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: Space+drag or right drag.",
+    "Click to select, Shift+click to add. Click in a room to name it or to set its height. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: Space+drag or right drag.",
   wall: "Click to add corners. A click on a corner or a wall ends the chain. The direction snaps to 15°. Shift: 45° steps. Alt: free. Esc: stop.",
   door: "Click on a wall to put a door in it.",
   window: "Click on a wall to put a window in it.",
   dimension:
     "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.",
+  stair:
+    "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.",
+  chimney: "Click where the chimney goes. It goes up through the stories above and the roof.",
   calibrate: "Click two points on the background with a known distance between them.",
   rectify: "Click the four corners of the plan on the background, in any order. Esc: stop.",
 };
@@ -442,6 +468,157 @@ function renderPanel(): void {
     button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
     return;
   }
+  if (selection?.kind === "room") {
+    const room = findRoom(plan, selection.id);
+    if (!room) return;
+    const key = room.key;
+    const story = plan;
+    const change = (edit: (info: RoomInfo) => void) =>
+      doc.edit((plan) => {
+        const current = findRoom(plan, key);
+        if (current) editRoomInfo(plan, current, edit);
+      });
+    heading("Room", "view2d");
+    const height = room.info?.height ?? defaultWallHeight(story);
+    stats([
+      [`${room.area.toFixed(2)} m²`, "area"],
+      [`${height.toFixed(2)} m`, "clear height"],
+    ]);
+    textField("Name", room.info?.name ?? "", (value) => change((info) => (info.name = value)), {
+      placeholder: "For example Kitchen",
+      allowEmpty: true,
+    });
+    numberField("Height", height, (value) => change((info) => (info.height = value)), {
+      min: 0.5,
+    });
+    paragraph(
+      room.info?.height == null
+        ? `The room has the clear height of the story: ${defaultWallHeight(story).toFixed(2)} m. Type a height for a lowered ceiling or a high room.`
+        : "The room has its own height. The 3D view shows its ceiling.",
+      "note",
+    );
+    if (room.info?.height != null) {
+      button("Height of the story", () => change((info) => (info.height = null)), {
+        icon: "layers",
+      });
+    }
+    return;
+  }
+
+  if (selection?.kind === "stair") {
+    const stair = findStair(plan, selection.id);
+    if (!stair) return;
+    const shape = stairShape(stair, stairRise(doc.building, plan));
+    heading("Stair", "stair");
+    stats([
+      [String(shape.count), "steps"],
+      [`${(shape.stepHeight * 100).toFixed(1)} cm`, "step height"],
+      [`${(shape.stepDepth * 100).toFixed(1)} cm`, "step depth", true],
+    ]);
+    numberField(
+      "Width",
+      stair.width,
+      (value) => doc.edit((plan) => (findStair(plan, stair.id)!.width = value)),
+      { min: 0.4 },
+    );
+    numberField(
+      "Run",
+      distance(stair.a, stair.b),
+      (value) =>
+        doc.edit((plan) => {
+          const s = findStair(plan, stair.id)!;
+          const length = distance(s.a, s.b);
+          if (length === 0) return;
+          s.b = {
+            x: s.a.x + ((s.b.x - s.a.x) * value) / length,
+            y: s.a.y + ((s.b.y - s.a.y) * value) / length,
+          };
+        }),
+      { min: 0.5 },
+    );
+    selectField<StairKind>(
+      "Shape",
+      stair.kind,
+      [
+        ["straight", "Straight"],
+        ["l", "L (quarter turn)"],
+        ["u", "U (half turn)"],
+      ],
+      (kind) =>
+        doc.edit((plan) => {
+          const s = findStair(plan, stair.id)!;
+          // A U stair comes back along the first flight, so its second flight has the same run.
+          if (kind === "u" && s.kind !== "u") s.run2 = distance(s.a, s.b);
+          if (kind === "l" && s.kind !== "l") s.run2 = Math.max(1, distance(s.a, s.b) / 2);
+          s.kind = kind;
+        }),
+    );
+    if (stair.kind !== "straight") {
+      selectField<"1" | "-1">(
+        "Turn",
+        stair.turn === 1 ? "1" : "-1",
+        [
+          ["1", "To the right"],
+          ["-1", "To the left"],
+        ],
+        (turn) => doc.edit((plan) => (findStair(plan, stair.id)!.turn = turn === "1" ? 1 : -1)),
+      );
+      numberField(
+        "Second run",
+        stair.run2,
+        (value) => doc.edit((plan) => (findStair(plan, stair.id)!.run2 = value)),
+        { min: 0.3 },
+      );
+    }
+    paragraph(
+      "The stair goes up to the floor of the next story. The run is the first flight. The landing counts as one step.",
+      "note",
+    );
+    button(
+      "Turn around",
+      () =>
+        doc.edit((plan) => {
+          const s = findStair(plan, stair.id)!;
+          [s.a, s.b] = [s.b, s.a];
+        }),
+      { icon: "flipHinge" },
+    );
+    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
+    return;
+  }
+
+  if (selection?.kind === "chimney") {
+    const chimney = findChimney(plan, selection.id);
+    if (!chimney) return;
+    const extent = chimneyExtent(doc.building, plan, chimney);
+    heading("Chimney", "chimney");
+    const set = (key: "width" | "depth") => (value: number) =>
+      doc.edit((plan) => (findChimney(plan, chimney.id)![key] = value));
+    numberField("Width", chimney.width, set("width"), { min: 0.1 });
+    numberField("Depth", chimney.depth, set("depth"), { min: 0.1 });
+    numberField(
+      "Top",
+      extent.top,
+      (value) => doc.edit((plan) => (findChimney(plan, chimney.id)!.top = value)),
+      { min: -1e6 },
+    );
+    paragraph(
+      chimney.top === null
+        ? "The top is automatic: 0.8 m above the roof. Type a height to fix it."
+        : "The top is fixed. The height is above the ground.",
+      "note",
+    );
+    if (chimney.top !== null) {
+      button(
+        "Automatic top",
+        () => doc.edit((plan) => (findChimney(plan, chimney.id)!.top = null)),
+        { icon: "check" },
+      );
+    }
+    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
+    return;
+  }
+
   if (selection?.kind === "wall") {
     const wall = findWall(plan, selection.id);
     if (!wall) return;
@@ -534,6 +711,7 @@ function renderPanel(): void {
     return;
   }
 
+  renderStoryPanel();
   heading("Plan", "view2d");
   const rooms = findRooms(plan);
   const area = rooms.reduce((sum, room) => sum + room.area, 0);
@@ -544,6 +722,7 @@ function renderPanel(): void {
     [`${area.toFixed(1)} m²`, "area"],
   ]);
   paragraph("The area is inside the center lines of the walls.", "note");
+  renderBuildingPanel();
   heading("Background", "image");
   if (plan.background) {
     rangeField("Opacity", plan.background.opacity, (value) =>
@@ -566,6 +745,231 @@ function renderPanel(): void {
   }
 }
 
+function textField(
+  text: string,
+  value: string,
+  change: (value: string) => void,
+  options: { placeholder?: string; allowEmpty?: boolean } = {},
+): void {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  if (options.placeholder) input.placeholder = options.placeholder;
+  input.addEventListener("change", () => {
+    const trimmed = input.value.trim();
+    if (trimmed || options.allowEmpty) change(trimmed);
+  });
+  field(text, input);
+}
+
+function selectField<T extends string>(
+  text: string,
+  value: T,
+  options: [T, string][],
+  change: (value: T) => void,
+): void {
+  const select = document.createElement("select");
+  for (const [key, label] of options) select.append(new Option(label, key, false, key === value));
+  select.addEventListener("change", () => change(select.value as T));
+  field(text, select);
+}
+
+/** The values of the active story. A change of its height moves the stories above with it. */
+function renderStoryPanel(): void {
+  const story = doc.plan;
+  const id = story.id;
+  heading("Story", "layers");
+  textField("Name", story.name, (value) =>
+    doc.editBuilding((b) => (findStory(b, id)!.name = value)),
+  );
+  numberField(
+    "Floor level",
+    story.elevation,
+    (value) =>
+      doc.editBuilding((b) => {
+        findStory(b, id)!.elevation = value;
+        sortStories(b);
+      }),
+    { min: -1e6 },
+  );
+  numberField(
+    "Story height",
+    story.height,
+    (value) =>
+      doc.editBuilding((b) => {
+        const s = findStory(b, id)!;
+        const delta = value - s.height;
+        for (const other of b.stories) if (other.elevation > s.elevation) other.elevation += delta;
+        s.height = value;
+      }),
+    { min: 0.5 },
+  );
+  if (doc.building.stories.length > 1) {
+    button(
+      "Delete story",
+      () => {
+        doc.editBuilding((b) => {
+          b.stories = b.stories.filter((s) => s.id !== id);
+          if (b.roof?.storyId === id) b.roof = null;
+        });
+      },
+      { kind: "danger", icon: "trash" },
+    );
+  }
+}
+
+const ROOF_KINDS: [RoofKind | "none", string][] = [
+  ["none", "No roof"],
+  ["gable", "Gable"],
+  ["hip", "Hip"],
+  ["shed", "Shed"],
+  ["flat", "Flat"],
+];
+
+/** The orientation and the roof of the building. */
+function renderBuildingPanel(): void {
+  const building = doc.building;
+  heading("Building", "roof");
+  numberField(
+    "North",
+    building.north,
+    (value) => doc.editBuilding((b) => (b.north = ((value % 360) + 360) % 360)),
+    { min: -360, step: 1, unit: "°" },
+  );
+  const roof = building.roof;
+  selectField("Roof", roof?.kind ?? "none", ROOF_KINDS, (kind) =>
+    doc.editBuilding((b) => {
+      if (kind === "none") b.roof = null;
+      else b.roof = { ...(b.roof ?? defaultRoof(b)), kind };
+    }),
+  );
+  if (!roof) return;
+  selectField(
+    "On story",
+    roof.storyId,
+    building.stories.map((s) => [s.id, s.name]),
+    (storyId) => doc.editBuilding((b) => (b.roof!.storyId = storyId)),
+  );
+  if (roof.kind !== "flat") {
+    numberField("Pitch", roof.pitch, (value) => doc.editBuilding((b) => (b.roof!.pitch = value)), {
+      step: 1,
+      max: 75,
+      unit: "°",
+    });
+    selectField(
+      roof.kind === "shed" ? "Slope" : "Ridge",
+      roof.ridge,
+      [
+        ["x", roof.kind === "shed" ? "Rises along y" : "Along x"],
+        ["y", roof.kind === "shed" ? "Rises along x" : "Along y"],
+      ],
+      (ridge) => doc.editBuilding((b) => (b.roof!.ridge = ridge)),
+    );
+  }
+  numberField("Overhang", roof.overhang, (value) =>
+    doc.editBuilding((b) => (b.roof!.overhang = value)),
+  );
+}
+
+// ----- Stories -----
+
+let showAbove = false;
+
+function renderStories(): void {
+  const list = $("#stories");
+  list.replaceChildren();
+  const active = doc.activeStoryId;
+  const stories = [...doc.building.stories].reverse();
+  for (const story of stories) {
+    const element = document.createElement("button");
+    element.className = story.id === active ? "story active" : "story";
+    const name = document.createElement("span");
+    name.textContent = story.name;
+    const level = document.createElement("small");
+    const sign = story.elevation > 0 ? "+" : story.elevation < 0 ? "−" : "±";
+    level.textContent = `${sign}${Math.abs(story.elevation).toFixed(2)}`;
+    element.append(name, level);
+    element.title = `${story.name}: floor at ${story.elevation.toFixed(2)} m`;
+    element.addEventListener("click", () => {
+      editor.select(null);
+      doc.setActiveStory(story.id);
+    });
+    list.append(element);
+    // A line marks the ground between the lowest story above ground and the cellars.
+    const next = stories[stories.indexOf(story) + 1];
+    if (story.elevation >= 0 && next && next.elevation < 0) {
+      const ground = document.createElement("div");
+      ground.className = "ground";
+      list.append(ground);
+    }
+  }
+  const add = document.createElement("button");
+  add.className = "add";
+  add.dataset.menu = "";
+  add.innerHTML = icon("plus");
+  add.append("Add story");
+  add.addEventListener("click", () => toggleMenu(add, $("#story-menu"), "above"));
+  list.append(add);
+}
+
+function addStory(kind: "top" | "attic" | "cellar"): void {
+  closeMenus();
+  let id = "";
+  doc.editBuilding((b) => {
+    const story = kind === "cellar" ? addCellar(b) : addStoryOnTop(b, kind === "attic");
+    id = story.id;
+  });
+  editor.select(null);
+  doc.setActiveStory(id);
+  showStatus(
+    kind === "cellar"
+      ? "Added a cellar. The walls of the story above show as dashed lines."
+      : "Added a story. The walls of the story below show as dashed lines.",
+  );
+}
+
+// ----- The compass -----
+
+function renderCompass(): void {
+  const needle = document.querySelector<SVGGElement>("#compass .needle")!;
+  needle.setAttribute("transform", `rotate(${doc.building.north})`);
+}
+
+/** A drag on the compass turns north. It snaps to 5°, or to 1° with Alt. */
+function setupCompass(): void {
+  const compass = $("#compass");
+  const angle = (e: PointerEvent) => {
+    const rect = compass.getBoundingClientRect();
+    const dx = e.clientX - (rect.left + rect.width / 2);
+    const dy = e.clientY - (rect.top + rect.height / 2);
+    const degrees = (Math.atan2(dx, -dy) * 180) / Math.PI;
+    const step = e.altKey ? 1 : 5;
+    return (((Math.round(degrees / step) * step) % 360) + 360) % 360;
+  };
+  compass.addEventListener("pointerdown", (e) => {
+    compass.setPointerCapture(e.pointerId);
+    doc.begin();
+    doc.updateBuilding((b) => (b.north = angle(e)));
+  });
+  compass.addEventListener("pointermove", (e) => {
+    if (!compass.hasPointerCapture(e.pointerId)) return;
+    doc.updateBuilding((b) => (b.north = angle(e)));
+  });
+  const end = () => doc.commit();
+  compass.addEventListener("pointerup", end);
+  compass.addEventListener("pointercancel", end);
+}
+
+// ----- The 3D view -----
+
+function update3d(): void {
+  view3d.update(doc.building, { activeStoryId: doc.activeStoryId, showAbove });
+}
+
+function fit3d(): void {
+  view3d.fit(doc.building);
+}
+
 // ----- Files -----
 
 function updateTitle(): void {
@@ -581,17 +985,17 @@ function confirmDiscard(): boolean {
 }
 
 function load(
-  plan = emptyPlan(),
+  building: Building = emptyBuilding(),
   name = "plan.grundriss",
   handle: FileSystemFileHandle | null = null,
 ) {
   setSuggestions(null);
-  doc.replace(plan);
+  doc.replace(building);
   fileName = name;
   fileHandle = handle;
   editor.select(null);
   editor.fit();
-  view3d.fit(plan);
+  fit3d();
   updateTitle();
 }
 
@@ -600,7 +1004,7 @@ async function openFile(): Promise<void> {
   try {
     const file = await openPlanFile();
     if (!file) return;
-    load(readPlanFile(file.bytes), file.name, file.handle);
+    load(readBuildingFile(file.bytes), file.name, file.handle);
     showStatus(`Opened ${file.name}.`);
   } catch (error) {
     showStatus(error instanceof Error ? error.message : String(error), true);
@@ -609,14 +1013,14 @@ async function openFile(): Promise<void> {
 
 async function saveFile(saveAs: boolean): Promise<void> {
   try {
-    const plan = doc.plan;
+    const building = doc.building;
     const result = await savePlanFile(
       async (name) =>
         isPackageName(name)
-          ? new Blob([writePackage(plan, await exportsOf(plan)) as BlobPart], {
+          ? new Blob([writePackage(building, await exportsOf(building)) as BlobPart], {
               type: "application/zip",
             })
-          : new Blob([serializePlan(plan)], { type: "application/json" }),
+          : new Blob([serializeBuilding(building)], { type: "application/json" }),
       saveAs ? null : fileHandle,
       fileName,
     );
@@ -634,23 +1038,21 @@ async function saveFile(saveAs: boolean): Promise<void> {
 
 type ExportFormat = keyof typeof EXPORT_TYPES;
 
-/** The file of one export format. */
-async function exportFile(plan: Plan, format: ExportFormat): Promise<Uint8Array | string> {
-  if (format === "svg") return planToSvg(plan, { background: false });
-  if (format === "pdf") return planToPdf(plan);
-  if (format === "dxf") return planToDxf(plan);
-  // The 3D view shows the plan of the document, so its model is the model of `plan`.
-  return new Uint8Array(await exportGlb(view3d.model));
+/** The file of one export format. SVG is for the active story, the others for all stories. */
+async function exportFile(building: Building, format: ExportFormat): Promise<Uint8Array | string> {
+  const story = findStory(building, doc.activeStoryId) ?? building.stories[0];
+  if (format === "svg") {
+    return planToSvg(story, { ...storyExtras(building, story), background: false });
+  }
+  if (format === "pdf") return buildingToPdf(building);
+  if (format === "dxf") return buildingToDxf(building);
+  // The model has the whole building, also the stories that the 3D view hides now.
+  return new Uint8Array(await exportGlb(buildModel(building)));
 }
 
 /** The exports that a package contains, so that other programs can use them at once. */
-async function exportsOf(plan: Plan): Promise<Record<string, Uint8Array | string>> {
-  return {
-    "plan.svg": await exportFile(plan, "svg"),
-    "plan.pdf": await exportFile(plan, "pdf"),
-    "plan.dxf": await exportFile(plan, "dxf"),
-    "model.glb": await exportFile(plan, "glb"),
-  };
+async function exportsOf(building: Building): Promise<Record<string, Uint8Array | string>> {
+  return buildingExports(building, (await exportFile(building, "glb")) as Uint8Array);
 }
 
 const MIME: Record<ExportFormat, string> = {
@@ -663,10 +1065,11 @@ const MIME: Record<ExportFormat, string> = {
 async function exportPlan(format: ExportFormat): Promise<void> {
   closeMenus();
   try {
-    const data = await exportFile(doc.plan, format);
+    const data = await exportFile(doc.building, format);
     const base = fileName.replace(/\.[^.]+$/, "");
+    const name = format === "svg" ? `${base}-${slug(doc.plan.name)}` : base;
     const blob = new Blob([data as BlobPart], { type: MIME[format] });
-    const result = await saveBlob(blob, `${base}.${format}`, [EXPORT_TYPES[format]]);
+    const result = await saveBlob(blob, `${name}.${format}`, [EXPORT_TYPES[format]]);
     if (result) showStatus(`Exported ${result.name}.`);
   } catch (error) {
     showStatus(error instanceof Error ? error.message : String(error), true);
@@ -680,13 +1083,18 @@ function closeMenus(): void {
 }
 
 /** Opens the menu under the button, or closes it if it is open. */
-function toggleMenu(button: HTMLElement, menu: HTMLElement): void {
+function toggleMenu(
+  button: HTMLElement,
+  menu: HTMLElement,
+  place: "below" | "above" = "below",
+): void {
   const open = menu.hidden;
   closeMenus();
   menu.hidden = !open;
   if (!open) return;
   const rect = button.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.top =
+    place === "below" ? `${rect.bottom + 6}px` : `${rect.top - menu.offsetHeight - 6}px`;
   menu.style.left = `${Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)}px`;
 }
 
@@ -722,11 +1130,30 @@ async function loadBackground(): Promise<void> {
 
 // ----- Wiring -----
 
+let shownStoryId = "";
 doc.subscribe(() => {
   updateTitle();
-  view3d.update(doc.plan);
+  update3d();
+  renderStories();
+  renderCompass();
   renderPanel();
+  // A change of the active story shows the whole new story.
+  if (doc.activeStoryId !== shownStoryId) {
+    shownStoryId = doc.activeStoryId;
+    editor.select(null);
+  }
 });
+setupCompass();
+$("#show-above").addEventListener("click", () => {
+  showAbove = !showAbove;
+  $("#show-above").classList.toggle("active", showAbove);
+  update3d();
+});
+for (const element of document.querySelectorAll<HTMLButtonElement>("[data-add-story]")) {
+  element.addEventListener("click", () =>
+    addStory(element.dataset.addStory as "top" | "attic" | "cellar"),
+  );
+}
 editor.onSelect = () => renderPanel();
 editor.onCalibrate = (a, b) => {
   calibration = { a, b };
@@ -749,7 +1176,7 @@ $("#empty-wall").addEventListener("click", () => setTool("wall"));
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")) {
   element.addEventListener("click", () => {
     editor.fit();
-    view3d.fit(doc.plan);
+    fit3d();
   });
 }
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
@@ -765,6 +1192,8 @@ const TOOL_KEYS: Record<string, Tool> = {
   d: "door",
   n: "window",
   m: "dimension",
+  s: "stair",
+  h: "chimney",
   c: "calibrate",
 };
 
@@ -804,7 +1233,7 @@ window.addEventListener("keydown", (e) => {
   } else if (key === "delete" || key === "backspace") editor.deleteSelection();
   else if (key === "f") {
     editor.fit();
-    view3d.fit(doc.plan);
+    fit3d();
   } else return;
   e.preventDefault();
 });
