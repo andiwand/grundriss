@@ -15,3 +15,15 @@ The changes that a user notices.
 - A new plan shows a card with the first steps.
 - Each pane has a button that fits the plan in the view.
 - Fix: the halo behind a dimension label keeps its size at each zoom.
+- Select more than one object: Shift+click, or drag a box on the empty plan. Move, delete,
+  copy, cut, paste, and duplicate the selection. The arrow keys move it.
+- A door has a hinge side and a swing direction. A new door opens to the side of the click.
+- The Measure tool (M) adds dimension lines.
+- The wall tool snaps the direction to multiples of 15°. Shift keeps it at multiples of 45°.
+- A drag of a wall keeps the angles of the next walls. Shift moves the wall freely.
+- Pan with Space+drag or with the right mouse button. A drag on the empty plan selects now.
+- Export the plan as PDF, SVG, DXF, or glTF.
+- A plan is now a `.grundriss` package: a ZIP file with the plan, the background image, and the
+  exports. The app still opens and saves `.json` plans.
+- Assisted tracing with OpenCV.js: straighten a photo, clean up a scan, and get suggested walls
+  to accept or reject.

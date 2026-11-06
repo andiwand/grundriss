@@ -22,6 +22,9 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   only at vertices. The editor splits a wall where a new wall starts or ends on it.
 - Doors and windows (`Opening`) belong to a wall, with an offset from the vertex `a` of the
   wall. So they move with the wall.
+- Dimension lines (`Dimension`) have their own two points. They do not follow the walls.
+- The selection of the editor is a list of `Item` (a kind and an id). The functions in
+  `src/model/plan.ts` copy, paste, move, and remove items.
 - Rooms are not stored. `findRooms` calculates them from the cycles of the wall graph.
 - The plan uses meters and screen axes (y points down). The 3D view maps the plan y to the
   world z.
@@ -36,10 +39,15 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/rooms.ts`     | The rooms from the faces of the wall graph.                       |
 | `src/model/history.ts`   | `PlanDocument`: transactions, undo, redo, and the dirty state.    |
 | `src/model/file.ts`      | The file format: `serializePlan` and `parsePlan` with validation. |
+| `src/model/drawing.ts`   | The shapes of the 2D drawing, for the editor and the exports.     |
 | `src/io/files.ts`        | Open and save with the File System Access API, and the fallbacks. |
+| `src/io/package.ts`      | The `.grundriss` package: a ZIP file with the plan and its image. |
+| `src/export/`            | The exports: SVG, PDF, DXF, and glTF.                             |
+| `src/tracing/`           | Assisted tracing with OpenCV.js, which loads only when necessary. |
 | `src/editor/editor2d.ts` | The 2D editor: SVG drawing, tools, snapping, pan, and zoom.       |
 | `src/view3d/view3d.ts`   | The 3D view with Three.js.                                        |
 | `src/main.ts`            | The app: toolbar, panel, files, and keyboard shortcuts.           |
+| `src/icons.ts`           | The icons of the user interface.                                  |
 | `src/style.css`          | The layout and the style of the 2D drawing.                       |
 | `test/`                  | Vitest tests of the model. They run in Node and need no DOM.      |
 

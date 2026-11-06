@@ -34,6 +34,9 @@
           title="Save as (Ctrl+Shift+S)"
         ></button>
       </div>
+      <button id="export" class="ghost" data-icon="export" data-menu title="Export the plan">
+        Export
+      </button>
       <div class="divider"></div>
       <div class="group">
         <button class="icon-button" id="undo" data-icon="undo" title="Undo (Ctrl+Z)"></button>
@@ -58,6 +61,9 @@
           </button>
           <button data-tool="window" data-icon="window" title="Put a window in a wall (N)">
             Window<kbd>N</kbd>
+          </button>
+          <button data-tool="dimension" data-icon="dimension" title="Draw a dimension line (M)">
+            Measure<kbd>M</kbd>
           </button>
           <span class="divider"></span>
           <button id="background" data-icon="image" title="Load a scan or a photo of a plan">
@@ -98,6 +104,20 @@
       <aside id="panel"></aside>
     </main>
     <footer id="status"></footer>
+    <div class="menu" id="export-menu" role="menu" hidden>
+      <button data-export="pdf" role="menuitem">
+        <span>PDF</span><small>Print at a standard scale</small>
+      </button>
+      <button data-export="svg" role="menuitem">
+        <span>SVG</span><small>Vector drawing in meters</small>
+      </button>
+      <button data-export="dxf" role="menuitem">
+        <span>DXF</span><small>For CAD programs</small>
+      </button>
+      <button data-export="glb" role="menuitem">
+        <span>glTF (.glb)</span><small>3D model</small>
+      </button>
+    </div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

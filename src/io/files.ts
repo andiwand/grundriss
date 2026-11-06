@@ -1,7 +1,7 @@
 // Reads and writes files. Chromium has the File System Access API, so Save can write to the
 // same file again. Firefox and Safari use a file input to open and a download to save.
 
-interface FilePickerType {
+export interface FilePickerType {
   description: string;
   accept: Record<string, string[]>;
 }
@@ -14,15 +14,26 @@ interface FilePickerWindow {
   }): Promise<FileSystemFileHandle>;
 }
 
-const PLAN_TYPES: FilePickerType[] = [
-  { description: "Grundriss plan", accept: { "application/json": [".json"] } },
-];
+export const PACKAGE_TYPE: FilePickerType = {
+  description: "Grundriss package",
+  accept: { "application/zip": [".grundriss"] },
+};
+export const JSON_TYPE: FilePickerType = {
+  description: "Grundriss plan (JSON)",
+  accept: { "application/json": [".json"] },
+};
+export const EXPORT_TYPES = {
+  svg: { description: "SVG drawing", accept: { "image/svg+xml": [".svg"] } },
+  pdf: { description: "PDF document", accept: { "application/pdf": [".pdf"] } },
+  dxf: { description: "DXF drawing", accept: { "application/dxf": [".dxf"] } },
+  glb: { description: "glTF binary model", accept: { "model/gltf-binary": [".glb"] } },
+} satisfies Record<string, FilePickerType>;
 
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
 export interface OpenedFile {
   name: string;
-  text: string;
+  bytes: Uint8Array;
   /** The handle to save to the same file again, or null if the browser has no handle. */
   handle: FileSystemFileHandle | null;
 }
@@ -39,58 +50,105 @@ export function pickFile(accept: string): Promise<File | null> {
   });
 }
 
+/** Asks for a package or a JSON plan and reads its bytes. It gives null if the user cancels. */
 export async function openPlanFile(): Promise<OpenedFile | null> {
   const picker = window as FilePickerWindow;
   if (picker.showOpenFilePicker) {
     try {
-      const [handle] = await picker.showOpenFilePicker({ types: PLAN_TYPES });
+      const [handle] = await picker.showOpenFilePicker({
+        types: [
+          {
+            description: "Grundriss plan",
+            accept: { "application/zip": [".grundriss"], "application/json": [".json"] },
+          },
+        ],
+      });
       const file = await handle.getFile();
-      return { name: file.name, text: await file.text(), handle };
+      return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), handle };
     } catch (error) {
       if (isAbort(error)) return null;
       throw error;
     }
   }
-  const file = await pickFile(".json,application/json");
-  return file ? { name: file.name, text: await file.text(), handle: null } : null;
+  const file = await pickFile(".grundriss,.json,application/json,application/zip");
+  return file
+    ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), handle: null }
+    : null;
 }
 
-async function write(handle: FileSystemFileHandle, text: string): Promise<void> {
+async function write(handle: FileSystemFileHandle, blob: Blob): Promise<void> {
   const stream = await handle.createWritable();
-  await stream.write(text);
+  await stream.write(blob);
   await stream.close();
 }
 
+function download(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /**
- * Saves the text. With a handle, it writes to that file. Without a handle, it asks for a file,
- * or it downloads the file if the browser cannot ask. It gives null if the user cancels.
+ * Saves a file. With a handle, it writes to that file. Without a handle, it asks for a file, or
+ * it downloads the file if the browser cannot ask. It gives null if the user cancels.
  */
-export async function savePlanFile(
-  text: string,
-  handle: FileSystemFileHandle | null,
+export async function saveBlob(
+  blob: Blob,
   suggestedName: string,
+  types: FilePickerType[],
+  handle: FileSystemFileHandle | null = null,
 ): Promise<{ name: string; handle: FileSystemFileHandle | null } | null> {
   if (handle) {
-    await write(handle, text);
+    await write(handle, blob);
     return { name: handle.name, handle };
   }
   const picker = window as FilePickerWindow;
   if (picker.showSaveFilePicker) {
     try {
-      const chosen = await picker.showSaveFilePicker({ types: PLAN_TYPES, suggestedName });
-      await write(chosen, text);
+      const chosen = await picker.showSaveFilePicker({ types, suggestedName });
+      await write(chosen, blob);
       return { name: chosen.name, handle: chosen };
     } catch (error) {
       if (isAbort(error)) return null;
       throw error;
     }
   }
-  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = suggestedName;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  download(blob, suggestedName);
+  return { name: suggestedName, handle: null };
+}
+
+/**
+ * Saves a plan file. The name decides the order of the types in the picker: a name that ends
+ * with ".json" shows the JSON type first, else the package type is first. The caller makes the
+ * blob in the format that the name of the result asks for. So with a picker, the caller gives a
+ * function that makes the blob for the chosen name.
+ */
+export async function savePlanFile(
+  makeBlob: (name: string) => Blob | Promise<Blob>,
+  handle: FileSystemFileHandle | null,
+  suggestedName: string,
+): Promise<{ name: string; handle: FileSystemFileHandle | null } | null> {
+  if (handle) {
+    await write(handle, await makeBlob(handle.name));
+    return { name: handle.name, handle };
+  }
+  const json = suggestedName.toLowerCase().endsWith(".json");
+  const types = json ? [JSON_TYPE, PACKAGE_TYPE] : [PACKAGE_TYPE, JSON_TYPE];
+  const picker = window as FilePickerWindow;
+  if (picker.showSaveFilePicker) {
+    try {
+      const chosen = await picker.showSaveFilePicker({ types, suggestedName });
+      await write(chosen, await makeBlob(chosen.name));
+      return { name: chosen.name, handle: chosen };
+    } catch (error) {
+      if (isAbort(error)) return null;
+      throw error;
+    }
+  }
+  download(await makeBlob(suggestedName), suggestedName);
   return { name: suggestedName, handle: null };
 }
 

@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import { dimensionShape, openingShape, planBounds, wallOutline } from "../src/model/drawing";
+import { addOpening, addVertex, addWall, emptyPlan } from "../src/model/plan";
+
+function wallPlan() {
+  const plan = emptyPlan();
+  const a = addVertex(plan, { x: 0, y: 0 });
+  const b = addVertex(plan, { x: 4, y: 0 });
+  const wall = addWall(plan, a.id, b.id, { thickness: 0.2, height: 2.5 })!;
+  return { plan, wall };
+}
+
+const close = (p: { x: number; y: number }, x: number, y: number) => {
+  expect(p.x).toBeCloseTo(x);
+  expect(p.y).toBeCloseTo(y);
+};
+
+describe("drawing shapes", () => {
+  it("gives the outline of a free wall", () => {
+    const { plan, wall } = wallPlan();
+    const outline = wallOutline(plan, wall);
+    close(outline[0], 0, 0.1);
+    close(outline[1], 4, 0.1);
+    close(outline[2], 4, -0.1);
+    close(outline[3], 0, -0.1);
+  });
+
+  it("draws a door with the hinge at a and the swing to the right side like the editor", () => {
+    const { plan, wall } = wallPlan();
+    const door = addOpening(plan, wall.id, "door", 2);
+    const shape = openingShape(plan, door);
+    if (shape?.kind !== "door") throw new Error("no door");
+    // The width is 0.9, so the opening goes from 1.55 to 2.45.
+    close(shape.hinge, 1.55, 0.1);
+    close(shape.leaf, 1.55, 1.0);
+    close(shape.arc.to, 2.45, 0.1);
+    expect(shape.arc.sweep).toBe(0);
+    expect(shape.arc.radius).toBeCloseTo(0.9);
+  });
+
+  it("moves the hinge and the swing", () => {
+    const { plan, wall } = wallPlan();
+    const door = addOpening(plan, wall.id, "door", 2);
+    door.hinge = "b";
+    door.swing = -1;
+    const shape = openingShape(plan, door);
+    if (shape?.kind !== "door") throw new Error("no door");
+    close(shape.hinge, 2.45, -0.1);
+    close(shape.leaf, 2.45, -1.0);
+    close(shape.arc.to, 1.55, -0.1);
+    // Both turns flip, so the sweep stays the same.
+    expect(shape.arc.sweep).toBe(0);
+    door.swing = 1;
+    const other = openingShape(plan, door);
+    if (other?.kind !== "door") throw new Error("no door");
+    expect(other.arc.sweep).toBe(1);
+  });
+
+  it("draws a window as a gap with glass", () => {
+    const { plan, wall } = wallPlan();
+    const window = addOpening(plan, wall.id, "window", 2);
+    const shape = openingShape(plan, window);
+    if (shape?.kind !== "window") throw new Error("no window");
+    close(shape.glass[0], 1.4, 0);
+    close(shape.glass[1], 2.6, 0);
+    expect(shape.gap).toHaveLength(4);
+  });
+
+  it("gives a dimension line with readable text", () => {
+    const shape = dimensionShape({ id: "d", a: { x: 4, y: 0 }, b: { x: 0, y: 0 }, offset: 0.5 });
+    expect(shape.text).toBe("4.00 m");
+    // From b to a points to -x, so the side is -y, and the line is at y = -0.5.
+    close(shape.line[0], 4, -0.5);
+    close(shape.line[1], 0, -0.5);
+    close(shape.normal, 0, -1);
+    // The direction is 180 degrees, so the text turns to 0 degrees.
+    expect(Math.abs(shape.angle)).toBeCloseTo(0);
+    expect(shape.extensions[0][1].y).toBeCloseTo(-0.6);
+  });
+
+  it("gives the bounds of the plan", () => {
+    const { plan } = wallPlan();
+    expect(planBounds(emptyPlan())).toBeNull();
+    const box = planBounds(plan)!;
+    expect(box.minX).toBeCloseTo(0);
+    expect(box.maxX).toBeCloseTo(4);
+    expect(box.minY).toBeCloseTo(-0.1);
+    expect(box.maxY).toBeCloseTo(0.1);
+  });
+});

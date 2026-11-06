@@ -1,7 +1,11 @@
 // The file format: JSON with a format name and a version. A change that old versions of the app
 // cannot read needs a new version and a migration in parsePlan.
+//
+// A new field that old versions can ignore needs no new version. parsePlan gives it a default
+// value when a file does not have it. Examples: `hinge` and `swing` of an opening, and
+// `dimensions`.
 
-import type { Background, Opening, Plan, Vertex, Wall } from "./types";
+import type { Background, Dimension, Opening, Plan, Point, Vertex, Wall } from "./types";
 
 export const FILE_FORMAT = "grundriss";
 export const FILE_VERSION = 1;
@@ -93,11 +97,27 @@ export function parsePlan(text: string): Plan {
       width: number(o, "width", where),
       height: number(o, "height", where),
       sill: number(o, "sill", where),
+      hinge: o.hinge === "b" ? "b" : "a",
+      swing: o.swing === -1 ? -1 : 1,
     } satisfies Opening;
     if (!wallIds.has(opening.wallId)) {
       throw new Error(`The file is damaged: ${where} refers to a wall that does not exist.`);
     }
     return opening;
+  });
+
+  const point = (data: unknown, where: string): Point => {
+    if (!isObject(data)) throw new Error(`The file is damaged: ${where} is not a point.`);
+    return { x: number(data, "x", where), y: number(data, "y", where) };
+  };
+  const dimensions: Dimension[] = list(data, "dimensions").map((d, i) => {
+    const where = `dimension ${i}`;
+    return {
+      id: string(d, "id", where),
+      a: point(d.a, `${where}, point a`),
+      b: point(d.b, `${where}, point b`),
+      offset: number(d, "offset", where),
+    };
   });
 
   let background: Background | null = null;
@@ -115,5 +135,5 @@ export function parsePlan(text: string): Plan {
     };
   }
 
-  return { vertices, walls, openings, background };
+  return { vertices, walls, openings, dimensions, background };
 }

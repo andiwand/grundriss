@@ -4,10 +4,10 @@
 
 1. **Manual tracing** (done in 0.1.0): load a scan as the background, set its scale, draw walls,
    doors, and windows, edit them, see the plan in 3D, and save it as a file.
-2. **Better editing**: select more than one object, copy and paste, door hinge side and swing
+2. **Better editing** (done): select more than one object, copy and paste, door hinge side and swing
    direction, dimension lines, angle snapping, and a wall that keeps its angle on a drag.
-3. **Export**: SVG and PDF for 2D, glTF for 3D, and maybe DXF.
-4. **Assisted tracing**: OpenCV.js (WASM) corrects the perspective of a photo, removes noise,
+3. **Export** (done): SVG, PDF, and DXF for 2D, glTF for 3D, and the `.grundriss` package.
+4. **Assisted tracing** (done, first version): OpenCV.js (WASM) corrects the perspective of a photo, removes noise,
    and suggests wall lines. The user accepts or corrects them.
 5. **Furniture**: a catalog of glTF models, with position and rotation in the plan.
 6. **The whole building**: more than one story, a cellar and an attic as stories, stairs that

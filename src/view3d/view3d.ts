@@ -61,6 +61,11 @@ export class View3D {
     new ResizeObserver(() => this.resize()).observe(container);
   }
 
+  /** The meshes of the plan, without the grid and the lights. The glTF export uses it. */
+  get model(): THREE.Object3D {
+    return this.content;
+  }
+
   update(plan: Plan): void {
     this.content.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {

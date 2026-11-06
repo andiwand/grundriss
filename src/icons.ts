@@ -22,6 +22,17 @@ const ICONS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  dimension: '<path d="M4 8v8M20 8v8M4 12h16"/><path d="m7 9-3 3 3 3M17 9l3 3-3 3"/>',
+  flipHinge: '<path d="M12 4v16"/><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
+  flipSwing: '<path d="M4 12h16"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/>',
+  export: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
+  wand: '<path d="m4 20 11-11M14 4v2M18 6l-1.5 1.5M20 10h-2M11 6l1.5 1.5"/><path d="m15 9-2-2"/>',
+  crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
+  sparkle:
+    '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

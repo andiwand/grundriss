@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parsePlan, serializePlan } from "../src/model/file";
-import { addOpening, addVertex, addWall, emptyPlan } from "../src/model/plan";
+import { addDimension, addOpening, addVertex, addWall, emptyPlan } from "../src/model/plan";
 
 describe("file format", () => {
   it("reads what it writes", () => {
@@ -9,6 +9,10 @@ describe("file format", () => {
     const b = addVertex(plan, { x: 4, y: 0 });
     const wall = addWall(plan, a.id, b.id)!;
     addOpening(plan, wall.id, "window", 2);
+    const door = addOpening(plan, wall.id, "door", 1);
+    door.hinge = "b";
+    door.swing = -1;
+    addDimension(plan, { x: 0, y: 0 }, { x: 4, y: 0 }, -0.5);
     plan.background = {
       image: "data:image/png;base64,AAAA",
       width: 100,
@@ -19,6 +23,25 @@ describe("file format", () => {
       opacity: 0.5,
     };
     expect(parsePlan(serializePlan(plan))).toEqual(plan);
+  });
+
+  it("gives defaults to the fields that old files do not have", () => {
+    const text = JSON.stringify({
+      format: "grundriss",
+      version: 1,
+      vertices: [
+        { id: "v1", x: 0, y: 0 },
+        { id: "v2", x: 4, y: 0 },
+      ],
+      walls: [{ id: "w1", a: "v1", b: "v2", thickness: 0.2, height: 2.5 }],
+      openings: [
+        { id: "o1", wallId: "w1", kind: "door", offset: 1, width: 0.9, height: 2.1, sill: 0 },
+      ],
+      background: null,
+    });
+    const plan = parsePlan(text);
+    expect(plan.openings[0]).toMatchObject({ hinge: "a", swing: 1 });
+    expect(plan.dimensions).toEqual([]);
   });
 
   it("rejects a file that is not JSON", () => {
