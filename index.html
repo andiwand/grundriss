@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Grundriss</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="./icon.svg" alt="" width="26" height="26" />
+        <span>Grundriss</span>
+      </div>
+      <div class="file-name" id="file-name" title="The name of the plan file">
+        <span id="file-title">plan.json</span>
+        <span class="dirty-dot" title="Unsaved changes"></span>
+      </div>
+      <div class="spacer"></div>
+      <div class="group">
+        <button class="icon-button" id="new" data-icon="new" title="New plan"></button>
+        <button
+          class="icon-button"
+          id="open"
+          data-icon="open"
+          title="Open a plan (Ctrl+O)"
+        ></button>
+        <button class="icon-button" id="save" data-icon="save" title="Save (Ctrl+S)"></button>
+        <button
+          class="icon-button"
+          id="save-as"
+          data-icon="saveAs"
+          title="Save as (Ctrl+Shift+S)"
+        ></button>
+      </div>
+      <div class="divider"></div>
+      <div class="group">
+        <button class="icon-button" id="undo" data-icon="undo" title="Undo (Ctrl+Z)"></button>
+        <button class="icon-button" id="redo" data-icon="redo" title="Redo (Ctrl+Shift+Z)"></button>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented" id="views" role="group" aria-label="View">
+        <button data-view="2d" data-icon="view2d" title="2D only">2D</button>
+        <button data-view="split" data-icon="split" title="2D and 3D">Split</button>
+        <button data-view="3d" data-icon="view3d" title="3D only">3D</button>
+      </div>
+    </header>
+    <main id="area" class="view-split">
+      <section id="plan-2d" class="pane">
+        <div class="palette" id="tools" role="toolbar" aria-label="Tools">
+          <button data-tool="select" data-icon="select" title="Select and move (V)">
+            Select<kbd>V</kbd>
+          </button>
+          <button data-tool="wall" data-icon="wall" title="Draw walls (W)">Wall<kbd>W</kbd></button>
+          <button data-tool="door" data-icon="door" title="Put a door in a wall (D)">
+            Door<kbd>D</kbd>
+          </button>
+          <button data-tool="window" data-icon="window" title="Put a window in a wall (N)">
+            Window<kbd>N</kbd>
+          </button>
+          <span class="divider"></span>
+          <button id="background" data-icon="image" title="Load a scan or a photo of a plan">
+            Background
+          </button>
+          <button
+            data-tool="calibrate"
+            data-icon="ruler"
+            title="Set the scale of the background (C)"
+          >
+            Scale<kbd>C</kbd>
+          </button>
+        </div>
+        <div class="empty-state" id="empty-state" hidden>
+          <h2>Start a floor plan</h2>
+          <p>Load a scan or a photo of a plan and trace it, or draw the walls on the grid.</p>
+          <div class="actions">
+            <button class="primary" id="empty-background" data-icon="image">Load background</button>
+            <button id="empty-wall" data-icon="wall">Draw walls</button>
+          </div>
+        </div>
+        <button
+          class="icon-button fit"
+          data-fit
+          data-icon="fit"
+          title="Fit the plan in the view (F)"
+        ></button>
+      </section>
+      <section id="plan-3d" class="pane">
+        <span class="pane-label">3D · drag to orbit, scroll to zoom</span>
+        <button
+          class="icon-button fit"
+          data-fit
+          data-icon="fit"
+          title="Fit the plan in the view (F)"
+        ></button>
+      </section>
+      <aside id="panel"></aside>
+    </main>
+    <footer id="status"></footer>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

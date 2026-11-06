@@ -1,0 +1,26 @@
+{
+  "name": "grundriss",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Trace a scanned floor plan, edit it in 2D, and see it in 3D, in the browser",
+  "license": "MPL-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "format": "prettier --write src test *.ts *.json *.md index.html",
+    "format:check": "prettier --check src test *.ts *.json *.md index.html"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5",
+    "vitest": "^3.2.7"
+  }
+}
