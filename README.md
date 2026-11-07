@@ -167,8 +167,10 @@ the plan works offline after that. The app sends the place to open-meteo.com onl
 
 The **Layers** menu can show a map under the 2D plan: OpenStreetMap, or the aerial photo of
 [basemap.at](https://basemap.at) in Austria. The map lies at the location and turns with the
-north direction. The **Plan point x** and **y** of the location are the point of the plan at its
-latitude and longitude: change them, and North, until the map fits the plan. The browser loads
+north direction. To fit the map to the plan, click **Move the map** in the Location group. Drag to move the map,
+and Shift+drag to turn it around the place (this changes North). Esc or **Done** ends it. The
+**Plan point x** and **y** of the location are the point of the plan at its latitude and
+longitude, so you can also type them. The browser loads
 the map only while it shows, because each request sends the place to the map server.
 
 From the stored year, the app calculates:
@@ -179,6 +181,11 @@ From the stored year, the app calculates:
 - the mean temperature of each month, and the heating degree days G20/15.
 - the design temperature: the coldest mean of 48 hours in the 10 years. The Energy panel can use
   it for the temperature outside.
+- the heating per year: a monthly balance of the heat loss of the rooms, the sun through the
+  windows (by their direction), and the internal gains (3.75 W/m²), in the spirit of EN ISO 13790. The **Heating per year** group of the Energy panel sets the heating (heat pump, boiler,
+  district heating, or direct electric), its efficiency, and the price. It shows the heat demand,
+  an efficiency class, the final energy, the cost, the CO₂, the heat demand of each month, and
+  for a heat pump the part that the PV can cover. Hot water is not included.
 
 Without a climate, the PV yield is a general estimate for Central Europe.
 

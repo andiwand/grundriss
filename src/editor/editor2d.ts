@@ -118,7 +118,9 @@ export type Tool =
   | "fixture"
   | "run"
   | "calibrate"
-  | "rectify";
+  | "rectify"
+  /** Moves the map under the plan, and turns it with Shift. */
+  | "map";
 export type Selection = Item[];
 
 /** A point that the pointer snaps to. It can be an existing vertex or a point on a wall. */
@@ -138,7 +140,8 @@ type Drag =
   | { kind: "move"; startWorld: Point; origin: MoveOrigin }
   | { kind: "furniture"; id: Id; grab: Point }
   | { kind: "fixture"; id: Id; grab: Point }
-  | { kind: "roof-corner"; roofId: Id; index: number };
+  | { kind: "roof-corner"; roofId: Id; index: number }
+  | { kind: "map"; start: Point; anchor: Point; north: number; turn: boolean };
 
 type Attributes = Record<string, string | number>;
 
@@ -606,6 +609,20 @@ export class Editor2D {
       case "select":
         this.selectDown(e, world);
         break;
+      case "map": {
+        // The map moves with the pointer: the point of the plan at the place moves with it.
+        const location = this.doc.building.location;
+        if (!location) break;
+        this.doc.begin();
+        this.drag = {
+          kind: "map",
+          start: world,
+          anchor: { x: location.x, y: location.y },
+          north: this.doc.building.north,
+          turn: e.shiftKey,
+        };
+        break;
+      }
       case "wall":
         this.addChainPoint(this.snap(world, e));
         break;
@@ -791,6 +808,24 @@ export class Editor2D {
     if (this.lostTransaction(drag)) return;
     const grid = (p: Point) => (e.altKey ? p : snapToGrid(p, GRID_STEP));
     switch (drag.kind) {
+      case "map": {
+        const { start, anchor } = drag;
+        if (drag.turn) {
+          // The map turns around the place by the angle of the pointer around it.
+          const before = Math.atan2(start.y - anchor.y, start.x - anchor.x);
+          const after = Math.atan2(world.y - anchor.y, world.x - anchor.x);
+          const turned = drag.north + ((after - before) * 180) / Math.PI;
+          const north = Math.round((((turned % 360) + 360) % 360) * 10) / 10;
+          this.doc.updateBuilding((b) => (b.north = north));
+        } else {
+          this.doc.updateBuilding((b) => {
+            if (!b.location) return;
+            b.location.x = anchor.x + world.x - start.x;
+            b.location.y = anchor.y + world.y - start.y;
+          });
+        }
+        break;
+      }
       case "pan":
         this.offset = {
           x: drag.startOffset.x + e.clientX - drag.startScreen.x,

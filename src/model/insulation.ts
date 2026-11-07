@@ -1,6 +1,7 @@
 // The materials of constructions and the default thermal envelope. The calculations of U-values
 // and heat loss are in src/model/energy.ts.
 
+import { defaultHeating } from "./heating";
 import type { Envelope, Layer } from "./types";
 
 export interface Material {
@@ -65,5 +66,6 @@ export function defaultEnvelope(): Envelope {
     doorU: 1.3,
     outside: -12,
     inside: 20,
+    heating: defaultHeating("heat-pump"),
   };
 }

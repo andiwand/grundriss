@@ -79,6 +79,12 @@ export function wallLayers(building: Building, wall: Wall): Layer[] {
   return wall.layers ?? building.envelope.wall;
 }
 
+/** A window in an outer wall: its area in m² and the azimuth of its outside (0 is north). */
+export interface Glazing {
+  area: number;
+  azimuth: number;
+}
+
 export interface RoomLoss {
   /**
    * The floor area in m², the clear height in m, and the volume in m³. The height is the height
@@ -101,6 +107,10 @@ export interface RoomLoss {
   ventilation: number;
   /** The sum of the parts in W. */
   total: number;
+  /** The heat transfer coefficient in W/K: the loss for 1 K between inside and outside. */
+  transfer: number;
+  /** The windows in the outer walls, for the solar gains. */
+  glazing: Glazing[];
   /** The heat output of the heating devices in the room, in W. */
   heating: number;
   /** The estimate of the floor heating, or null if the room has none. */
@@ -154,6 +164,7 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
   let windows = 0;
   let doors = 0;
   let wallArea = 0;
+  const glazing: Glazing[] = [];
   const ids = room.vertexIds;
   const position = new Map(story.vertices.map((v) => [v.id, v]));
   for (let i = 0; i < ids.length; i++) {
@@ -165,18 +176,27 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     const b = position.get(wall.b)!;
     const strip = (from: number, to: number, sill?: number, top?: number) =>
       stripArea(ceiling, a, b, from, to, sill, top);
+    // The direction of the outside of the wall: away from the room.
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    let normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
+    const middle = { x: (a.x + b.x) / 2 + normal.x * 0.01, y: (a.y + b.y) / 2 + normal.y * 0.01 };
+    if (pointInPolygon(middle, room.polygon)) normal = { x: -normal.x, y: -normal.y };
+    const facing =
+      (((Math.atan2(normal.x, -normal.y) * 180) / Math.PI - building.north) % 360) + 360;
     let openingArea = 0;
     for (const opening of story.openings) {
       if (opening.wallId !== wall.id) continue;
       const half = opening.width / 2;
       const one = strip(opening.offset - half, opening.offset + half, opening.sill, opening.height);
       openingArea += one;
-      if (opening.kind === "window") windows += one * envelope.windowU * delta;
-      else doors += one * envelope.doorU * delta;
+      if (opening.kind === "window") {
+        windows += one * envelope.windowU;
+        glazing.push({ area: one, azimuth: facing % 360 });
+      } else doors += one * envelope.doorU;
     }
     const net = Math.max(0, strip(0, Math.hypot(b.x - a.x, b.y - a.y)) - openingArea);
     wallArea += net;
-    walls += net * uValue(wallLayers(building, wall), "wall") * delta;
+    walls += net * uValue(wallLayers(building, wall), "wall");
   }
 
   // The roof loss goes to the highest room under the roof. The walls and the windows of the
@@ -186,16 +206,14 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     roofArea = ceilingArea(ceiling);
     const dormers = dormerAreas(building, story, room);
     wallArea += dormers.walls;
-    walls += dormers.walls * uValue(envelope.wall, "wall") * delta;
-    windows += dormers.windows * envelope.windowU * delta;
+    walls += dormers.walls * uValue(envelope.wall, "wall");
+    windows += dormers.windows * envelope.windowU;
   }
-  const roof = roofArea * uValue(envelope.roof, "roof") * delta;
+  const roof = roofArea * uValue(envelope.roof, "roof");
   const lowest = building.stories[0];
   const floor =
-    lowest && story.id === lowest.id
-      ? area * uValue(envelope.floor, "floor") * GROUND_FACTOR * delta
-      : 0;
-  const ventilation = AIR_HEAT * AIR_CHANGE * volume * delta;
+    lowest && story.id === lowest.id ? area * uValue(envelope.floor, "floor") * GROUND_FACTOR : 0;
+  const ventilation = AIR_HEAT * AIR_CHANGE * volume;
 
   const heating = story.fixtures
     .filter((f) => f.system === "heating" && f.power != null && pointInPolygon(f, room.polygon))
@@ -204,6 +222,8 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     ? { power: FLOOR_HEATING_POWER * area, pipe: area / FLOOR_HEATING_SPACING }
     : null;
 
+  // The parts above are in W/K. The loss in W is the part times the difference of temperature.
+  const transfer = walls + windows + doors + roof + floor + ventilation;
   return {
     area,
     height,
@@ -211,13 +231,15 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     wallArea,
     roofArea,
     temperature,
-    walls,
-    windows,
-    doors,
-    roof,
-    floor,
-    ventilation,
-    total: walls + windows + doors + roof + floor + ventilation,
+    walls: walls * delta,
+    windows: windows * delta,
+    doors: doors * delta,
+    roof: roof * delta,
+    floor: floor * delta,
+    ventilation: ventilation * delta,
+    total: transfer * delta,
+    transfer,
+    glazing,
     heating,
     floorHeating,
   };

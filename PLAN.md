@@ -21,7 +21,9 @@
    (radiators, floor heating, and the heat source), the insulation of walls, roof, and floor,
    and the electrical wiring (sockets, switches, lights, and cables). Each layer can be on or
    off in the 2D and in the 3D view.
-8. **Energy efficiency** (first part done, first version: the location and the climate): first, the location of the building: a place search (Open-Meteo
+8. **Energy efficiency** (done, first version: the location, the climate, and the heating per
+   year as a monthly balance with the heating system, cost, CO₂, a class, and the PV share;
+   open: hot water, a heated or unheated cellar, and the comparison of variants): first, the location of the building: a place search (Open-Meteo
    geocoding) or coordinates. A button loads the climate once and stores it in the plan, so that
    the app works offline after that: a typical year of hourly radiation (global, direct, and
    diffuse) and temperature from the Open-Meteo archive (CC BY 4.0, free for non-commercial use).

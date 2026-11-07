@@ -11,6 +11,16 @@ The changes that a user notices.
   basemap.at (Austria). The map lies at the location of the building and turns with North. The
   location has a plan point that is at its latitude and longitude. The browser loads the map
   only when you turn it on, because each request sends the place to the map server.
+- Energy: "Heating per year" in the panel. With the climate of the location, the app makes a
+  monthly balance of the heat loss, the sun through the windows, and the internal gains (in the
+  spirit of EN ISO 13790). It shows the heat demand per year and per m², an efficiency class, the
+  final energy, the cost, and the CO₂ of the heating, and the heat demand of each month as a
+  chart. The heating is a heat pump, a gas, oil, or wood boiler, district heating, or direct
+  electric, with its efficiency and price. With a heat pump, the panel shows the part that the PV
+  can cover in the balance of each month.
+- Location: "Move the map" places the map under the plan with the mouse. A drag moves the map,
+  and Shift+drag turns it around the place (this changes North). Esc or "Done" ends it. Each drag
+  is one step of the undo.
 - The Layers menu can hide the background image of the 2D plan. The image stays in the plan.
 - 3D: the floor of a story over a cellar or another story does not flicker any more.
 

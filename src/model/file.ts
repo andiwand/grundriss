@@ -18,6 +18,8 @@ import type {
   Dimension,
   Dormer,
   Envelope,
+  HeatingKind,
+  HeatingSystem,
   Fixture,
   Furniture,
   Layer,
@@ -39,6 +41,7 @@ import type {
 } from "./types";
 
 import { decodeSeries, SERIES_NAMES } from "./climate";
+import { defaultHeating, HEATING_KINDS } from "./heating";
 import { defaultEnvelope } from "./insulation";
 import { storyBox } from "./roof";
 
@@ -381,6 +384,22 @@ function parseEnvelope(data: unknown): Envelope {
     doorU: finite(data.doorU, defaults.doorU),
     outside: finite(data.outside, defaults.outside),
     inside: finite(data.inside, defaults.inside),
+    heating: parseHeating(data.heating),
+  };
+}
+
+/** Reads the heating. A file without it, or with an unknown kind, gets the default heating. */
+function parseHeating(data: unknown): HeatingSystem {
+  if (!isObject(data) || typeof data.kind !== "string" || !(data.kind in HEATING_KINDS)) {
+    return defaultEnvelope().heating;
+  }
+  const defaults = defaultHeating(data.kind as HeatingKind);
+  const efficiency = finite(data.efficiency, defaults.efficiency);
+  const price = finite(data.price, defaults.price);
+  return {
+    kind: defaults.kind,
+    efficiency: efficiency > 0 ? efficiency : defaults.efficiency,
+    price: Math.max(0, price),
   };
 }
 

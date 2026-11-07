@@ -700,6 +700,53 @@ button.ghost:hover:not(:disabled) {
   font-weight: normal;
 }
 
+/* The bar chart of the heat demand per month. */
+.chart-title {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.month-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.month-chart .bar {
+  fill: var(--accent);
+}
+
+.month-chart .axis {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.month-chart .bar,
+.month-chart text {
+  pointer-events: none;
+}
+
+.month-chart text {
+  fill: var(--ink-2);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.month-chart .value {
+  fill: var(--ink);
+  font-weight: 600;
+}
+
+.month-chart .hit {
+  fill: transparent;
+}
+
+.month-chart .hit:hover {
+  fill: var(--surface-2);
+  fill-opacity: 0.6;
+}
+
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -778,6 +825,10 @@ button.ghost:hover:not(:disabled) {
   user-select: none;
   /* The select tool selects, so it has the normal arrow. Only a pan shows a hand. */
   cursor: default;
+}
+
+.editor2d[data-tool="map"] {
+  cursor: move;
 }
 
 .editor2d[data-tool="pan"],

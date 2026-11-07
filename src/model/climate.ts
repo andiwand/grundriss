@@ -125,6 +125,8 @@ interface Decoded {
   sun: Float64Array;
   /** The yields per kWp and the irradiations, by tilt and azimuth. */
   faces: Map<string, FaceResult>;
+  /** The irradiation of each month, by tilt and azimuth. */
+  months: Map<string, number[]>;
 }
 
 /** A transaction copies the building, so the cache compares the text of the series. */
@@ -142,6 +144,7 @@ function decoded(climate: Climate): Decoded {
     series,
     sun: sunPath(climate.latitude, climate.longitude),
     faces: new Map(),
+    months: new Map(),
   };
   cache.unshift(entry);
   cache.length = Math.min(cache.length, CACHE_SIZE);
@@ -363,6 +366,34 @@ export function climateFace(climate: Climate, tilt: number, azimuth: number): Fa
     if (entry.faces.size >= FACE_CACHE_SIZE) entry.faces.clear();
     result = faceYear(entry.series, entry.sun, tilt, azimuth);
     entry.faces.set(key, result);
+  }
+  return result;
+}
+
+/**
+ * The irradiation on a face in each month of the typical year, in kWh/m², for the stored
+ * climate. It counts the beam, the diffuse light, and the light from the ground. The cache keeps
+ * the results.
+ */
+export function climateFaceMonths(climate: Climate, tilt: number, azimuth: number): number[] {
+  const entry = decoded(climate);
+  const key = tilt < 0.05 ? "flat" : `${tilt.toFixed(1)}:${azimuth.toFixed(1)}`;
+  let result = entry.months.get(key);
+  if (!result) {
+    if (entry.months.size >= FACE_CACHE_SIZE) entry.months.clear();
+    const [nx, ny, nz] = normalOf(tilt, azimuth);
+    result = [];
+    let hour = 0;
+    for (const days of MONTH_DAYS) {
+      let sum = 0;
+      for (let h = hour; h < hour + days * 24; h++) {
+        const part = irradianceAt(entry.series, entry.sun, h, nx, ny, nz);
+        sum += part.beam + part.diffuse + part.ground;
+      }
+      result.push(sum / 1000);
+      hour += days * 24;
+    }
+    entry.months.set(key, result);
   }
   return result;
 }

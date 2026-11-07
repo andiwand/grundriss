@@ -202,6 +202,20 @@ export interface Layer {
   thickness: number;
 }
 
+/** The kinds of heating of `src/model/heating.ts`. */
+export type HeatingKind = "heat-pump" | "gas" | "oil" | "wood" | "district" | "electric";
+
+/**
+ * The heating of the building. `efficiency` is the seasonal performance factor of a heat pump
+ * (heat per electricity), or the efficiency of the other kinds (heat per fuel, for example 0.95).
+ * `price` is the price of the final energy (the electricity or the fuel) in currency per kWh.
+ */
+export interface HeatingSystem {
+  kind: HeatingKind;
+  efficiency: number;
+  price: number;
+}
+
 /**
  * The thermal envelope of the building: the default layers of the outer walls, the roof, and the
  * lowest floor, the U-values of windows and doors, and the design temperatures.
@@ -216,6 +230,8 @@ export interface Envelope {
   /** The design temperature outside and the usual temperature inside, in °C. */
   outside: number;
   inside: number;
+  /** The heating, for the energy per year. */
+  heating: HeatingSystem;
 }
 
 /**

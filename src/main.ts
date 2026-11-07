@@ -68,6 +68,7 @@ import { topView } from "./view3d/models";
 import { buildModelAsync, View3D } from "./view3d/view3d";
 import { findFurniture, genericType } from "./model/furniture";
 import { buildingHeatLoss, isOuterWall, roomHeatLoss, uValue, wallLayers } from "./model/energy";
+import { defaultHeating, HEATING_KINDS, heatingEnergy, INTERNAL_GAINS } from "./model/heating";
 import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
 import { faceInfo, pvLayout, pvSummary, specificYield } from "./model/pv";
@@ -134,6 +135,7 @@ const HINTS: Record<Tool, string> = {
   chimney: "Click where the chimney goes. It goes up through the stories above and the roof.",
   calibrate: "Click two points on the background with a known distance between them.",
   rectify: "Click the four corners of the plan on the background, in any order. Esc: stop.",
+  map: "Drag to move the map under the plan. Shift+drag turns the map around the place. Esc: done.",
 };
 
 function showStatus(text: string, error = false): void {
@@ -1682,12 +1684,23 @@ function renderLocationPanel(): void {
       editLocation((l) => (l.longitude = value)),
     );
     if (location) {
+      const moving = editor.tool === "map";
+      button(
+        moving ? "Done" : "Move the map",
+        () => {
+          if (moving) return setTool("select");
+          // Without a map, the map of OpenStreetMap shows, so that there is something to move.
+          if (!editor.mapSource) setMapSource("osm");
+          setTool("map");
+        },
+        { icon: moving ? "check" : "hand", kind: moving ? "primary" : undefined },
+      );
       // The point of the plan at the place: the map in the Layers menu lies under it.
       const limit = { min: -10000, step: 0.1 };
       numberField("Plan point x", location.x, (v) => editLocation((l) => (l.x = v)), limit);
       numberField("Plan point y", location.y, (v) => editLocation((l) => (l.y = v)), limit);
       paragraph(
-        "The plan point is at the latitude and the longitude. Change it, and North, until the map in the Layers menu fits the plan.",
+        "The plan point is at the latitude and the longitude. Move the map, or change the plan point and North, until the map fits the plan.",
         "note",
       );
     }
@@ -1929,6 +1942,141 @@ function renderEnergyPanel(): void {
     numberField("Inside", envelope.inside, set("inside"), { min: -60, step: 0.5, unit: "°C" });
     designTemperatureButton();
   });
+  renderHeatingEnergy();
+}
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** A number of kWh with a thin space between the thousands, for example "12 340 kWh". */
+const kwh = (value: number) =>
+  `${Math.round(value).toLocaleString("en").replace(/,/g, "\u2009")} kWh`;
+
+/** The energy for heating per year: the heating system, the results, and the months. */
+function renderHeatingEnergy(): void {
+  const building = doc.building;
+  const heating = building.envelope.heating;
+  const info = HEATING_KINDS[heating.kind];
+  heading("Heating per year", "flame");
+  const setHeating = (edit: (h: typeof heating) => void) =>
+    doc.editBuilding((b) => edit(b.envelope.heating));
+  selectField(
+    "Heating",
+    heating.kind,
+    Object.entries(HEATING_KINDS).map(([kind, k]) => [kind as typeof heating.kind, k.name]),
+    (kind) => doc.editBuilding((b) => (b.envelope.heating = defaultHeating(kind))),
+  );
+  const pump = heating.kind === "heat-pump";
+  numberField(
+    pump ? "Performance factor" : "Efficiency",
+    heating.efficiency,
+    (value) => value > 0 && setHeating((h) => (h.efficiency = value)),
+    { min: 0.1, step: pump ? 0.1 : 0.01, unit: "" },
+  );
+  numberField(`Price of ${info.energy}`, heating.price, (v) => setHeating((h) => (h.price = v)), {
+    step: 0.01,
+    unit: "€/kWh",
+  });
+  const energy = heatingEnergy(building);
+  if (!energy) {
+    paragraph(
+      building.climate
+        ? "Draw rooms to calculate the energy per year."
+        : "Load the climate in the Location group to calculate the energy per year.",
+      "note",
+    );
+    return;
+  }
+  const tiles: [string, string, boolean?][] = [
+    [kwh(energy.demand), "heat demand per year"],
+    [`${Math.round(energy.perArea)} kWh/m²`, "per heated area"],
+    [energy.efficiencyClass, "efficiency class"],
+    [kwh(energy.final), `${info.energy} for the heating`],
+    [`${Math.round(energy.cost).toLocaleString("en")} €`, "per year"],
+    [`${(energy.co2 / 1000).toFixed(1)} t`, "CO₂ per year"],
+  ];
+  if (info.energy === "electricity" && energy.pvCovered > 0) {
+    const share = Math.round((energy.pvCovered / energy.final) * 100);
+    tiles.push([`${share} %`, "of it from your PV, in the balance of each month", true]);
+  }
+  stats(tiles);
+  monthChart(energy.months.map((m) => m.demand));
+  paragraph(
+    `A monthly balance in the spirit of EN ISO 13790, with the stored climate: the heat loss of the rooms, the sun through the windows, and ${INTERNAL_GAINS} W/m² from people and devices. Without hot water. The class uses the scale of the Austrian energy certificate (OIB), but it is an estimate, not a certificate. The PV share is an upper limit, because PV in the day does not heat at night without a battery.`,
+    "note",
+  );
+}
+
+/**
+ * A small bar chart of the heat demand of each month. A column shows its value on hover, and
+ * the largest month has its value as a label.
+ */
+function monthChart(values: number[]): void {
+  const ns = "http://www.w3.org/2000/svg";
+  const width = 240;
+  const height = 96;
+  const top = 16;
+  const bottom = 16;
+  const slot = width / 12;
+  const bar = slot - 4;
+  const max = Math.max(...values, 1);
+  const peak = values.indexOf(Math.max(...values));
+  const chart = document.createElementNS(ns, "svg");
+  chart.setAttribute("class", "month-chart");
+  chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  chart.setAttribute("role", "img");
+  chart.setAttribute(
+    "aria-label",
+    `Heat demand per month: ${values.map((v, m) => `${MONTH_NAMES[m]} ${Math.round(v)} kWh`).join(", ")}`,
+  );
+  const add = (name: string, attributes: Record<string, string | number>, text?: string) => {
+    const element = document.createElementNS(ns, name);
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+    if (text !== undefined) element.textContent = text;
+    chart.append(element);
+    return element;
+  };
+  const base = height - bottom;
+  add("line", { x1: 0, x2: width, y1: base, y2: base, class: "axis" });
+  values.forEach((value, m) => {
+    const x = m * slot + 2;
+    const h = (value / max) * (base - top);
+    // The column behind the bar is the target of the hover, larger than the bar.
+    const hit = add("rect", { x: m * slot, y: 0, width: slot, height, class: "hit" });
+    const title = document.createElementNS(ns, "title");
+    title.textContent = `${MONTH_NAMES[m]}: ${Math.round(value)} kWh`;
+    hit.append(title);
+    // The bar has round corners at the top only: a path from the baseline.
+    if (h > 0.5) {
+      const r = Math.min(4, h, bar / 2);
+      add("path", {
+        class: "bar",
+        d: `M${x} ${base}V${base - h + r}a${r} ${r} 0 0 1 ${r} ${-r}h${bar - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}V${base}Z`,
+      });
+    }
+    add("text", { x: x + bar / 2, y: height - 3, class: "month" }, MONTH_NAMES[m][0]);
+    if (m === peak && value > 0) {
+      // The label stays inside the chart, also over the first and the last bar.
+      const at = Math.min(width - 12, Math.max(12, x + bar / 2));
+      add("text", { x: at, y: base - h - 4, class: "value" }, `${Math.round(value)}`);
+    }
+  });
+  const caption = document.createElement("p");
+  caption.className = "chart-title";
+  caption.textContent = "Heat demand per month, kWh";
+  section.append(caption, chart);
 }
 
 /** The PV fields on the faces of the roof. */
@@ -2585,12 +2733,17 @@ $("#layers-button").addEventListener("click", () =>
 for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
   input.addEventListener("change", applyLayers);
 }
+/** Shows the map of the source under the plan, or no map, and marks it in the Layers menu. */
+function setMapSource(source: MapSourceId | null): void {
+  editor.mapSource = source;
+  for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]")) {
+    input.checked = input.value === (source ?? "");
+  }
+  updateMapCredit();
+  editor.render();
+}
 for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]")) {
-  input.addEventListener("change", () => {
-    editor.mapSource = (input.value || null) as MapSourceId | null;
-    updateMapCredit();
-    editor.render();
-  });
+  input.addEventListener("change", () => setMapSource((input.value || null) as MapSourceId | null));
 }
 editor.onRun = () => showStatus("Added the line. Draw the next line, or press Esc to stop.");
 $("#furniture").addEventListener("click", () => catalog.toggle());
@@ -2671,7 +2824,7 @@ window.addEventListener("keydown", (e) => {
   } else if (key in TOOL_KEYS) setTool(TOOL_KEYS[key]);
   else if (key === "escape") {
     closeMenus();
-    if (editor.tool === "furniture") setTool("select");
+    if (editor.tool === "furniture" || editor.tool === "map") setTool("select");
     else if (catalog.isOpen) catalog.close();
     else if (editor.tool === "calibrate" && calibration) {
       // The editor drops the two points, so the panel drops the real length.
