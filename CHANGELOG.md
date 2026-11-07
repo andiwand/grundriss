@@ -11,6 +11,7 @@ The changes that a user notices.
   basemap.at (Austria). The map lies at the location of the building and turns with North. The
   location has a plan point that is at its latitude and longitude. The browser loads the map
   only when you turn it on, because each request sends the place to the map server.
+- The Layers menu can hide the background image of the 2D plan. The image stays in the plan.
 - 3D: the floor of a story over a cellar or another story does not flicker any more.
 
 - 2D: a Pan tool (P) moves the view with a drag. The Select tool has the normal arrow, because

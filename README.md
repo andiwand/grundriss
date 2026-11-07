@@ -69,7 +69,7 @@ account and no server, and your plans stay on your computer as files.
     back goes against the wall. R turns it, and the panel sets its size.
 12. Click **Services** (E) and choose a device or a line. A device for a wall goes against the
     wall. A line connects to devices; a double click ends it. The **Layers** menu shows or hides
-    electricity, heating, PV, and the insulation.
+    electricity, heating, PV, the insulation, the background image, and a map.
 13. Without a selection, the panel shows the story, the north direction, and the roof. Drag the
     compass at the top right to turn north.
 14. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
