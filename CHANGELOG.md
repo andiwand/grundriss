@@ -14,6 +14,10 @@ The changes that a user notices.
   of its walls, the building has a facade color for the outside, and a roof has a color for its
   top and its underside. A single wall can have its own color on one side, for example an accent
   wall. The panel of a wall names the room on each side.
+- 3D: the floor and the slab over a stair have a hole for it, so the stair comes up through the
+  floor of the story above.
+- 3D: no shadow acne (stripes and rings) on walls, roofs, and floors. The faces of the walls and
+  the roofs point outward, and the shadows use their back side.
 - 3D: a roof window is see-through: the roof has a hole under it, and its frame lines the hole.
 - Website: in the chapters without the roof, the attic walls stop at the slope, like in the
   finished house. Before, they were full stories until the roof came.

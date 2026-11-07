@@ -13,6 +13,7 @@ import {
   SLAB,
   stairRise,
   storyAbove,
+  storyBelow,
   stairShape,
 } from "../model/building";
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
@@ -48,6 +49,9 @@ const materials = {
     color: 0xc9a77c,
     roughness: 0.8,
     side: THREE.DoubleSide,
+    // The floor faces down after its rotation. The sun sees its back, so the shadow leaves out its
+    // front side: the floor does not shadow itself, and the slab under it casts the shadow.
+    shadowSide: THREE.FrontSide,
     // The floor lies on the top of the slab. The offset draws the floor in front of the slab,
     // so that the two surfaces do not flicker when the camera is far away.
     polygonOffset: true,
@@ -536,9 +540,12 @@ function prism(
   top: number,
   material: THREE.Material,
   edges = false,
+  holes: Point[][] = [],
 ): THREE.Mesh | null {
   if (top - bottom < 1e-4 || polygon.length < 3) return null;
   const shape = new THREE.Shape(polygon.map((p) => new THREE.Vector2(p.x, p.y)));
+  for (const hole of holes)
+    shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))));
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: top - bottom, bevelEnabled: false });
   const mesh = new THREE.Mesh(geometry, material);
   // The rotation maps the plane of the shape (x, y) to the floor (x, z), and local z to -y.
@@ -561,8 +568,18 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
       wall.height >= floorAbove - SLAB - 1e-6 ? Math.max(wall.height, floorAbove) : wall.height;
     addWall(group, building, story, wall, base, height, ceiling, rooms);
   }
+  // The stairs of the story below come up through the floor: the floor and the slab of a room
+  // have a hole where such a stair is inside the room.
+  const below = storyBelow(building, story);
+  const stairHoles = below
+    ? below.stairs.map((stair) => stairShape(stair, stairRise(building, below)).outline)
+    : [];
   for (const room of rooms) {
+    const holes = stairHoles.filter((hole) => hole.every((p) => pointInPolygon(p, room.polygon)));
     const shape = new THREE.Shape(room.polygon.map((p) => new THREE.Vector2(p.x, p.y)));
+    for (const hole of holes) {
+      shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))));
+    }
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), materials.floor);
     floor.rotation.x = Math.PI / 2;
     floor.position.y = base + 0.001;
@@ -578,7 +595,7 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
     }
     // The slab under the floor of an upper story is the ceiling of the story below.
     if (slab) {
-      const mesh = prism(room.polygon, base - SLAB, base, materials.slab);
+      const mesh = prism(room.polygon, base - SLAB, base, materials.slab, false, holes);
       if (mesh) group.add(mesh);
     }
   }
@@ -620,7 +637,10 @@ function colorMaterial(color: string, roof = false): THREE.MeshStandardMaterial 
     material = new THREE.MeshStandardMaterial({
       color,
       roughness: 0.9,
-      side: THREE.DoubleSide,
+      // The faces of a body point outward, so one side is enough. The underside of a roof shows
+      // from below, because it is a face of the slab.
+      side: THREE.FrontSide,
+      shadowSide: THREE.BackSide,
       polygonOffset: roof,
       polygonOffsetFactor: roof ? -1 : 0,
       polygonOffsetUnits: roof ? -4 : 0,
@@ -643,7 +663,17 @@ class BodyBuilder {
   }
 
   /** Adds a convex polygon of world points (x, y up, z) with the material `index`. */
-  polygon(index: number, points: THREE.Vector3[]): void {
+  polygon(index: number, points: THREE.Vector3[], outward: THREE.Vector3): void {
+    // The triangles turn so that their normal points outward: then the material shows one side,
+    // and the shadow uses the side away from the light, without self-shadowing (acne).
+    const normal = new THREE.Vector3();
+    for (let i = 1; i < points.length - 1 && normal.lengthSq() < 1e-12; i++) {
+      normal.crossVectors(
+        new THREE.Vector3().subVectors(points[i], points[0]),
+        new THREE.Vector3().subVectors(points[i + 1], points[0]),
+      );
+    }
+    if (normal.dot(outward) < 0) points = [...points].reverse();
     for (let i = 1; i < points.length - 1; i++) {
       for (const p of [points[0], points[i], points[i + 1]])
         this.positions[index].push(p.x, p.y, p.z);
@@ -685,6 +715,8 @@ class BodyBuilder {
 const RIGHT = 0;
 const LEFT = 1;
 const REST = 2;
+const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
 
 /**
  * Builds a wall as one body: its two faces with the colors of their sides, its top, the reveals
@@ -797,7 +829,7 @@ function addWall(
             : u0 > y0
               ? [at(s0, o, y0), at(s0 + ((s1 - s0) * (u0 - y0)) / (u0 - u1), o, y0), at(s0, o, u0)]
               : [at(s1, o, y0), at(s1, o, u1), at(s1 - ((s1 - s0) * (u1 - y0)) / (u1 - u0), o, y0)];
-        body.polygon(index, points);
+        body.polygon(index, points, new THREE.Vector3(n.x * sideSign, 0, n.y * sideSign));
       }
     }
     // The edge lines of the face: the top, and the ends that are corners or free ends.
@@ -852,35 +884,41 @@ function addWall(
     const y = (s: number) => top(Math.abs(s - s0) < Math.abs(s - s1) ? s0 : s1);
     const points = shape.map((p) => at(p.s, p.o, y(p.s)));
     if (points.every((p) => p.y <= base + 1e-4)) continue;
-    body.polygon(REST, points);
+    body.polygon(REST, points, UP);
   }
 
   // The reveals of the openings: the sill, the head, and the two jambs, across the wall.
   for (const h of openings) {
     const head = Math.min(h.head, top(h.s0), top(h.s1));
     if (h.sill > 1e-4) {
-      body.polygon(REST, [
-        at(h.s0, half, h.sill),
-        at(h.s1, half, h.sill),
-        at(h.s1, -half, h.sill),
-        at(h.s0, -half, h.sill),
-      ]);
+      body.polygon(
+        REST,
+        [
+          at(h.s0, half, h.sill),
+          at(h.s1, half, h.sill),
+          at(h.s1, -half, h.sill),
+          at(h.s0, -half, h.sill),
+        ],
+        UP,
+      );
     }
     if (head < Math.min(top(h.s0), top(h.s1)) - 1e-4) {
-      body.polygon(REST, [
-        at(h.s0, half, head),
-        at(h.s1, half, head),
-        at(h.s1, -half, head),
-        at(h.s0, -half, head),
-      ]);
+      body.polygon(
+        REST,
+        [at(h.s0, half, head), at(h.s1, half, head), at(h.s1, -half, head), at(h.s0, -half, head)],
+        DOWN,
+      );
     }
-    for (const s of [h.s0, h.s1]) {
-      body.polygon(REST, [
-        at(s, half, h.sill),
-        at(s, half, head),
-        at(s, -half, head),
-        at(s, -half, h.sill),
-      ]);
+    // A jamb faces into the opening: the jamb at the start along the wall, the other back.
+    for (const [s, sign] of [
+      [h.s0, 1],
+      [h.s1, -1],
+    ] as const) {
+      body.polygon(
+        REST,
+        [at(s, half, h.sill), at(s, half, head), at(s, -half, head), at(s, -half, h.sill)],
+        new THREE.Vector3(d.x * sign, 0, d.y * sign),
+      );
     }
   }
 
@@ -890,12 +928,13 @@ function addWall(
     [end, faces.joins[1]],
   ] as const) {
     if (join !== "free" || top(e) <= 1e-4) continue;
-    body.polygon(REST, [
-      at(e, half, 0),
-      at(e, half, top(e)),
-      at(e, -half, top(e)),
-      at(e, -half, 0),
-    ]);
+    // The end at the start of the wall faces back along the wall, the other end forward.
+    const sign = e === start ? -1 : 1;
+    body.polygon(
+      REST,
+      [at(e, half, 0), at(e, half, top(e)), at(e, -half, top(e)), at(e, -half, 0)],
+      new THREE.Vector3(d.x * sign, 0, d.y * sign),
+    );
     body.line([at(e, half, top(e)), at(e, -half, top(e))]);
   }
 
@@ -1284,11 +1323,18 @@ function roofSlab(
   for (const face of faces) {
     const polygon = face.polygon;
     if (polygon.length < 3) continue;
+    const up = world(face.normal);
+    const center = world({
+      x: polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length,
+      y: polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length,
+      z: polygon.reduce((sum, p) => sum + p.z, 0) / polygon.length,
+    });
     for (const triangle of withHoles(polygon, face.holes ?? [])) {
-      body.polygon(TOP, triangle.map(world));
+      body.polygon(TOP, triangle.map(world), up);
       body.polygon(
         BOTTOM,
         triangle.map((p) => world(down(p, face.normal))),
+        up.clone().negate(),
       );
     }
     polygon.forEach((p, i) => {
@@ -1296,7 +1342,9 @@ function roofSlab(
       if (!edges) body.line([world(p), world(q)]);
       if ((count.get(edgeKey(p, q)) ?? 0) > 1) return;
       const fascia = [p, q, down(q, face.normal), down(p, face.normal)].map(world);
-      body.polygon(BOTTOM, fascia);
+      // The fascia faces away from the middle of its face.
+      const middle = new THREE.Vector3().addVectors(fascia[0], fascia[1]).multiplyScalar(0.5);
+      body.polygon(BOTTOM, fascia, middle.sub(center));
       body.line([fascia[2], fascia[3]]);
     });
   }
