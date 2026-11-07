@@ -216,6 +216,9 @@ function parseLocation(data: unknown): Location | null {
     name: typeof data.name === "string" ? data.name : "",
     latitude: bounded(data, "latitude", where, -90, 90),
     longitude: bounded(data, "longitude", where, -180, 180),
+    // Older files have no point of the plan: the place is at the origin.
+    x: finite(data.x, 0),
+    y: finite(data.y, 0),
   };
 }
 

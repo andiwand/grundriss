@@ -53,6 +53,7 @@ import type {
   Envelope,
   ItemKind,
   Layer,
+  Location as PlanLocation,
   PvArray,
   Opening,
   OpeningKind,
@@ -79,8 +80,9 @@ import {
   searchPlaces,
   type Place,
 } from "./io/climate";
+import { MAP_SOURCES, type MapSourceId } from "./io/tiles";
 import { buildingQuantities } from "./model/quantities";
-import { newRoof, roofBase, roofGeometryOf } from "./model/roof";
+import { newRoof, roofBase, roofGeometryOf, storyBox } from "./model/roof";
 import { livingArea, roofIsCeiling } from "./model/attic";
 import type { Room } from "./model/rooms";
 import type { Story } from "./model/types";
@@ -443,7 +445,7 @@ function paragraph(text: string, className?: string): void {
 function button(
   text: string,
   action: () => void,
-  options: { kind?: "primary" | "danger"; icon?: IconName } = {},
+  options: { kind?: "primary" | "danger"; icon?: IconName; detail?: string } = {},
 ): void {
   let row = section.lastElementChild;
   if (!row?.classList.contains("actions")) {
@@ -454,7 +456,20 @@ function button(
   const element = document.createElement("button");
   if (options.kind) element.className = options.kind;
   if (options.icon) element.innerHTML = icon(options.icon);
-  element.append(text);
+  if (options.detail) {
+    // A list item: the text on the first line, and the detail small below it.
+    element.classList.add("item");
+    const label = document.createElement("span");
+    const detail = document.createElement("small");
+    label.textContent = text;
+    detail.textContent = options.detail;
+    const lines = document.createElement("span");
+    lines.className = "lines";
+    lines.append(label, detail);
+    element.append(lines);
+  } else {
+    element.append(text);
+  }
   element.addEventListener("click", action);
   row.append(element);
 }
@@ -530,6 +545,7 @@ function stats(items: [value: string, text: string, wide?: boolean][]): void {
 }
 
 function renderPanel(): void {
+  updateMapCredit();
   panel.replaceChildren();
   section = panel;
   const plan = doc.plan;
@@ -1213,12 +1229,12 @@ function renderBuildingPanel(): void {
   for (const roof of building.roofs) {
     const story = findStory(building, roof.storyId);
     button(
-      `${roof.name} · ${story?.name ?? "no story"}`,
+      roof.name,
       () => {
         if (story && story.id !== doc.activeStoryId) doc.setActiveStory(story.id);
         editor.select({ kind: "roof", id: roof.id });
       },
-      { icon: "roof" },
+      { icon: "roof", detail: story?.name ?? "No story" },
     );
   }
   paragraph(
@@ -1537,12 +1553,16 @@ function coordinateField(
   field(text, input, "°");
 }
 
+/** The center of the walls of the active story, or the origin. A new location is there. */
+function planCenter(): Point {
+  const box = storyBox(doc.plan);
+  return box ? { x: (box[0].x + box[2].x) / 2, y: (box[0].y + box[2].y) / 2 } : { x: 0, y: 0 };
+}
+
 /** Changes the location of the building. A building without a location gets one. */
-function editLocation(
-  edit: (location: { name: string; latitude: number; longitude: number }) => void,
-) {
+function editLocation(edit: (location: PlanLocation) => void) {
   doc.editBuilding((b) => {
-    b.location ??= { name: "", latitude: 0, longitude: 0 };
+    b.location ??= { name: "", latitude: 0, longitude: 0, ...planCenter() };
     edit(b.location);
   });
 }
@@ -1661,6 +1681,16 @@ function renderLocationPanel(): void {
     coordinateField("Longitude", location?.longitude ?? null, 180, (value) =>
       editLocation((l) => (l.longitude = value)),
     );
+    if (location) {
+      // The point of the plan at the place: the map in the Layers menu lies under it.
+      const limit = { min: -10000, step: 0.1 };
+      numberField("Plan point x", location.x, (v) => editLocation((l) => (l.x = v)), limit);
+      numberField("Plan point y", location.y, (v) => editLocation((l) => (l.y = v)), limit);
+      paragraph(
+        "The plan point is at the latitude and the longitude. Change it, and North, until the map in the Layers menu fits the plan.",
+        "note",
+      );
+    }
   });
   const details = section.lastElementChild as HTMLDetailsElement;
   details.addEventListener("toggle", () => (locationOpen = details.open));
@@ -2246,6 +2276,19 @@ function drawInsulation(group: SVGGElement, zoom: number): void {
   }
 }
 
+/** The credit of the map under the plan, and a hint if the map needs a location first. */
+function updateMapCredit(): void {
+  const credit = $<HTMLAnchorElement>("#map-credit");
+  const source = editor.mapSource ? MAP_SOURCES[editor.mapSource] : null;
+  const located = doc.building.location !== null;
+  credit.hidden = !source || !located;
+  if (source) {
+    credit.textContent = source.credit;
+    credit.href = source.creditUrl;
+  }
+  $("#map-note").classList.toggle("warning", !!source && !located);
+}
+
 /** The layers that the 2D editor and the 3D view show. */
 function applyLayers(): void {
   for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
@@ -2542,6 +2585,13 @@ $("#layers-button").addEventListener("click", () =>
 for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
   input.addEventListener("change", applyLayers);
 }
+for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]")) {
+  input.addEventListener("change", () => {
+    editor.mapSource = (input.value || null) as MapSourceId | null;
+    updateMapCredit();
+    editor.render();
+  });
+}
 editor.onRun = () => showStatus("Added the line. Draw the next line, or press Esc to stop.");
 $("#furniture").addEventListener("click", () => catalog.toggle());
 $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export-menu")));
@@ -2550,6 +2600,7 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export
 }
 $("#empty-background").addEventListener("click", () => void loadBackground());
 $("#empty-wall").addEventListener("click", () => setTool("wall"));
+$("#empty-open").addEventListener("click", () => void openFile());
 $("#empty-example").addEventListener("click", () => {
   if (!confirmDiscard()) return;
   load(makeHouse(), "example.grundriss");

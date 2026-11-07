@@ -49,6 +49,11 @@ const materials = {
     color: 0xc9a77c,
     roughness: 0.8,
     side: THREE.DoubleSide,
+    // The floor lies on the top of the slab. The offset draws the floor in front of the slab,
+    // so that the two surfaces do not flicker when the camera is far away.
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   }),
   slab: new THREE.MeshStandardMaterial({ color: 0xd9d5cc, roughness: 0.9 }),
   ceiling: new THREE.MeshStandardMaterial({
@@ -298,10 +303,14 @@ export class View3D {
       (s) => view.showAbove || !active || s.elevation <= active.elevation + 1e-6,
     );
     // A roof shows if its story shows, and if all stories show or its story is the active one.
+    // With one story, a roof of the active story shows only if no story is above it. Else, for
+    // example, the roof of a low wing hides the rooms of the story next to the higher part.
     const visibleIds = new Set(visible.map((s) => s.id));
     const roofs = building.roofs.filter(
       (roof) =>
-        visibleIds.has(roof.storyId) && (view.showAbove || roof.storyId === view.activeStoryId),
+        visibleIds.has(roof.storyId) &&
+        (view.showAbove ||
+          (roof.storyId === view.activeStoryId && !(active && storyAbove(building, active)))),
     );
     const layers = view.layers ?? ALL_LAYERS;
     this.content.add(buildGroup(building, visible, roofs, layers, () => this.modelLoaded()));

@@ -26,6 +26,7 @@ import {
   snapToWall,
   wallFaces,
 } from "../model/furniture";
+import { MAP_SOURCES, tilesFor, type MapSourceId } from "../io/tiles";
 import { roofLines } from "../model/roof";
 import { clearHeightLines, WOFLV } from "../model/attic";
 import {
@@ -159,6 +160,11 @@ const sameItem = (a: Item, b: Item) => a.kind === b.kind && a.id === b.id;
 export class Editor2D {
   readonly element: SVGSVGElement;
   private backgroundImage: SVGImageElement;
+  /** The tiles of the map under the plan, by the key of the tile. */
+  private mapGroup: SVGGElement;
+  private mapTiles = new Map<string, SVGImageElement>();
+  /** The map under the plan, or null for no map. The building must have a location. */
+  mapSource: MapSourceId | null = null;
   private content: SVGGElement;
   private zoom = 50;
   /** The screen position of the world origin, in pixels. */
@@ -207,6 +213,7 @@ export class Editor2D {
     this.element = svg("svg", { class: "editor2d" });
     container.append(this.element);
     const world = svg("g", {}, this.element);
+    this.mapGroup = svg("g", { class: "map" }, world);
     this.backgroundImage = svg("image", { preserveAspectRatio: "none" }, world);
     this.content = svg("g", {}, world);
 
@@ -1258,6 +1265,7 @@ export class Editor2D {
       "transform",
       `translate(${this.offset.x} ${this.offset.y}) scale(${this.zoom})`,
     );
+    this.renderMap();
     this.renderBackground(plan);
     this.content.replaceChildren();
     this.renderGrid();
@@ -1278,6 +1286,61 @@ export class Editor2D {
       draw(svg("g", { class: "extra" }, this.content), this.zoom);
     }
     this.renderOverlay(plan);
+  }
+
+  /**
+   * The tiles of the map that cover the view. A tile stays in the DOM while it is in view, so
+   * that a pan does not load it again.
+   */
+  private renderMap(): void {
+    const location = this.doc.building.location;
+    if (!this.mapSource || !location) {
+      this.mapGroup.replaceChildren();
+      this.mapTiles.clear();
+      return;
+    }
+    const placement = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      anchor: { x: location.x, y: location.y },
+      north: this.doc.building.north,
+    };
+    const { width, height } = this.element.getBoundingClientRect();
+    const corner = (x: number, y: number) => ({
+      x: (x - this.offset.x) / this.zoom,
+      y: (y - this.offset.y) / this.zoom,
+    });
+    const view = [corner(0, 0), corner(width, 0), corner(width, height), corner(0, height)];
+    const { tiles } = tilesFor(
+      MAP_SOURCES[this.mapSource],
+      placement,
+      view,
+      this.zoom * (window.devicePixelRatio || 1),
+    );
+    this.mapGroup.setAttribute(
+      "transform",
+      `translate(${placement.anchor.x} ${placement.anchor.y}) rotate(${placement.north})`,
+    );
+    const keep = new Set<string>();
+    for (const tile of tiles) {
+      const key = `${this.mapSource}/${tile.key}`;
+      keep.add(key);
+      let image = this.mapTiles.get(key);
+      if (!image) {
+        image = svg("image", { href: tile.url, preserveAspectRatio: "none" }, this.mapGroup);
+        this.mapTiles.set(key, image);
+      }
+      // A small overlap hides the thin seams between the tiles.
+      image.setAttribute("x", String(tile.x));
+      image.setAttribute("y", String(tile.y));
+      image.setAttribute("width", String(tile.size * 1.002));
+      image.setAttribute("height", String(tile.size * 1.002));
+    }
+    for (const [key, image] of this.mapTiles) {
+      if (keep.has(key)) continue;
+      image.remove();
+      this.mapTiles.delete(key);
+    }
   }
 
   private renderBackground(plan: Plan): void {

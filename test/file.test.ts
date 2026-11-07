@@ -299,16 +299,28 @@ describe("location and climate", () => {
 
   it("reads what it writes, and the climate adds well under 100 kB", () => {
     const building = emptyBuilding();
-    building.location = { name: "Vienna, Austria", latitude: 48.2, longitude: 16.37 };
+    building.location = { name: "Vienna, Austria", latitude: 48.2, longitude: 16.37, x: 3, y: -2 };
     building.climate = structuredClone(climate);
     const text = serializeBuilding(building);
     expect(parseBuilding(text)).toEqual(building);
     expect(text.length - serializeBuilding(emptyBuilding()).length).toBeLessThan(50000);
   });
 
+  it("puts the place of an older location at the origin of the plan", () => {
+    const data = JSON.parse(serializeBuilding(emptyBuilding()));
+    data.location = { name: "Vienna", latitude: 48.2, longitude: 16.37 };
+    expect(parseBuilding(JSON.stringify(data)).location).toEqual({
+      name: "Vienna",
+      latitude: 48.2,
+      longitude: 16.37,
+      x: 0,
+      y: 0,
+    });
+  });
+
   it("rejects a damaged location or climate", () => {
     const building = emptyBuilding();
-    building.location = { name: "", latitude: 95, longitude: 0 };
+    building.location = { name: "", latitude: 95, longitude: 0, x: 0, y: 0 };
     expect(() => parseBuilding(serializeBuilding(building))).toThrow(/location.*latitude/);
     building.location = null;
     building.climate = { ...climate, dni: "AAAA" };

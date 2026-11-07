@@ -4,6 +4,15 @@ The changes that a user notices.
 
 ## Unreleased
 
+- 3D: when only one story shows, the roofs of that story show only if it is the top story. So
+  the roof of a low wing does not hide the rooms of a lower story. "All stories" shows all roofs.
+- The start card has an "Open a plan" button.
+- 2D: a map under the plan. The Layers menu shows OpenStreetMap or the aerial photo of
+  basemap.at (Austria). The map lies at the location of the building and turns with North. The
+  location has a plan point that is at its latitude and longitude. The browser loads the map
+  only when you turn it on, because each request sends the place to the map server.
+- 3D: the floor of a story over a cellar or another story does not flicker any more.
+
 - 2D: a Pan tool (P) moves the view with a drag. The Select tool has the normal arrow, because
   it selects. The cursor is an open hand while you hold Space, and a closed hand during a pan.
 

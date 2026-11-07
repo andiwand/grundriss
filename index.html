@@ -116,6 +116,7 @@
           data-icon="fit"
           title="Fit the plan in the view (F)"
         ></button>
+        <a class="map-credit" id="map-credit" target="_blank" rel="noopener" hidden></a>
       </section>
       <section id="plan-3d" class="pane">
         <span class="pane-label">3D · drag to orbit, scroll to zoom</span>
@@ -133,9 +134,13 @@
       <!-- The start card lies over the 2D and the 3D pane. -->
       <div class="empty-state" id="empty-state" hidden>
         <h2>Start a floor plan</h2>
-        <p>Load a scan or a photo of a plan and trace it, or draw the walls on the grid.</p>
+        <p>
+          Open a saved plan, load a scan or a photo of a plan and trace it, or draw the walls on the
+          grid.
+        </p>
         <div class="actions">
-          <button class="primary" id="empty-background" data-icon="image">Load background</button>
+          <button class="primary" id="empty-open" data-icon="open">Open a plan</button>
+          <button id="empty-background" data-icon="image">Load background</button>
           <button id="empty-wall" data-icon="wall">Draw walls</button>
         </div>
         <button class="link" id="empty-example" data-icon="roof">Or open the example house</button>
@@ -150,6 +155,16 @@
       <label class="check"
         ><input type="checkbox" data-layer="insulation" /> Insulation and heat loss</label
       >
+      <div class="menu-label">Under the 2D plan</div>
+      <label class="check"><input type="radio" name="map" value="" checked /> No map</label>
+      <label class="check"><input type="radio" name="map" value="osm" /> Map (OpenStreetMap)</label>
+      <label class="check"
+        ><input type="radio" name="map" value="basemap-ortho" /> Aerial photo (Austria)</label
+      >
+      <p class="menu-note" id="map-note">
+        The map needs a location. It loads from the internet, so it sends the place to the map
+        server.
+      </p>
     </div>
     <div class="menu" id="story-menu" role="menu" hidden>
       <button data-add-story="top" role="menuitem">

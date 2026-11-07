@@ -397,12 +397,15 @@ export interface Roof {
 
 /**
  * The place of the building. The latitude and the longitude are in degrees, with north and east
- * positive.
+ * positive. The point (x, y) of the plan is at this place, so that a map can lie under the plan.
+ * The map turns with `Building.north`.
  */
 export interface Location {
   name: string;
   latitude: number;
   longitude: number;
+  x: number;
+  y: number;
 }
 
 /**

@@ -165,6 +165,12 @@ from [Open-Meteo](https://open-meteo.com) and stores a typical year in the plan 
 the plan works offline after that. The app sends the place to open-meteo.com only when you click
 **Search** or **Load climate**.
 
+The **Layers** menu can show a map under the 2D plan: OpenStreetMap, or the aerial photo of
+[basemap.at](https://basemap.at) in Austria. The map lies at the location and turns with the
+north direction. The **Plan point x** and **y** of the location are the point of the plan at its
+latitude and longitude: change them, and North, until the map fits the plan. The browser loads
+the map only while it shows, because each request sends the place to the map server.
+
 From the stored year, the app calculates:
 
 - the PV yield of each face: the sun position for each hour, the Hay–Davies model for the
@@ -207,7 +213,8 @@ See [`AGENTS.md`](AGENTS.md) for the architecture and the conventions. On `main`
 
 The furniture models come from [Kenney](https://kenney.nl) and [Poly Haven](https://polyhaven.com)
 (both CC0). Weather data by [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). The free
-Open-Meteo API is for non-commercial use. Grundriss uses [Three.js](https://threejs.org), [OpenCV.js](https://opencv.org),
+Open-Meteo API is for non-commercial use. Map tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+contributors, and aerial photos by [basemap.at](https://basemap.at) (CC BY 4.0). Grundriss uses [Three.js](https://threejs.org), [OpenCV.js](https://opencv.org),
 [ONNX Runtime Web](https://onnxruntime.ai), and [fflate](https://github.com/101arrowz/fflate).
 
 ## License
