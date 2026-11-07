@@ -21,9 +21,17 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   to the story where they start. A stair goes up to the next story. A chimney goes up through
   the stories above.
 
-- The user interface has five topics (`Topic` in `src/main.ts`): source, structure, utilities,
-  interior, and energy. A topic selects the tools of the palette (`data-topic`), the panel
-  without a selection, and the layers. The topic is not in the plan file.
+- Without an open plan (`planOpen` in `src/main.ts`), the app shows the home page (`#home`) with
+  the projects, and the top bar hides the parts with the class `plan-tools`. With an open plan,
+  the user interface has five topics (`Topic`): overview, structure, utilities, interior, and
+  energy. A topic selects the tools of the palette (`data-topic`), the panel without a
+  selection, and the layers. The overview (`#overview`) shows the contents in place of the 2D
+  and the 3D view. The topic is not in the plan file.
+- The open plan saves itself in IndexedDB (`src/io/projects.ts`) after each change. Each
+  project stores the JSON of the file format, so `parseBuilding` reads it, with its migrations.
+- The app is a PWA: `public/manifest.webmanifest` and the service worker `src/pwa/sw.js`. The
+  plugin in `vite.config.ts` writes the service worker into the build with a new version and the
+  list of the files to cache. The dev server has no service worker.
 - `PlanDocument` (`src/model/history.ts`) holds the building, the active story, and the undo
   history. `doc.plan` is the active story. `doc.edit` changes the active story, and
   `doc.editBuilding` changes the building. The choice of the active story is not in the history.
@@ -80,6 +88,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/file.ts`       | The file format: `serializePlan` and `parsePlan` with validation.                      |
 | `src/model/drawing.ts`    | The shapes of the 2D drawing, for the editor and the exports.                          |
 | `src/io/files.ts`         | Open and save with the File System Access API, and the fallbacks.                      |
+| `src/io/projects.ts`      | The projects in the browser: IndexedDB, the list, and persistent storage.              |
+| `src/pwa/sw.js`           | The service worker: the cache of the app for offline use and the install.              |
 | `src/io/package.ts`       | The `.grundriss` package: a ZIP file with the plan and its image.                      |
 | `src/export/`             | The exports: SVG, PDF, DXF, and glTF.                                                  |
 | `src/model/services.ts`   | The devices and lines of electricity and heating, and symbols.                         |

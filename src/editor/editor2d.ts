@@ -265,7 +265,23 @@ export class Editor2D {
     };
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
-    const resize = new ResizeObserver(() => this.render());
+    // A change of the size keeps the point at the center of the view at the center, for example
+    // when the view changes from split to 2D only. A pane that hides or shows has a size of 0 on
+    // one side of the change, and the fit of a new plan happens after it shows, so such a change
+    // moves nothing.
+    let size = { width: this.element.clientWidth, height: this.element.clientHeight };
+    const resize = new ResizeObserver(() => {
+      const next = { width: this.element.clientWidth, height: this.element.clientHeight };
+      const visible = (s: { width: number; height: number }) => s.width > 0 && s.height > 0;
+      if (visible(size) && visible(next)) {
+        this.offset = {
+          x: this.offset.x + (next.width - size.width) / 2,
+          y: this.offset.y + (next.height - size.height) / 2,
+        };
+      }
+      size = next;
+      this.render();
+    });
     resize.observe(this.element);
     this.disposers.push(
       unsubscribe,
@@ -1322,6 +1338,7 @@ export class Editor2D {
     this.renderFixtures(plan);
     this.renderStairs(plan);
     this.renderChimneys(plan);
+    this.renderRoomLabels(plan);
     this.renderDimensions(plan);
     this.renderRoof();
     if (this.currentTool === "select" || this.currentTool === "wall") this.renderVertices(plan);
@@ -1426,6 +1443,16 @@ export class Editor2D {
     for (const room of findRooms(plan)) {
       const selected = this.isSelected("room", room.key);
       svg("polygon", { points: points(room.polygon), class: selected ? "selected" : "" }, group);
+    }
+  }
+
+  /**
+   * The names and the areas of the rooms. They come after the furniture, the services, and the
+   * stairs, so that the text stays readable over them.
+   */
+  private renderRoomLabels(plan: Plan): void {
+    const group = svg("g", { class: "room-labels" }, this.content);
+    for (const room of findRooms(plan)) {
       const lines = roomLabel(room);
       lines.forEach((text, i) => {
         // The lines stack around the label point. The name is bold.

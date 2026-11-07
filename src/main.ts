@@ -15,6 +15,17 @@ import {
   savePlanFile,
 } from "./io/files";
 import { isPackageName, readBuildingFile, writePackage } from "./io/package";
+import {
+  deleteProject,
+  keepProjects,
+  listProjects,
+  loadProject,
+  newProjectId,
+  projectsAvailable,
+  renameProject,
+  saveProject,
+  type ProjectInfo,
+} from "./io/projects";
 import { distance } from "./model/geometry";
 import {
   addCellar,
@@ -27,7 +38,7 @@ import {
   stairRise,
   stairShape,
 } from "./model/building";
-import { serializeBuilding } from "./model/file";
+import { parseBuilding, serializeBuilding } from "./model/file";
 import { PlanDocument } from "./model/history";
 import {
   findChimney,
@@ -51,6 +62,7 @@ import type {
   Roof,
   RoofWindow,
   Envelope,
+  Item,
   ItemKind,
   Layer,
   Location as PlanLocation,
@@ -148,10 +160,8 @@ const HINTS: Record<Tool, string> = {
  * The topics of the user interface. A topic shows its own tools in the palette, its own content
  * in the panel when nothing is selected, and its own layers.
  */
-type Topic = "source" | "structure" | "utilities" | "interior" | "energy";
+type Topic = "overview" | "structure" | "utilities" | "interior" | "energy";
 type LayerName = keyof typeof editor.layers;
-
-const TOPICS: Topic[] = ["source", "structure", "utilities", "interior", "energy"];
 
 const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: false };
 
@@ -160,7 +170,7 @@ const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: f
  * because the user sets it for all topics. A change in the Layers menu stays with the topic.
  */
 const topicLayers: Record<Topic, Partial<Record<LayerName, boolean>>> = {
-  source: { ...SERVICE_LAYERS, pv: false, insulation: false },
+  overview: { ...SERVICE_LAYERS, pv: false, insulation: false },
   structure: { ...SERVICE_LAYERS, pv: false, insulation: false },
   utilities: {
     water: true,
@@ -176,9 +186,9 @@ const topicLayers: Record<Topic, Partial<Record<LayerName, boolean>>> = {
 
 /** The topic of the tools that do not belong to all topics. */
 const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
-  calibrate: "source",
-  rectify: "source",
-  map: "source",
+  calibrate: "structure",
+  rectify: "structure",
+  map: "energy",
   wall: "structure",
   door: "structure",
   window: "structure",
@@ -196,22 +206,79 @@ const SYSTEM_ICONS: Record<ServiceSystem, IconName> = {
   comms: "antenna",
 };
 
-const TOPIC_KEY = "grundriss.topic";
+const HOME_HINT = "Click a plan to open it, or start a new plan.";
+const OVERVIEW_HINT = "Click a part of the plan to open it in its topic.";
+
 let topic: Topic = "structure";
-try {
-  const stored = localStorage.getItem(TOPIC_KEY) as Topic | null;
-  if (stored && TOPICS.includes(stored)) topic = stored;
-} catch {
-  // Without the storage, the app starts with the structure.
+/**
+ * True while a plan is open. Without an open plan, the app shows the home page with the projects,
+ * and the top bar hides the topics and the tools of the plan.
+ */
+let planOpen = false;
+/** True if a plan opened while the views were hidden, so that they fit it when they show. */
+let fitPending = false;
+
+/** Shows the home page. The open plan closes; it is already in the browser. */
+function showHome(): void {
+  if (planOpen && !confirmDiscard()) return;
+  planOpen = false;
+  closeMenus();
+  if (catalog.isOpen) catalog.close();
+  editor.cancel();
+  document.body.classList.add("no-plan");
+  $("#brand").title = "";
+  $("#home").hidden = false;
+  $("#area").hidden = true;
+  $("#overview").hidden = true;
+  document.title = "Grundriss";
+  renderHome();
+  showStatus(HOME_HINT);
 }
 
-/** Opens the topic: its tools, its layers, and its panel. */
+/** Leaves the home page for the open plan, in the topic. */
+function enterPlan(next: Topic): void {
+  planOpen = true;
+  document.body.classList.remove("no-plan");
+  $("#brand").title =
+    "Close the plan and show the projects. The plan is already saved in the browser.";
+  $("#home").hidden = true;
+  if (status.textContent === HOME_HINT) showStatus(HINTS[editor.tool]);
+  updateTitle();
+  setTopic(next);
+}
+
+/**
+ * Opens the topic: its tools, its layers, and its panel. The overview shows the contents of the
+ * plan in place of the views.
+ */
 function setTopic(next: Topic): void {
   topic = next;
-  try {
-    localStorage.setItem(TOPIC_KEY, next);
-  } catch {
-    // The topic is only a convenience, so a blocked storage is no problem.
+  const overview = next === "overview";
+  $("#overview").hidden = !overview;
+  $("#area").hidden = overview;
+  document.body.classList.toggle("overview", overview);
+  // The energy has no split view: its wide panel takes the place of one view.
+  const energy = next === "energy";
+  document.body.classList.toggle("energy", energy);
+  $<HTMLButtonElement>('[data-view="split"]').disabled = energy;
+  if (energy && currentView === "split") {
+    viewBeforeEnergy = "split";
+    setView("2d");
+  } else if (!energy && viewBeforeEnergy) {
+    setView(viewBeforeEnergy);
+    viewBeforeEnergy = null;
+  }
+  if (overview) {
+    renderContents();
+    showStatus(OVERVIEW_HINT);
+  } else if (status.textContent === OVERVIEW_HINT) showStatus(HINTS[editor.tool]);
+  if (!overview && fitPending) {
+    fitPending = false;
+    // The views get their size in the next frame.
+    requestAnimationFrame(() => {
+      editor.fit();
+      fit3d();
+    });
   }
   for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-tab]")) {
     element.classList.toggle("active", element.dataset.topicTab === next);
@@ -220,7 +287,9 @@ function setTopic(next: Topic): void {
     element.hidden = element.dataset.topic !== next;
   }
   // The divider after the tools of all topics shows only if the topic has its own tools.
-  $("#tools .divider").hidden = !document.querySelector(`#tools [data-topic="${next}"]`);
+  $("#tools .divider:not([data-topic])").hidden = !document.querySelector(
+    `#tools [data-topic="${next}"]`,
+  );
   for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
     const value = topicLayers[next][input.dataset.layer as LayerName];
     if (value !== undefined) input.checked = value;
@@ -256,7 +325,13 @@ function markTool(tool: Tool): void {
   $("#furniture").classList.toggle("active", tool === "furniture" || catalog.isOpen);
 }
 
-function setView(view: "2d" | "split" | "3d"): void {
+type View = "2d" | "split" | "3d";
+let currentView: View = "split";
+/** The view before the energy topic, if the energy changed it, so that it comes back after. */
+let viewBeforeEnergy: View | null = null;
+
+function setView(view: View): void {
+  currentView = view;
   $("#area").className = `view-${view}`;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-view]")) {
     button.classList.toggle("active", button.dataset.view === view);
@@ -524,6 +599,8 @@ function renderTracing(): boolean {
 
 /** The section of the panel that the helpers below append to. */
 let section: HTMLElement = panel;
+/** The element that takes the sections of the headings: the panel, or a column of it. */
+let column: HTMLElement = panel;
 
 function heading(text: string, iconName?: IconName): void {
   section = document.createElement("section");
@@ -531,7 +608,7 @@ function heading(text: string, iconName?: IconName): void {
   if (iconName) element.innerHTML = icon(iconName);
   element.append(text);
   section.append(element);
-  panel.append(section);
+  column.append(section);
 }
 
 function paragraph(text: string, className?: string): void {
@@ -676,6 +753,7 @@ function stats(items: [value: string, text: string, wide?: boolean][]): void {
 function renderPanel(): void {
   updateMapCredit();
   panel.replaceChildren();
+  column = panel;
   section = panel;
   const plan = doc.plan;
   if (renderTracing()) return;
@@ -1227,8 +1305,8 @@ function renderPanel(): void {
   }
 
   switch (topic) {
-    case "source":
-      return renderSourcePanel();
+    case "overview":
+      return;
     case "structure":
       return renderStructurePanel();
     case "utilities":
@@ -1240,13 +1318,9 @@ function renderPanel(): void {
   }
 }
 
-/** Open a plan, a scan or a photo as the background, the assisted tracing, and the map. */
-function renderSourcePanel(): void {
+/** The scan or the photo of a plan under the active story, and the assisted tracing. */
+function renderBackgroundPanel(): void {
   const plan = doc.plan;
-  heading("Source", "open");
-  paragraph("Start from a saved plan, from a scan or a photo of a plan, or from a map.", "note");
-  button("Open a plan", () => void openFile(), { icon: "open" });
-  button("Open the example house", openExample, { icon: "roof" });
   heading("Background", "image");
   if (plan.background) {
     rangeField("Opacity", plan.background.opacity, (value) =>
@@ -1272,7 +1346,6 @@ function renderSourcePanel(): void {
     paragraph("Load a scan or a photo of a plan as the background, and draw the walls on it.");
     button("Load background", () => void loadBackground(), { icon: "image" });
   }
-  renderLocationPanel("map");
 }
 
 /** The story, the walls and the rooms of the plan, the orientation, and the roofs. */
@@ -1289,7 +1362,14 @@ function renderStructurePanel(): void {
     [`${area.toFixed(1)} m²`, "area"],
   ]);
   paragraph("The area is inside the center lines of the walls.", "note");
-  renderBuildingPanel();
+  // Before the first wall, the background comes first, because the tracing starts with it.
+  if (plan.walls.length === 0) {
+    renderBackgroundPanel();
+    renderBuildingPanel();
+  } else {
+    renderBuildingPanel();
+    renderBackgroundPanel();
+  }
 }
 
 const SYSTEM_HINTS: Record<ServiceSystem, string> = {
@@ -1355,8 +1435,21 @@ function renderInteriorPanel(): void {
 
 /** The location and the climate, the envelope, the heating per year, and the PV yield. */
 function renderEnergyTopic(): void {
-  renderLocationPanel("climate");
-  renderEnergyPanel();
+  // The wide panel of the energy has two columns when it has room: the inputs and the results.
+  const columns = document.createElement("div");
+  columns.className = "panel-columns";
+  const inputs = document.createElement("div");
+  const results = document.createElement("div");
+  inputs.className = results.className = "panel-column";
+  columns.append(inputs, results);
+  panel.append(columns);
+  column = inputs;
+  renderLocationPanel();
+  renderEnvelopeInputs();
+  renderHeatingInputs();
+  column = results;
+  renderHeatLoss();
+  renderHeatingResults();
   const building = doc.building;
   if (building.pv.length > 0) {
     const total = pvSummary(building);
@@ -1368,6 +1461,7 @@ function renderEnergyTopic(): void {
     pvSourceNote();
     button("Change the PV fields", () => setTopic("utilities"), { icon: "bolt" });
   }
+  column = panel;
 }
 
 function textField(
@@ -1897,12 +1991,8 @@ async function loadClimate(): Promise<void> {
   }
 }
 
-/** The location: the place search, the coordinates, and the climate. */
-/**
- * The place of the building. The source topic shows the map under the plan, and the energy topic
- * shows the climate of the place.
- */
-function renderLocationPanel(mode: "map" | "climate"): void {
+/** The location: the place search, the coordinates, the map under the plan, and the climate. */
+function renderLocationPanel(): void {
   const building = doc.building;
   const location = building.location;
   heading("Location", "pin");
@@ -1948,7 +2038,7 @@ function renderLocationPanel(mode: "map" | "climate"): void {
     coordinateField("Longitude", location?.longitude ?? null, 180, (value) =>
       editLocation((l) => (l.longitude = value)),
     );
-    if (location && mode === "map") {
+    if (location) {
       const moving = editor.tool === "map";
       button(
         moving ? "Done" : "Move the map",
@@ -1972,15 +2062,6 @@ function renderLocationPanel(mode: "map" | "climate"): void {
   });
   const details = section.lastElementChild as HTMLDetailsElement;
   details.addEventListener("toggle", () => (locationOpen = details.open));
-  if (mode === "map") {
-    paragraph(
-      "Search sends the text to open-meteo.com. The app sends nothing before you click. The map under the plan is in the Layers menu.",
-      "note",
-    );
-    if (locationMessage)
-      paragraph(locationMessage.text, locationMessage.error ? "warning" : "note");
-    return;
-  }
   if (locationBusy) {
     paragraph(locationBusy, "busy");
     if (climateRequest) button("Stop", () => climateRequest?.abort(), { icon: "close" });
@@ -2183,19 +2264,25 @@ function layerEditor(
 }
 
 /** The heat loss of the building and its envelope: the layers, the openings, the climate. */
-function renderEnergyPanel(): void {
-  const building = doc.building;
-  const envelope = building.envelope;
-  const summary = buildingHeatLoss(building);
-  heading("Energy", "flame");
+/** The heat loss of the building at the design temperature. */
+function renderHeatLoss(): void {
+  const envelope = doc.building.envelope;
+  const summary = buildingHeatLoss(doc.building);
+  heading("Heat loss", "flame");
   stats([
     [`${(summary.total / 1000).toFixed(1)} kW`, "heat loss"],
     [`${Math.round(summary.perArea)} W/m²`, "per heated area"],
   ]);
   paragraph(
-    `At ${envelope.outside} °C outside and ${envelope.inside} °C inside. An estimate, not a calculation by a standard.`,
+    `At ${envelope.outside} °C outside and ${envelope.inside} °C inside. An estimate, not a calculation by a standard. Click a room or a wall on the plan for its own values.`,
     "note",
   );
+}
+
+/** The layers of the envelope, the U-values of the openings, and the temperatures. */
+function renderEnvelopeInputs(): void {
+  const envelope = doc.building.envelope;
+  heading("Envelope", "layers");
   const editEnvelope = (edit: (envelope: Envelope) => void) =>
     doc.editBuilding((b) => edit(b.envelope));
   group(`Outer walls · U ${uValue(envelope.wall, "wall").toFixed(2)}`, false, () =>
@@ -2216,7 +2303,6 @@ function renderEnergyPanel(): void {
     numberField("Inside", envelope.inside, set("inside"), { min: -60, step: 0.5, unit: "°C" });
     designTemperatureButton();
   });
-  renderHeatingEnergy();
 }
 
 const MONTH_NAMES = [
@@ -2258,12 +2344,11 @@ function renderHeatingSystem(): void {
   );
 }
 
-/** The energy for heating per year: the price, the results, and the months. */
-function renderHeatingEnergy(): void {
-  const building = doc.building;
-  const heating = building.envelope.heating;
+/** The heat source of the building, from Utilities, and the price of its energy. */
+function renderHeatingInputs(): void {
+  const heating = doc.building.envelope.heating;
   const info = HEATING_KINDS[heating.kind];
-  heading("Heating per year", "flame");
+  heading("Heating", "flame");
   const setHeating = (edit: (h: typeof heating) => void) =>
     doc.editBuilding((b) => edit(b.envelope.heating));
   const pump = heating.kind === "heat-pump";
@@ -2275,6 +2360,13 @@ function renderHeatingEnergy(): void {
     step: 0.01,
     unit: "€/kWh",
   });
+}
+
+/** The energy for heating per year: the demand, the cost, the CO₂, the class, and the months. */
+function renderHeatingResults(): void {
+  const building = doc.building;
+  const info = HEATING_KINDS[building.envelope.heating.kind];
+  heading("Heating per year", "gauge");
   const energy = heatingEnergy(building);
   if (!energy) {
     paragraph(
@@ -2785,6 +2877,7 @@ function loadTopViews(): void {
 // ----- Files -----
 
 function updateTitle(): void {
+  if (!planOpen) return;
   document.title = `${doc.dirty ? "• " : ""}${fileName} – Grundriss`;
   $("#file-title").textContent = fileName;
   $("#file-name").classList.toggle("dirty", doc.dirty);
@@ -2792,14 +2885,96 @@ function updateTitle(): void {
   $<HTMLButtonElement>("#redo").disabled = !doc.canRedo;
 }
 
+// ----- Projects -----
+
+/** True if the browser can store projects. Until the check ends, the app assumes it cannot. */
+let storageOk = false;
+/** The project of the open plan in the browser, or null before its first save. */
+let projectId: string | null = null;
+let projectCreated = 0;
+/** The building of the last save to the browser. A save happens only for a new building. */
+let storedBuilding: Building | null = null;
+let autosaveTimer = 0;
+/** The time from a change to the save, in milliseconds. */
+const AUTOSAVE_DELAY = 800;
+
+const projectName = () => fileName.replace(/\.(grundriss|json)$/i, "") || "Plan";
+
+/** Saves the open plan to the browser soon, if it changed since the last save. */
+function scheduleAutosave(): void {
+  if (!storageOk || doc.inTransaction || doc.building === storedBuilding) return;
+  window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => void storeProject(), AUTOSAVE_DELAY);
+}
+
+/**
+ * Saves the open plan to the browser now. The function reads the plan before its first await, so
+ * a load of another plan right after it does not change what it saves.
+ */
+async function storeProject(): Promise<void> {
+  window.clearTimeout(autosaveTimer);
+  const building = doc.building;
+  if (!storageOk || building === storedBuilding) return;
+  if (!projectId) {
+    projectId = newProjectId();
+    projectCreated = Date.now();
+    void keepProjects();
+  }
+  const id = projectId;
+  storedBuilding = building;
+  try {
+    await saveProject({
+      id,
+      name: projectName(),
+      created: projectCreated,
+      updated: Date.now(),
+      preview: projectPreview(building),
+      data: serializeBuilding(building),
+    });
+  } catch (error) {
+    // The next change tries again.
+    if (storedBuilding === building) storedBuilding = null;
+    showStatus(
+      `The browser did not save the project: ${error instanceof Error ? error.message : error}. Save it to a file.`,
+      true,
+    );
+  }
+  if (!planOpen) renderHome();
+}
+
+/** A small SVG of the ground floor, without the background image, for the list of projects. */
+function projectPreview(building: Building): string {
+  const story = building.stories.find((s) => s.elevation >= -1e-6) ?? building.stories[0];
+  if (story.walls.length === 0) return "";
+  try {
+    return planToSvg(story, { ...storyExtras(building, story), background: false });
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * True if the open plan can go away. With the storage, the plan is in the browser, so the app
+ * saves it and asks nothing. Without the storage, the user confirms the loss of the changes.
+ */
 function confirmDiscard(): boolean {
+  if (storageOk) {
+    void storeProject();
+    return true;
+  }
   return !doc.dirty || confirm("The plan has unsaved changes. Discard them?");
 }
 
+/**
+ * Opens a plan. `project` is the project of the plan in the browser. Without it, the plan is new:
+ * a plan from a file goes to the browser at once, and a new or an example plan after its first
+ * change.
+ */
 function load(
   building: Building = emptyBuilding(),
   name = "plan.grundriss",
   handle: FileSystemFileHandle | null = null,
+  project: { id: string; created: number } | "from-file" | null = null,
 ) {
   setSuggestions(null);
   // The points of a calibration belong to the old background.
@@ -2808,10 +2983,17 @@ function load(
   doc.replace(building);
   fileName = name;
   fileHandle = handle;
+  projectId = project && project !== "from-file" ? project.id : null;
+  projectCreated = project && project !== "from-file" ? project.created : 0;
+  storedBuilding = project === "from-file" ? null : doc.building;
   editor.select(null);
-  editor.fit();
-  fit3d();
+  if (!planOpen || topic === "overview") fitPending = true;
+  else {
+    editor.fit();
+    fit3d();
+  }
   updateTitle();
+  if (project === "from-file") void storeProject();
 }
 
 async function openFile(): Promise<void> {
@@ -2819,11 +3001,467 @@ async function openFile(): Promise<void> {
   try {
     const file = await openPlanFile();
     if (!file) return;
-    load(readBuildingFile(file.bytes), file.name, file.handle);
+    load(readBuildingFile(file.bytes), file.name, file.handle, "from-file");
     showStatus(`Opened ${file.name}.`);
+    enterPlan("structure");
   } catch (error) {
     showStatus(error instanceof Error ? error.message : String(error), true);
   }
+}
+
+async function openProject(id: string): Promise<void> {
+  if (id === projectId) return enterPlan("structure");
+  if (!confirmDiscard()) return;
+  try {
+    const project = await loadProject(id);
+    if (!project) throw new Error("The project is not in the browser any more.");
+    load(parseBuilding(project.data), `${project.name}.grundriss`, null, project);
+    showStatus(`Opened ${project.name}.`);
+    enterPlan("structure");
+  } catch (error) {
+    showStatus(error instanceof Error ? error.message : String(error), true);
+    renderHome();
+  }
+}
+
+function newPlan(): void {
+  if (!confirmDiscard()) return;
+  load();
+  enterPlan("structure");
+}
+
+function openExample(): void {
+  if (!confirmDiscard()) return;
+  load(makeHouse(), "Example house.grundriss");
+  showStatus("Opened the example house. A change saves it as a project in the browser.");
+  enterPlan("structure");
+}
+
+const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** "5 minutes ago", "yesterday", or "3 weeks ago". */
+function ago(time: number): string {
+  const seconds = (time - Date.now()) / 1000;
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return relativeTime.format(Math.round(seconds / size), unit);
+  }
+  return "just now";
+}
+
+let homeRequest = 0;
+
+/** The home page: the tiles to start a plan, the plans in the browser, and the examples. */
+function renderHome(): void {
+  const note = $("#projects-note");
+  if (!storageOk) {
+    note.textContent =
+      "This browser does not store projects, for example in a private window. Save the plan to a file to keep it.";
+    note.classList.add("warning");
+    fillProjects(null);
+    return;
+  }
+  note.classList.remove("warning");
+  note.textContent =
+    "The projects stay in this browser on this device, and each change saves itself. Save to a file for a backup or to share a plan.";
+  // A newer call wins, so that a slow list does not replace a newer one.
+  const request = ++homeRequest;
+  void listProjects().then(
+    (projects) => request === homeRequest && fillProjects(projects),
+    (error) => {
+      if (request !== homeRequest) return;
+      note.textContent = `The browser cannot read the projects: ${error instanceof Error ? error.message : error}`;
+      note.classList.add("warning");
+    },
+  );
+}
+
+/** The example house in the list of the projects. It is not in the browser storage. */
+let examplePreview: string | null = null;
+const EXAMPLE_ID = "example";
+
+/**
+ * Fills the home page: the tiles to start a plan, the plans in the browser, and the examples.
+ * Without the storage (`projects` is null), the row of the plans in the browser does not show.
+ */
+function fillProjects(projects: ProjectInfo[] | null): void {
+  const list = $("#project-list");
+  list.replaceChildren();
+  const row = (title: string | null, className = "") => {
+    const wrap = document.createElement("section");
+    wrap.className = "project-section";
+    if (title) {
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      wrap.append(heading);
+    }
+    const grid = document.createElement("div");
+    grid.className = `project-grid ${className}`.trim();
+    wrap.append(grid);
+    list.append(wrap);
+    return grid;
+  };
+  const startRow = row(null, "start-row");
+  const mine = projects ? row("Plans in this browser") : null;
+  const examples = row("Examples");
+  if (projects && projects.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "project-empty";
+    empty.textContent =
+      "No plans yet. A plan that you start or open shows here, and each change saves it.";
+    mine!.append(empty);
+  }
+  examplePreview ??= projectPreview(makeHouse());
+  const example: ProjectInfo = {
+    id: EXAMPLE_ID,
+    name: "Example house",
+    created: 0,
+    updated: 0,
+    preview: examplePreview,
+  };
+  // The first tiles start a plan: a new plan, or a plan from a file.
+  const start = (iconName: IconName, title: string, detail: string, action: () => void) => {
+    const tile = document.createElement("button");
+    tile.className = "project project-start";
+    const picture = document.createElement("span");
+    picture.className = "project-picture";
+    picture.innerHTML = icon(iconName);
+    const text = document.createElement("span");
+    text.className = "project-text";
+    const name = document.createElement("strong");
+    name.textContent = title;
+    const small = document.createElement("small");
+    small.textContent = detail;
+    text.append(name, small);
+    tile.append(picture, text);
+    tile.addEventListener("click", action);
+    startRow.append(tile);
+  };
+  start("plus", "New plan", "Draw the walls, or trace a scan or a photo.", newPlan);
+  start("open", "Open a file", "A .grundriss or a .json file.", () => void openFile());
+  for (const project of [...(projects ?? []), example]) {
+    const isExample = project === example;
+    const card = document.createElement("article");
+    card.className = "project";
+    const open = document.createElement("button");
+    open.className = "project-open";
+    open.title = `Open ${project.name}`;
+    const picture = document.createElement("div");
+    picture.className = "project-picture";
+    if (project.preview) {
+      const image = document.createElement("img");
+      image.alt = "";
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(project.preview)}`;
+      picture.append(image);
+    } else {
+      picture.innerHTML = icon("view2d");
+    }
+    const text = document.createElement("span");
+    text.className = "project-text";
+    const name = document.createElement("strong");
+    name.textContent = project.name;
+    const time = document.createElement("small");
+    time.textContent = isExample
+      ? "A house with two stories, a roof, PV, and utilities. A change saves a copy."
+      : `Changed ${ago(project.updated)}`;
+    text.append(name, time);
+    open.append(picture, text);
+    open.addEventListener("click", () =>
+      isExample ? openExample() : void openProject(project.id),
+    );
+    if (isExample) {
+      card.classList.add("example");
+      card.append(open);
+      examples.append(card);
+      continue;
+    }
+    const tools = document.createElement("div");
+    tools.className = "project-tools";
+    const tool = (iconName: IconName, title: string, action: () => void, danger = false) => {
+      const element = document.createElement("button");
+      element.className = `icon-button${danger ? " danger" : ""}`;
+      element.title = title;
+      element.setAttribute("aria-label", `${title}: ${project.name}`);
+      element.innerHTML = icon(iconName);
+      element.addEventListener("click", action);
+      tools.append(element);
+    };
+    tool("rename", "Rename", () => renameInPlace(card, project));
+    tool("copy", "Duplicate", () => void duplicateProject(project.id));
+    tool(
+      "trash",
+      "Delete",
+      () => {
+        if (!confirm(`Delete the project "${project.name}" from this browser?`)) return;
+        void deleteProject(project.id).then(() => {
+          // The open plan stays, and its next change saves it as a new project.
+          if (project.id === projectId) {
+            projectId = null;
+            storedBuilding = doc.building;
+          }
+          showStatus(`Deleted ${project.name}.`);
+          renderHome();
+        });
+      },
+      true,
+    );
+    card.append(open, tools);
+    mine!.append(card);
+  }
+}
+
+/** Puts a text field in place of the name of the project. Enter or a blur keeps the new name. */
+function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
+  const name = card.querySelector("strong")!;
+  const input = document.createElement("input");
+  input.className = "project-name";
+  input.value = project.name;
+  input.setAttribute("aria-label", "Name of the project");
+  let done = false;
+  const finish = (keep: boolean) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    if (!keep || !value || value === project.name) return renderHome();
+    if (project.id === projectId) {
+      const extension = /\.json$/i.test(fileName) ? ".json" : ".grundriss";
+      fileName = `${value}${extension}`;
+      updateTitle();
+    }
+    void renameProject(project.id, value).then(renderHome);
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") finish(true);
+    if (event.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+  // The click on the card opens the project, so the field stops it.
+  input.addEventListener("click", (event) => event.stopPropagation());
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+async function duplicateProject(id: string): Promise<void> {
+  const project = await loadProject(id);
+  if (!project) return;
+  const now = Date.now();
+  await saveProject({
+    ...project,
+    id: newProjectId(),
+    name: `${project.name} (copy)`,
+    created: now,
+    updated: now,
+  });
+  renderHome();
+}
+
+/** Opens the topic of an item, makes its story active, and selects it. */
+function showItems(storyId: string, items: Item[], itemTopic: Topic): void {
+  setTopic(itemTopic);
+  doc.setActiveStory(storyId);
+  // A change of the story clears the selection in the next frame, unless it knows the story.
+  shownStoryId = doc.activeStoryId;
+  editor.select(items);
+}
+
+/** The tree of the contents of the open plan: the stories with their parts, and the building. */
+function renderContents(): void {
+  const root = $("#contents");
+  root.replaceChildren();
+  const building = doc.building;
+  const head = document.createElement("p");
+  head.className = "contents-title";
+  head.textContent = `${projectName()} · ${building.stories.length} ${building.stories.length === 1 ? "story" : "stories"}`;
+  root.append(head);
+
+  const node = (parent: HTMLElement, title: string, count: number | null, open = false) => {
+    const details = document.createElement("details");
+    details.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = title;
+    if (count !== null) {
+      const badge = document.createElement("span");
+      badge.className = "count";
+      badge.textContent = String(count);
+      summary.append(badge);
+    }
+    details.append(summary);
+    parent.append(details);
+    return details;
+  };
+  const leaf = (
+    parent: HTMLElement,
+    title: string,
+    detail: string,
+    action: (() => void) | null,
+    iconName?: IconName,
+  ) => {
+    const element = document.createElement(action ? "button" : "div");
+    element.className = "leaf";
+    if (iconName) element.innerHTML = icon(iconName);
+    const label = document.createElement("span");
+    label.textContent = title;
+    element.append(label);
+    if (detail) {
+      const small = document.createElement("small");
+      small.textContent = detail;
+      element.append(small);
+    }
+    if (action) element.addEventListener("click", action);
+    parent.append(element);
+  };
+
+  // The highest story first, as in the list of the stories.
+  const stories = [...building.stories].sort((a, b) => b.elevation - a.elevation);
+  for (const story of stories) {
+    const sign = story.elevation >= 0 ? "+" : "−";
+    const storyNode = node(
+      root,
+      `${story.name} (${sign}${Math.abs(story.elevation).toFixed(2)} m)`,
+      null,
+      story.id === doc.activeStoryId,
+    );
+    storyNode.classList.add("story-node");
+    const show = (items: Item[], itemTopic: Topic) => () => showItems(story.id, items, itemTopic);
+    const all = (kind: ItemKind, list: { id: string }[]) => list.map((x) => ({ kind, id: x.id }));
+    const rooms = findRooms(story);
+    if (rooms.length > 0) {
+      const group = node(storyNode, "Rooms", rooms.length);
+      for (const room of rooms) {
+        leaf(
+          group,
+          room.info?.name || "Room",
+          `${room.area.toFixed(2)} m²`,
+          show([{ kind: "room", id: room.key }], "structure"),
+          "view2d",
+        );
+      }
+    }
+    const counts: [string, Item[], IconName][] = [
+      ["Walls", all("wall", story.walls), "wall"],
+      [
+        "Doors",
+        all(
+          "opening",
+          story.openings.filter((o) => o.kind === "door"),
+        ),
+        "door",
+      ],
+      [
+        "Windows",
+        all(
+          "opening",
+          story.openings.filter((o) => o.kind === "window"),
+        ),
+        "window",
+      ],
+      ["Stairs", all("stair", story.stairs), "stair"],
+      ["Chimneys", all("chimney", story.chimneys), "chimney"],
+      ["Dimensions", all("dimension", story.dimensions), "dimension"],
+    ];
+    for (const [title, items, iconName] of counts) {
+      if (items.length > 0) {
+        leaf(storyNode, title, `${items.length}`, show(items, "structure"), iconName);
+      }
+    }
+    if (story.background) {
+      leaf(storyNode, "Background image", "", show([], "structure"), "image");
+    }
+    if (story.furniture.length > 0) {
+      const group = node(storyNode, "Furniture", story.furniture.length);
+      for (const piece of story.furniture) {
+        leaf(
+          group,
+          piece.name || "Piece",
+          "",
+          show([{ kind: "furniture", id: piece.id }], "interior"),
+          "sofa",
+        );
+      }
+    }
+    for (const { system, name } of SERVICE_SYSTEMS) {
+      const fixtures = story.fixtures.filter((f) => f.system === system);
+      const runs = story.runs.filter((r) => r.system === system);
+      if (fixtures.length + runs.length === 0) continue;
+      const parts = [
+        fixtures.length > 0
+          ? `${fixtures.length} ${fixtures.length === 1 ? "device" : "devices"}`
+          : "",
+        runs.length > 0 ? `${runs.length} ${runs.length === 1 ? "line" : "lines"}` : "",
+      ];
+      leaf(
+        storyNode,
+        name,
+        parts.filter(Boolean).join(", "),
+        show([...all("fixture", fixtures), ...all("run", runs)], "utilities"),
+        SYSTEM_ICONS[system],
+      );
+    }
+    if (storyNode.childElementCount === 1) {
+      leaf(storyNode, "Empty", "", null);
+    }
+  }
+
+  const buildingNode = node(root, "Building", null, true);
+  if (building.roofs.length > 0) {
+    const group = node(buildingNode, "Roofs", building.roofs.length);
+    for (const roof of building.roofs) {
+      const story = findStory(building, roof.storyId);
+      leaf(
+        group,
+        roof.name,
+        story ? `on ${story.name}` : "",
+        story ? () => showItems(story.id, [{ kind: "roof", id: roof.id }], "structure") : null,
+        "roof",
+      );
+    }
+  }
+  if (building.pv.length > 0) {
+    const total = pvSummary(building);
+    leaf(
+      buildingNode,
+      "Photovoltaic",
+      `${building.pv.length} ${building.pv.length === 1 ? "field" : "fields"}, ${total.peak.toFixed(1)} kWp`,
+      () => setTopic("utilities"),
+      "bolt",
+    );
+  }
+  if (building.models.length > 0) {
+    leaf(
+      buildingNode,
+      "3D models",
+      `${building.models.length}`,
+      () => setTopic("interior"),
+      "sofa",
+    );
+  }
+  leaf(
+    buildingNode,
+    "Location",
+    building.location
+      ? building.location.name ||
+          `${building.location.latitude.toFixed(2)}, ${building.location.longitude.toFixed(2)}`
+      : "not set",
+    () => setTopic("energy"),
+    "pin",
+  );
+  leaf(
+    buildingNode,
+    "Climate",
+    building.climate
+      ? `${building.climate.firstYear} to ${building.climate.lastYear}`
+      : "not loaded",
+    () => setTopic("energy"),
+    "gauge",
+  );
 }
 
 async function saveFile(saveAs: boolean): Promise<void> {
@@ -2843,6 +3481,8 @@ async function saveFile(saveAs: boolean): Promise<void> {
     fileName = result.name;
     fileHandle = result.handle;
     doc.markSaved();
+    // The project in the browser takes the name of the file.
+    if (projectId) void renameProject(projectId, projectName());
     showStatus(`Saved ${fileName}.`);
   } catch (error) {
     showStatus(error instanceof Error ? error.message : String(error), true);
@@ -3012,7 +3652,7 @@ editor.onCalibrate = (a, b) => {
   renderPanel();
 };
 
-$("#new").addEventListener("click", () => confirmDiscard() && load());
+$("#new").addEventListener("click", newPlan);
 $("#open").addEventListener("click", () => void openFile());
 $("#save").addEventListener("click", () => void saveFile(false));
 $("#save-as").addEventListener("click", () => void saveFile(true));
@@ -3027,6 +3667,7 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-system
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-tab]")) {
   element.addEventListener("click", () => setTopic(element.dataset.topicTab as Topic));
 }
+$("#brand").addEventListener("click", () => planOpen && showHome());
 $("#layers-button").addEventListener("click", () =>
   toggleMenu($("#layers-button"), $("#layers-menu")),
 );
@@ -3051,19 +3692,11 @@ $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export]")) {
   element.addEventListener("click", () => void exportPlan(element.dataset.export as ExportFormat));
 }
-$("#empty-background").addEventListener("click", () => {
-  setTopic("source");
-  void loadBackground();
-});
+$("#empty-background").addEventListener("click", () => void loadBackground());
 $("#empty-wall").addEventListener("click", () => setTool("wall"));
 $("#empty-open").addEventListener("click", () => void openFile());
 $("#empty-example").addEventListener("click", openExample);
 
-function openExample(): void {
-  if (!confirmDiscard()) return;
-  load(makeHouse(), "example.grundriss");
-  showStatus("Opened the example house. Save it to keep your changes.");
-}
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")) {
   element.addEventListener("click", () => {
     editor.fit();
@@ -3100,6 +3733,14 @@ window.addEventListener("keydown", (e) => {
   const target = e.target as HTMLElement;
   if (target.matches("input, select, textarea")) return;
   const key = e.key.toLowerCase();
+  // Without an open plan, only Ctrl+O works: it opens a file.
+  if (!planOpen) {
+    if ((e.ctrlKey || e.metaKey) && key === "o") {
+      e.preventDefault();
+      void openFile();
+    }
+    return;
+  }
   if (e.ctrlKey || e.metaKey) {
     if (key === "z") e.shiftKey ? doc.redo() : doc.undo();
     else if (key === "y") doc.redo();
@@ -3148,13 +3789,77 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("beforeunload", (e) => {
-  if (doc.dirty) e.preventDefault();
+  // With the storage, the plan is in the browser: the last change saves now.
+  if (storageOk) void storeProject();
+  else if (doc.dirty) e.preventDefault();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") void storeProject();
+});
+doc.subscribe(scheduleAutosave);
+void projectsAvailable().then((ok) => {
+  storageOk = ok;
+  if (!planOpen) renderHome();
 });
 
-setTopic(topic);
+// ----- Installed app -----
+
+/** The prompt of the browser to install the app, while the browser offers it. */
+let installPrompt: (Event & { prompt(): Promise<void> }) | null = null;
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPrompt = event as typeof installPrompt;
+  $("#install").hidden = false;
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  $("#install").hidden = true;
+  showStatus("Installed Grundriss. It opens from your apps, also without the internet.");
+});
+$("#install").addEventListener("click", () => {
+  void installPrompt?.prompt();
+});
+
+// The installed app opens the .grundriss and .json files that the user opens with it.
+interface LaunchParams {
+  files: FileSystemFileHandle[];
+}
+const launchQueue = (
+  window as { launchQueue?: { setConsumer(f: (p: LaunchParams) => void): void } }
+).launchQueue;
+launchQueue?.setConsumer(async ({ files }) => {
+  const handle = files[0];
+  if (!handle || !confirmDiscard()) return;
+  try {
+    const file = await handle.getFile();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    load(readBuildingFile(bytes), file.name, handle, "from-file");
+    showStatus(`Opened ${file.name}.`);
+    enterPlan("structure");
+  } catch (error) {
+    showStatus(error instanceof Error ? error.message : String(error), true);
+  }
+});
+
+// The service worker keeps the app in the cache, so it starts without the internet. The dev
+// server has no service worker, because it would keep old code.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadController)
+      showStatus("A new version of Grundriss is ready. Reload the page to use it.");
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {
+      // Without the service worker, the app works as a normal web page.
+    });
+  });
+}
+
 setTool("select");
 setView("split");
 load();
+showHome();
 
 // The dev server gives the document and the editor to the console, for tests by hand. The
 // production build does not contain this code.

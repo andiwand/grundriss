@@ -238,12 +238,15 @@ button.ghost:hover:not(:disabled) {
 
 /* ----- The top bar ----- */
 
+/* The bar grows to a second row when its parts do not fit in one, so the page never scrolls to
+   the side. */
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  height: 52px;
-  padding: 0 12px;
+  min-height: 52px;
+  padding: 8px 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -252,9 +255,43 @@ button.ghost:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 4px;
+  margin-left: -4px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
+}
+
+/* On the home page, the brand is only a name. */
+body.no-plan .brand {
+  cursor: default;
+}
+
+body.no-plan .brand:hover:not(:disabled) {
+  background: transparent;
+}
+
+body:not(.no-plan) .brand:hover {
+  background: var(--surface-2);
+}
+
+.brand-back {
+  display: flex;
+  margin: 0 -2px 0 -2px;
+  color: var(--ink-3);
+}
+
+.brand-back .icon {
+  width: 16px;
+  height: 16px;
+}
+
+body:not(.no-plan) .brand:hover .brand-back {
+  color: var(--accent);
 }
 
 .brand img {
@@ -340,18 +377,42 @@ button.ghost:hover:not(:disabled) {
   height: 16px;
 }
 
-/* The topics of the app. In a narrow window, the tabs show only their icons. */
+/* The topics of the app. */
 .topics button {
   gap: 6px;
 }
 
-@media (max-width: 1280px) {
+/* The top bar gets shorter in steps before it wraps: first the views, Layers, and Export show
+   only their icons, then the topics and the back button. Each button keeps its title. */
+@media (max-width: 1600px) {
+  #views button,
+  #layers-button,
+  #export {
+    gap: 0;
+    padding: 0 8px;
+    font-size: 0;
+  }
+}
+
+@media (max-width: 1440px) {
   .topics button span {
     display: none;
   }
 
   .topics button {
+    gap: 0;
     padding: 0 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .file-name {
+    max-width: 40vw;
+    margin-left: 0;
+  }
+
+  .brand-name {
+    display: none;
   }
 }
 
@@ -396,6 +457,33 @@ button.ghost:hover:not(:disabled) {
 #area.view-2d #panel,
 #area.view-3d #panel {
   margin-left: 8px;
+}
+
+/* The energy has a wide panel for its calculations beside one view. It uses the columns of the
+   split view, and the panel takes the place of the second view, so that the edge between the
+   view and the panel is where the edge between the two views is. */
+body.energy #area.view-2d,
+body.energy #area.view-3d {
+  grid-template-columns: 1fr 1fr 272px;
+  column-gap: 8px;
+}
+
+body.energy #area #panel {
+  grid-area: 1 / 2 / 2 / 4;
+  margin-left: 0;
+}
+
+body.energy #area.view-2d #plan-3d,
+body.energy #area.view-3d #plan-2d {
+  display: none;
+}
+
+body.energy #area.view-3d #plan-3d {
+  grid-area: 1 / 1;
+}
+
+body.energy .empty-state {
+  grid-column: 1;
 }
 
 .pane {
@@ -590,6 +678,31 @@ button.ghost:hover:not(:disabled) {
   box-shadow: var(--shadow-sm);
 }
 
+/* Two columns in a wide panel, one column in a narrow one. */
+#panel {
+  container-type: inline-size;
+}
+
+.panel-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px 20px;
+  align-items: start;
+}
+
+@container (min-width: 600px) {
+  .panel-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.panel-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 #panel section {
   display: flex;
   flex-direction: column;
@@ -697,11 +810,15 @@ button.ghost:hover:not(:disabled) {
    text that does not fit in half a row goes to its own row, so that its text stays inside it. */
 #panel .actions button {
   flex: 1 1 calc(50% - 4px);
-  min-width: min(max-content, 100%);
-  /* A text longer than the row, for example the name of a place, wraps inside the button. */
   max-width: 100%;
+  /* A text longer than the button wraps inside it. The button grows with its lines, because a
+     fixed height lets a second line come out of it. */
+  height: auto;
+  min-height: 32px;
+  padding-block: 6px;
   white-space: normal;
   text-align: start;
+  line-height: 1.25;
 }
 
 /* A list item, for example a roof: one item in each row, with a detail below the text. */
@@ -915,6 +1032,14 @@ button.ghost:hover:not(:disabled) {
 
 .room-label.name {
   font-weight: 700;
+}
+
+/* A halo in the color of the paper keeps the text readable over furniture and lines. The editor
+   sets its width for the zoom. */
+.room-label {
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-linejoin: round;
 }
 
 .room-label,
@@ -1940,4 +2065,365 @@ button.ghost:hover:not(:disabled) {
   stroke: var(--paper);
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+/* ----- The home page of the projects ----- */
+
+/* Without an open plan, the top bar shows only the brand and the install button. */
+body.no-plan .plan-tools,
+body:not(.no-plan) .home-only {
+  display: none;
+}
+
+/* The overview has no views, so the tools of the views hide. */
+body.overview #views,
+body.overview #layers-button {
+  display: none;
+}
+
+#home,
+#overview {
+  display: grid;
+  padding: 8px;
+  min-height: 0;
+}
+
+/* The tree of the contents reads best in a column of moderate width. */
+#overview {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.home-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 16px 20px 8px;
+}
+
+.home-head h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.home-note {
+  margin: 0;
+  padding: 0 20px 12px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.home-note.warning {
+  color: #c2410c;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 20px 20px;
+  overflow-y: auto;
+}
+
+.project-section h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.project-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.project {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+
+.project:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.project.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.project-open {
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+  white-space: normal;
+}
+
+.project-open:hover:not(:disabled) {
+  background: transparent;
+}
+
+.project-picture {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  padding: 10px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.project-picture img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.project-picture .icon {
+  width: 36px;
+  height: 36px;
+  opacity: 0.5;
+}
+
+.project-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+}
+
+.project-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-text small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+/* The tiles that start a plan: compact, with a dashed frame and the icon on the left. */
+.project-start {
+  height: auto;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  white-space: normal;
+  font-weight: 400;
+}
+
+.project-start:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.project-start .project-picture {
+  flex: none;
+  width: 56px;
+  aspect-ratio: auto;
+  align-self: stretch;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+  color: var(--accent);
+}
+
+.project-start .project-picture .icon {
+  width: 24px;
+  height: 24px;
+  opacity: 1;
+}
+
+.project-start .project-text {
+  padding: 12px 12px 12px 0;
+}
+
+.project-name {
+  margin: 0 12px;
+  width: calc(100% - 24px);
+}
+
+/* The tools of a project lie over the corner of its picture. */
+.project-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-glass);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.project:hover .project-tools,
+.project:focus-within .project-tools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .project-tools {
+    opacity: 1;
+  }
+}
+
+.project-tools .icon-button.danger:hover:not(:disabled) {
+  color: #c92a2a;
+}
+
+/* The tree of the contents of the open plan. */
+.contents {
+  padding: 0 12px 16px;
+  overflow-y: auto;
+}
+
+.contents-title {
+  margin: 0 8px 8px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.contents details {
+  margin-left: 12px;
+}
+
+.contents > details {
+  margin-left: 0;
+}
+
+.contents summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.contents summary {
+  list-style: none;
+}
+
+.contents summary::-webkit-details-marker {
+  display: none;
+}
+
+/* An arrow that turns down when the group opens. */
+.contents summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px 0 1px;
+  border-right: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(-45deg);
+  transition: transform 120ms;
+}
+
+.contents details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.contents summary:hover {
+  background: var(--surface-2);
+}
+
+.contents .count,
+.contents .leaf small {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.contents .leaf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 20px);
+  height: auto;
+  margin-left: 20px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 400;
+  text-align: start;
+}
+
+.contents button.leaf:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.contents .leaf .icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.contents .leaf span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* In a bar with two rows, a divider can start a row, so the dividers hide. */
+@media (max-width: 1100px) {
+  .topbar .divider {
+    display: none;
+  }
 }

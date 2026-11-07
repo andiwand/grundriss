@@ -4,9 +4,37 @@ The changes that a user notices.
 
 ## Unreleased
 
-- Topics: the top bar has five topics: Source, Structure, Utilities, Interior, and Energy. Each
+- 2D: when the 2D pane changes its size, for example from split to 2D only, the point at the
+  center of the view stays at the center.
+- Energy: the topic shows one view, 2D or 3D, and a wide panel for the calculations. The edge
+  between the view and the panel is where the edge between the two views of split is. The panel
+  has the inputs (location, envelope, heating) in one column and the results (heat loss, heating
+  per year, PV) in the other. Split is not available in Energy; after Energy, the view of before
+  comes back.
+- Example house: the dining chairs, the sofa, the armchair, the shelf, and the kitchen counter
+  face the right way. The chairs stand beside the tables, not under them.
+- 2D: the names and the areas of the rooms are on top of the furniture, with a halo, so they stay
+  readable.
+- Projects: the app starts with the Projects page, without an open plan. The page has a tile for
+  a new plan and a tile to open a file, the plans in this browser as tiles with a picture of the
+  plan, and the example house under Examples. Until a plan is open, the top bar shows no topics
+  and no tools of the plan. A click on **‹ Grundriss** at the top left closes the plan and goes back. The open project saves itself in the browser (IndexedDB) after each change, so a reload
+  loses nothing. A project can get a new name, a copy, or go away. Save to a file stays for
+  backups and to share a plan.
+- Overview: the first topic shows the Contents tree of the open plan: each story with its rooms, walls, doors,
+  windows, stairs, furniture, and utilities, and the roofs, the PV, the location, and the
+  climate. A click opens the part in its topic and selects it.
+- Installable app: the app is a PWA. Chrome and Edge show **Install** in the top bar of the
+  Projects page. The
+  installed app starts without the internet and opens `.grundriss` and `.json` files. In the
+  browser, the app works as before.
+- Panel: a button with a long text grows to its lines. Before, the text came out of the button.
+- Top bar: in a narrow window, the buttons first show only their icons, and then the bar grows to
+  a second row. The page does not scroll to the side.
+- Topics: the top bar has five topics: Overview, Structure, Utilities, Interior, and Energy. Each
   topic shows its own tools in the palette, its own panel when nothing is selected, and its own
-  layers. Select, Pan, and Measure are in all topics. A shortcut of a tool opens its topic. A
+  layers. The background, the scale, and the tracing are in Structure, and the map under the plan
+  is in the Location group of Energy. Select, Pan, and Measure are in all topics. A shortcut of a tool opens its topic. A
   change in the Layers menu stays with the topic.
 - Utilities: four systems, each with its own menu in the palette: water, heating, electricity,
   and communication. New devices: water outlet, waste connection, floor drain, outdoor tap, water

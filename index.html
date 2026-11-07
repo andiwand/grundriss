@@ -6,26 +6,37 @@
     <meta name="color-scheme" content="light dark" />
     <title>Grundriss</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#2f6bff" />
+    <meta name="apple-mobile-web-app-title" content="Grundriss" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <!-- The CSS loads in the head, so the page never shows without it. An import in main.ts
          applies it only after the scripts run, and in dev mode the page then flashes. -->
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
+      <!-- With an open plan, the brand is the way back to the projects. -->
+      <button class="brand" id="brand">
+        <span class="brand-back plan-tools" data-icon="back"></span>
         <img src="./icon.svg" alt="" width="26" height="26" />
-        <span>Grundriss</span>
-      </div>
-      <div class="file-name" id="file-name" title="The name of the plan file">
+        <span class="brand-name">Grundriss</span>
+      </button>
+      <div class="file-name plan-tools" id="file-name" title="The name of the plan file">
         <span id="file-title">plan.grundriss</span>
         <span class="dirty-dot" title="Unsaved changes"></span>
       </div>
       <div class="spacer"></div>
-      <nav class="segmented topics" id="topics" aria-label="Topic">
-        <button data-topic-tab="source" data-icon="image" title="Open a plan, a scan, or a map">
-          <span>Source</span>
+      <nav class="segmented topics plan-tools" id="topics" aria-label="Topic">
+        <button data-topic-tab="overview" data-icon="layers" title="The contents of the plan">
+          <span>Overview</span>
         </button>
-        <button data-topic-tab="structure" data-icon="roof" title="Walls, floors, and roofs">
+        <button
+          data-topic-tab="structure"
+          data-icon="roof"
+          title="Background, walls, floors, and roofs"
+        >
           <span>Structure</span>
         </button>
         <button
@@ -47,7 +58,7 @@
         </button>
       </nav>
       <div class="spacer"></div>
-      <div class="group">
+      <div class="group plan-tools">
         <button class="icon-button" id="new" data-icon="new" title="New plan"></button>
         <button
           class="icon-button"
@@ -63,19 +74,40 @@
           title="Save as (Ctrl+Shift+S)"
         ></button>
       </div>
-      <button id="layers-button" class="ghost" data-icon="layers" data-menu title="Layers">
+      <button
+        id="install"
+        class="ghost home-only"
+        data-icon="install"
+        title="Install Grundriss as an app on this device. It then works without the internet."
+        hidden
+      >
+        Install
+      </button>
+      <button
+        id="layers-button"
+        class="ghost plan-tools"
+        data-icon="layers"
+        data-menu
+        title="Layers"
+      >
         Layers
       </button>
-      <button id="export" class="ghost" data-icon="export" data-menu title="Export the plan">
+      <button
+        id="export"
+        class="ghost plan-tools"
+        data-icon="export"
+        data-menu
+        title="Export the plan"
+      >
         Export
       </button>
-      <div class="divider"></div>
-      <div class="group">
+      <div class="divider plan-tools"></div>
+      <div class="group plan-tools">
         <button class="icon-button" id="undo" data-icon="undo" title="Undo (Ctrl+Z)"></button>
         <button class="icon-button" id="redo" data-icon="redo" title="Redo (Ctrl+Shift+Z)"></button>
       </div>
-      <div class="divider"></div>
-      <div class="segmented" id="views" role="group" aria-label="View">
+      <div class="divider plan-tools"></div>
+      <div class="segmented plan-tools" id="views" role="group" aria-label="View">
         <button data-view="2d" data-icon="view2d" title="2D only">2D</button>
         <button data-view="split" data-icon="split" title="2D and 3D">Split</button>
         <button data-view="3d" data-icon="view3d" title="3D only">3D</button>
@@ -95,7 +127,7 @@
           </button>
           <span class="divider"></span>
           <button
-            data-topic="source"
+            data-topic="structure"
             id="background"
             data-icon="image"
             title="Load a scan or a photo of a plan"
@@ -103,7 +135,7 @@
             Background
           </button>
           <button
-            data-topic="source"
+            data-topic="structure"
             data-tool="calibrate"
             data-icon="ruler"
             title="Set the scale of the background (C)"
@@ -111,13 +143,14 @@
             Scale<kbd>C</kbd>
           </button>
           <button
-            data-topic="source"
+            data-topic="structure"
             data-tool="rectify"
             data-icon="crop"
             title="Straighten a photo of a plan"
           >
             Straighten
           </button>
+          <span class="divider" data-topic="structure"></span>
           <button data-topic="structure" data-tool="wall" data-icon="wall" title="Draw walls (W)">
             Wall<kbd>W</kbd>
           </button>
@@ -245,6 +278,25 @@
         </div>
         <button class="link" id="empty-example" data-icon="roof">Or open the example house</button>
       </div>
+    </main>
+    <!-- The home page: the projects, while no plan is open. It takes the place of the work area. -->
+    <main id="home" hidden>
+      <section class="home-card home-projects" aria-labelledby="projects-title">
+        <div class="home-head">
+          <h2 id="projects-title">Projects</h2>
+        </div>
+        <p class="home-note" id="projects-note"></p>
+        <div class="project-list" id="project-list"></div>
+      </section>
+    </main>
+    <!-- The overview of the open plan. It takes the place of the work area. -->
+    <main id="overview" hidden>
+      <section class="home-card home-contents" aria-labelledby="contents-title">
+        <div class="home-head">
+          <h2 id="contents-title">Contents</h2>
+        </div>
+        <div class="contents" id="contents"></div>
+      </section>
     </main>
     <footer id="status"></footer>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>

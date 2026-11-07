@@ -45,17 +45,42 @@ account and no server, and your plans stay on your computer as files.
 
 ## Use
 
-The top bar has five topics. Each topic shows its own tools, panel, and layers:
+The app starts with the **Projects** page: start a new plan, open a file, open a plan of this
+browser, or open the example house. With an open plan, the top bar has five topics. Each topic
+shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top left closes the plan and goes back.
 
-- **Source**: open a plan, load a scan or a photo as the background, trace it, and set the map.
-- **Structure**: walls, doors, windows, stairs, chimneys, stories, and roofs.
+- **Overview**: the contents of the open plan. A click on a part opens it in its topic.
+- **Structure**: the background and the tracing, walls, doors, windows, stairs, chimneys, stories,
+  and roofs.
 - **Utilities**: water, heating, electricity with PV, and communication.
 - **Interior**: furniture and rooms.
-- **Energy**: the location and the climate, the insulation, the heating per year, and its cost.
+- **Energy**: the location, the map, the climate, the insulation, the heating per year, and its
+  cost.
 
 Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic.
 
-1. In **Source**, click **Background** and choose a scan or a photo of a plan.
+### Projects in the browser
+
+The open plan saves itself in the browser after each change, as a project. The Projects page
+shows each project with a picture of its ground floor; a click opens it. The buttons on a tile
+change its name, make a copy, or delete it.
+
+The projects stay in this browser on this device. Clearing the data of the site deletes them.
+Safari deletes the data of a site after 7 days without a visit, unless the app is installed. So
+**Save** a plan to a file for a backup or to share it.
+
+### Install the app
+
+Grundriss is a Progressive Web App. In Chrome or Edge, click **Install** in the top bar, or use
+the install button of the address bar. In Safari on iOS or macOS, use **Share › Add to Home
+Screen** or **File › Add to Dock**. The installed app opens in its own window, starts without the
+internet, and opens `.grundriss` and `.json` files. OpenCV and the recognition (about 28 MB)
+download at their first use, and work offline after that. The climate and the map need the
+internet.
+
+### Steps
+
+1. In **Structure**, click **Background** and choose a scan or a photo of a plan.
 2. Optional: straighten and clean the image, and let the app suggest the walls. See
    [Assisted tracing](#assisted-tracing).
 3. Click two points with a known distance between them, for example the ends of a wall. Type
@@ -169,7 +194,9 @@ roof on the outline of the walls of the active story. Click a roof to change it:
 
 ### Energy and photovoltaic
 
-Without a selection, the **Energy** topic shows the energy of the building:
+The **Energy** topic shows the 2D plan or the 3D view, and a wide panel for the calculations:
+the inputs in one column and the results in the other. Split is not available there. Without a
+selection, the panel shows the energy of the building:
 
 - **Energy**: the heat loss of the building in kW and in W/m². The groups below set the layers of
   the outer walls, the roof, and the floor on the ground, the U-values of windows and doors, and
@@ -180,7 +207,7 @@ Without a selection, the **Energy** topic shows the energy of the building:
 
 ### Location and climate
 
-The **Location** group (in **Source** and in **Energy**) sets the place of the building: search a town, or type the latitude and
+The **Location** group of **Energy** sets the place of the building: search a town, or type the latitude and
 the longitude. **Load climate** then downloads the hourly weather of the last 10 complete years
 from [Open-Meteo](https://open-meteo.com) and stores a typical year in the plan (about 40 kB). So
 the plan works offline after that. The app sends the place to open-meteo.com only when you click
@@ -188,7 +215,7 @@ the plan works offline after that. The app sends the place to open-meteo.com onl
 
 The **Layers** menu can show a map under the 2D plan: OpenStreetMap, or the aerial photo of
 [basemap.at](https://basemap.at) in Austria. The map lies at the location and turns with the
-north direction. To fit the map to the plan, click **Move the map** in the Location group of **Source**. Drag to move the map,
+north direction. To fit the map to the plan, click **Move the map** in the Location group. Drag to move the map,
 and Shift+drag to turn it around the place (this changes North). Esc or **Done** ends it. The
 **Plan point x** and **y** of the location are the point of the plan at its latitude and
 longitude, so you can also type them. The browser loads

@@ -148,30 +148,34 @@ function groundFloor(story: Story): void {
   // attic has its full height.
   addStair(story, p(5.6, 4.535), p(2.1, 4.535), 0.95);
 
-  // Living and dining.
-  furniture(story, "sofa", p(3.4, 7.2), 0);
+  // Living and dining. The front of a piece is at its local +y, so a rotation of 90° turns the
+  // front to the west, 180° to the north, and 270° to the east. The sofa and the armchair face
+  // the coffee table, and the shelf stands with its back to the west wall.
+  furniture(story, "sofa", p(3.4, 7.2), 180);
   furniture(story, "coffee-table", p(3.4, 6.1));
-  furniture(story, "armchair", p(1.2, 5.8), 90);
-  furniture(story, "shelf", p(0.35, 7.6), 90);
+  furniture(story, "armchair", p(1.2, 5.8), 270);
+  furniture(story, "shelf", p(0.35, 7.6), 270);
+  // The table spans x 5.15 to 6.05. The chairs stand beside it and face it.
   furniture(story, "table", p(5.6, 7.3), 90, { width: 1.6, depth: 0.9 });
   for (const [x, y, r] of [
-    [5.15, 6.75, 90],
-    [5.15, 7.85, 90],
-    [6.05, 6.75, 270],
-    [6.05, 7.85, 270],
+    [4.88, 6.85, 270],
+    [4.88, 7.75, 270],
+    [6.32, 6.85, 90],
+    [6.32, 7.75, 90],
   ]) {
     furniture(story, "chair", p(x, y), r);
   }
   // Hall: a wardrobe for the coats.
   furniture(story, "wardrobe", p(4.36, 1.2), 270);
   // Kitchen.
-  furniture(story, "counter", p(0.5, 1.3), 90, { width: 2.2 });
+  furniture(story, "counter", p(0.5, 1.3), 270, { width: 2.2 });
   furniture(story, "kitchen-sink", p(1.8, 0.47), 0);
   furniture(story, "hob", p(2.7, 0.47), 0);
   furniture(story, "fridge", p(3.55, 0.5), 0);
   furniture(story, "table-round", p(2.3, 2.7));
-  furniture(story, "chair", p(2.3, 3.45), 180);
-  furniture(story, "chair", p(1.6, 2.7), 270);
+  // The round table has a radius of 0.55 m. The chairs stand beside it and face it.
+  furniture(story, "chair", p(2.3, 3.52), 180);
+  furniture(story, "chair", p(1.52, 2.7), 270);
   // Bath and utility.
   furniture(story, "bathtub", p(11.0, 1.4), 90);
   furniture(story, "washbasin", p(10.6, 0.4), 0);
