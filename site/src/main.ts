@@ -27,13 +27,18 @@ const MOODS: Record<string, Mood> = {
   dusk: { sun: 1.9, sunColor: "#ff9a66", sky: "#b9b7e8", ground: "#5b5462", sunAzimuth: -80 },
 };
 
+// Each part is a part of the house, and whether its roofs show. The attic without its roof keeps
+// the roof in the building, so that its walls stop at the slope like in the finished house.
 const parts = {
-  shell: partOf(house, {}),
-  attic: partOf(house, { attic: true }),
-  roofed: partOf(house, { attic: true, roof: true }),
-  furnished: partOf(house, { furniture: true }),
-  solar: partOf(house, { attic: true, roof: true, pv: true }),
-  full: partOf(house, { attic: true, roof: true, pv: true, furniture: true }),
+  shell: { building: partOf(house, {}), roofs: false },
+  attic: { building: partOf(house, { attic: true, roof: true }), roofs: false },
+  roofed: { building: partOf(house, { attic: true, roof: true }), roofs: true },
+  furnished: { building: partOf(house, { furniture: true }), roofs: false },
+  solar: { building: partOf(house, { attic: true, roof: true, pv: true }), roofs: true },
+  full: {
+    building: partOf(house, { attic: true, roof: true, pv: true, furniture: true }),
+    roofs: true,
+  },
 };
 
 const center = (z: number): [number, number, number] => [6, 4.5, z];

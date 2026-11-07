@@ -62,7 +62,14 @@ export class Stage3D {
   // The camera moves to its goal with a little delay, so a jump of the scroll looks smooth.
   private view = { azimuth: 0, elevation: 30, distance: 30, tx: 6, ty: 2, tz: 4.5 };
 
-  constructor(container: HTMLElement, parts: Record<string, Building>) {
+  /**
+   * `parts` are the parts of the house by name: a building, and whether its roofs show. A part
+   * without its roofs keeps them in the building, so that the walls under them stop at them.
+   */
+  constructor(
+    container: HTMLElement,
+    parts: Record<string, { building: Building; roofs: boolean }>,
+  ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
@@ -106,8 +113,8 @@ export class Stage3D {
     shadow.name = "ground";
     this.scene.add(ground, shadow);
 
-    for (const [name, building] of Object.entries(parts)) {
-      const group = buildModel(building);
+    for (const [name, { building, roofs }] of Object.entries(parts)) {
+      const group = buildModel(building, { roofs });
       group.traverse((object) => {
         if (object instanceof THREE.Mesh) {
           object.castShadow = true;

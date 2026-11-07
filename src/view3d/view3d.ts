@@ -384,10 +384,12 @@ export class View3D {
 
 /**
  * Builds the full building with all stories and the roof. The glTF export uses it, so that the
- * export does not depend on what the view shows.
+ * export does not depend on what the view shows. With `roofs` false, the roofs do not show, but
+ * the walls under them still stop at them, for example the walls of an attic.
  */
-export function buildModel(building: Building): THREE.Group {
-  return buildGroup(building, building.stories, building.roofs, ALL_LAYERS);
+export function buildModel(building: Building, options: { roofs?: boolean } = {}): THREE.Group {
+  const roofs = options.roofs === false ? [] : building.roofs;
+  return buildGroup(building, building.stories, roofs, ALL_LAYERS);
 }
 
 /**
@@ -1103,10 +1105,13 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
       );
     } else {
       // The main faces have a hole under each dormer, so that the window of the dormer shows the
-      // room behind it and not the roof.
+      // room behind it and not the roof. A roof window has a hole too, so that its glass is
+      // see-through.
       const faces = geometry.faces.map((face) => ({
         ...face,
-        holes: geometry.dormers.map((d) => d.hole).filter((hole) => inPlane(hole, face.polygon)),
+        holes: geometry.holes
+          .map((h) => h.polygon)
+          .filter((hole) => inPlane(hole, face.polygon) && insidePolygon(hole, face.polygon)),
       }));
       const slab = roofSlab(faces, geometry.edges, roof, ROOF_THICKNESS);
       if (slab) object.add(slab);
@@ -1143,19 +1148,27 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
       geometry.dormers.map((d) => d.window).filter((w) => w.length >= 3),
       materials.glass,
     );
+    // A roof window: the glass in the plane of its frame, and the frame, which goes down through
+    // the roof to its underside, so that it lines the hole in the roof.
     add(
       geometry.windows.map((w) => w.quad),
-      materials.roofWindow,
+      materials.glass,
+      false,
     );
-    // The sides of each roof window go down to the face, so that the window sits on the roof.
     add(
-      geometry.windows.flatMap(({ quad }) =>
-        quad.map((p, k) => {
+      geometry.windows.flatMap(({ quad }) => {
+        const n = upNormal(quad);
+        const depth = WINDOW_LIFT + ROOF_THICKNESS + 0.01;
+        const down = (v: Vec3) => ({
+          x: v.x - n.x * depth,
+          y: v.y - n.y * depth,
+          z: v.z - n.z * depth,
+        });
+        return quad.map((p, k) => {
           const q = quad[(k + 1) % quad.length];
-          const down = (v: Vec3) => ({ ...v, z: v.z - WINDOW_LIFT - 0.01 });
           return [q, p, down(p), down(q)];
-        }),
-      ),
+        });
+      }),
       materials.roofWindow,
     );
     group.add(object);
