@@ -4,7 +4,7 @@ import { pvSummary } from "../src/model/pv";
 import { furnitureOutline } from "../src/model/furniture";
 import { clearHeight, roofGeometryOf } from "../src/model/roof";
 import { findRooms } from "../src/model/rooms";
-import { makeHouse, partOf } from "../site/src/house";
+import { makeHouse, partOf } from "../src/model/example";
 
 describe("the house of the website", () => {
   const house = makeHouse();

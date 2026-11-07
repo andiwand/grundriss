@@ -67,8 +67,18 @@ import { topView } from "./view3d/models";
 import { buildModelAsync, View3D } from "./view3d/view3d";
 import { findFurniture, genericType } from "./model/furniture";
 import { buildingHeatLoss, isOuterWall, roomHeatLoss, uValue, wallLayers } from "./model/energy";
+import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
-import { faceInfo, pvLayout, pvSummary, yieldFactor } from "./model/pv";
+import { faceInfo, pvLayout, pvSummary, specificYield } from "./model/pv";
+import { climateSummary, DEGREE_DAY_BASE, DEGREE_DAY_LIMIT } from "./model/climate";
+import {
+  ATTRIBUTION,
+  ATTRIBUTION_URL,
+  CLIMATE_YEARS,
+  downloadClimate,
+  searchPlaces,
+  type Place,
+} from "./io/climate";
 import { buildingQuantities } from "./model/quantities";
 import { newRoof, roofBase, roofGeometryOf } from "./model/roof";
 import { livingArea, roofIsCeiling } from "./model/attic";
@@ -105,7 +115,7 @@ let calibration: { a: Point; b: Point } | null = null;
 
 const HINTS: Record<Tool, string> = {
   select:
-    "Click to select, Shift+click to add. Click in a room to name it or to set its height. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: Space+drag or right drag.",
+    "Click to select, Shift+click to add. Click in a room to name it or to set its height. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: two-finger scroll, Space+drag, or right drag.",
   wall: "Click to add corners. A click on a corner or a wall ends the chain. The direction snaps to 15°. Shift: 45° steps. Alt: free. Esc: stop.",
   door: "Click on a wall to put a door in it.",
   window: "Click on a wall to put a window in it.",
@@ -1052,6 +1062,7 @@ function renderPanel(): void {
   ]);
   paragraph("The area is inside the center lines of the walls.", "note");
   renderBuildingPanel();
+  renderLocationPanel();
   renderEnergyPanel();
   renderPvPanel();
   renderQuantities();
@@ -1490,6 +1501,292 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
   button("Delete roof", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
 }
 
+// ----- Location and climate -----
+
+/** The state of the location group. It is not in the plan, so it stays across renders. */
+/** True or false after the user opens or closes the place group, null before. */
+let locationOpen: boolean | null = null;
+let placeQuery = "";
+let placeResults: Place[] = [];
+/** The text of the request that runs, or null. */
+let locationBusy: string | null = null;
+let locationMessage: { text: string; error: boolean } | null = null;
+let climateRequest: AbortController | null = null;
+
+const compassName = (azimuth: number) =>
+  ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(azimuth / 45) % 8];
+
+/** A field for a latitude or a longitude in degrees. An empty field shows no value. */
+function coordinateField(
+  text: string,
+  value: number | null,
+  limit: number,
+  change: (value: number) => void,
+): void {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "0.0001";
+  input.min = String(-limit);
+  input.max = String(limit);
+  input.value = value === null ? "" : String(Math.round(value * 10000) / 10000);
+  input.addEventListener("change", () => {
+    const parsed = Number(input.value);
+    if (input.value !== "" && Number.isFinite(parsed) && Math.abs(parsed) <= limit) change(parsed);
+  });
+  field(text, input, "°");
+}
+
+/** Changes the location of the building. A building without a location gets one. */
+function editLocation(
+  edit: (location: { name: string; latitude: number; longitude: number }) => void,
+) {
+  doc.editBuilding((b) => {
+    b.location ??= { name: "", latitude: 0, longitude: 0 };
+    edit(b.location);
+  });
+}
+
+/** Searches places by name. This sends the name to open-meteo.com. */
+async function findPlaces(query: string): Promise<void> {
+  placeQuery = query;
+  if (locationBusy) return;
+  if (query.trim().length < 2) {
+    locationMessage = { text: "Type at least two letters of the place.", error: true };
+    renderPanel();
+    return;
+  }
+  locationBusy = "Searching the place…";
+  locationMessage = null;
+  renderPanel();
+  try {
+    placeResults = await searchPlaces(query);
+    if (placeResults.length === 0) {
+      locationMessage = { text: `Found no place for "${query.trim()}".`, error: false };
+    }
+  } catch (error) {
+    placeResults = [];
+    locationMessage = { text: (error as Error).message, error: true };
+  } finally {
+    locationBusy = null;
+    renderPanel();
+  }
+}
+
+/**
+ * Downloads the climate of the location and stores it in the building. This sends the
+ * coordinates to open-meteo.com. If the location changes during the download, the result goes
+ * away.
+ */
+async function loadClimate(): Promise<void> {
+  const location = doc.building.location;
+  if (!location || locationBusy) return;
+  const { latitude, longitude } = location;
+  climateRequest = new AbortController();
+  locationBusy = `Loading ${CLIMATE_YEARS} years of weather data from open-meteo.com…`;
+  locationMessage = null;
+  renderPanel();
+  try {
+    const climate = await downloadClimate(latitude, longitude, {
+      signal: climateRequest.signal,
+    });
+    const now = doc.building.location;
+    if (now?.latitude !== latitude || now.longitude !== longitude) {
+      locationMessage = {
+        text: "The location changed during the download. Load the climate again.",
+        error: true,
+      };
+    } else {
+      doc.editBuilding((b) => (b.climate = climate));
+      locationMessage = {
+        text: "Loaded the climate. The plan stores it, so the app needs no network for it now.",
+        error: false,
+      };
+    }
+  } catch (error) {
+    locationMessage = climateRequest.signal.aborted
+      ? { text: "Stopped the download.", error: false }
+      : { text: (error as Error).message, error: true };
+  } finally {
+    locationBusy = null;
+    climateRequest = null;
+    renderPanel();
+  }
+}
+
+/** The location: the place search, the coordinates, and the climate. */
+function renderLocationPanel(): void {
+  const building = doc.building;
+  const location = building.location;
+  heading("Location", "pin");
+  const title = location?.name
+    ? `Place · ${location.name}`
+    : location
+      ? `Place · ${location.latitude.toFixed(2)}, ${location.longitude.toFixed(2)}`
+      : "Place";
+  group(title, locationOpen ?? !location, () => {
+    const search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = "Town or city";
+    search.value = placeQuery;
+    search.addEventListener("input", () => (placeQuery = search.value));
+    search.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") void findPlaces(search.value);
+    });
+    field("Search", search);
+    button("Search", () => void findPlaces(search.value), { icon: "search" });
+    for (const place of placeResults) {
+      button(
+        place.label,
+        () => {
+          placeResults = [];
+          locationMessage = null;
+          editLocation((l) => {
+            l.name = place.label;
+            l.latitude = place.latitude;
+            l.longitude = place.longitude;
+          });
+        },
+        { icon: "pin" },
+      );
+    }
+    if (location) {
+      textField("Name", location.name, (value) => editLocation((l) => (l.name = value)), {
+        allowEmpty: true,
+      });
+    }
+    coordinateField("Latitude", location?.latitude ?? null, 90, (value) =>
+      editLocation((l) => (l.latitude = value)),
+    );
+    coordinateField("Longitude", location?.longitude ?? null, 180, (value) =>
+      editLocation((l) => (l.longitude = value)),
+    );
+  });
+  const details = section.lastElementChild as HTMLDetailsElement;
+  details.addEventListener("toggle", () => (locationOpen = details.open));
+  if (locationBusy) {
+    paragraph(locationBusy, "busy");
+    if (climateRequest) button("Stop", () => climateRequest?.abort(), { icon: "close" });
+  } else if (location) {
+    button(building.climate ? "Load the climate again" : "Load climate", () => void loadClimate(), {
+      kind: "primary",
+    });
+  }
+  paragraph(
+    "Search and Load climate send the place to open-meteo.com. The app sends nothing before you click. The plan stores the climate, so it works offline after that.",
+    "note",
+  );
+  if (locationMessage) {
+    paragraph(locationMessage.text, locationMessage.error ? "warning" : "note");
+  }
+  if (building.climate) renderClimateSummary();
+}
+
+/** The values of the stored climate, and the credit of the data. */
+function renderClimateSummary(): void {
+  const building = doc.building;
+  const climate = building.climate!;
+  const summary = climateSummary(climate);
+  const location = building.location;
+  if (
+    location &&
+    (Math.abs(location.latitude - climate.latitude) > 0.01 ||
+      Math.abs(location.longitude - climate.longitude) > 0.01)
+  ) {
+    paragraph(
+      `The climate is for ${climate.latitude.toFixed(2)}, ${climate.longitude.toFixed(2)}. Load it again for the new location.`,
+      "warning",
+    );
+  }
+  // The best roof face of the building, else the best tilt toward the equator.
+  const faces = faceInfo(building).map((f) => ({
+    ...f,
+    perKwp: specificYield(building, f.tilt, f.azimuth),
+  }));
+  const best = faces.sort((p, q) => q.perKwp - p.perKwp)[0];
+  stats([
+    [`${summary.meanTemperature.toFixed(1)} °C`, "mean temperature"],
+    [`${summary.designTemperature.toFixed(1)} °C`, "design temperature"],
+    [`${Math.round(summary.degreeDays)} K·d`, `degree days ${DEGREE_DAY_BASE}/${DEGREE_DAY_LIMIT}`],
+    [`${Math.round(summary.globalIrradiation)} kWh/m²`, "sun on the ground per year"],
+    best
+      ? [
+          `${Math.round(best.perKwp)} kWh/kWp`,
+          `PV on the best roof face (${compassName(best.azimuth)} ${Math.round(best.tilt)}°)`,
+          true,
+        ]
+      : [
+          `${Math.round(summary.optimum.yield)} kWh/kWp`,
+          `PV at the best tilt (${compassName(summary.optimum.azimuth)} ${summary.optimum.tilt}°)`,
+          true,
+        ],
+  ]);
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  group(`Climate ${climate.firstYear} to ${climate.lastYear}`, false, () => {
+    for (let i = 0; i < 12; i += 3) {
+      paragraph(
+        summary.monthly
+          .slice(i, i + 3)
+          .map((t, j) => `${months[i + j]} ${t.toFixed(1)} °C`)
+          .join(" · "),
+      );
+    }
+    paragraph(
+      `A typical year: the mean of each hour of ${climate.firstYear} to ${climate.lastYear}, loaded on ${climate.downloaded}. The design temperature is the coldest mean of 48 hours in these years. The degree days count the days below ${DEGREE_DAY_LIMIT} °C against ${DEGREE_DAY_BASE} °C inside.`,
+      "note",
+    );
+    button("Remove the climate", () => doc.editBuilding((b) => (b.climate = null)), {
+      kind: "danger",
+      icon: "trash",
+    });
+  });
+  const credit = document.createElement("p");
+  credit.className = "note";
+  const link = document.createElement("a");
+  link.href = ATTRIBUTION_URL;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = ATTRIBUTION;
+  credit.append(link, " (CC BY 4.0).");
+  section.append(credit);
+}
+
+/** A button that puts the design temperature of the location into the envelope. */
+function designTemperatureButton(): void {
+  const climate = doc.building.climate;
+  if (!climate) return;
+  const value = climate.designTemperature;
+  if (doc.building.envelope.outside === value) {
+    paragraph("Outside is the design temperature of the location.", "note");
+    return;
+  }
+  button(`Use ${value.toFixed(1)} °C of the location`, () =>
+    doc.editBuilding((b) => (b.envelope.outside = value)),
+  );
+}
+
+/** Says where the PV yield comes from. */
+function pvSourceNote(): void {
+  paragraph(
+    doc.building.climate
+      ? "The yield comes from the climate of the location, without shade."
+      : "The yield is a general estimate for Central Europe. Load the climate of the location for a better value.",
+    "note",
+  );
+}
+
 function checkField(text: string, value: boolean, change: (value: boolean) => void): void {
   const label = document.createElement("label");
   label.className = "field check-field";
@@ -1599,6 +1896,7 @@ function renderEnergyPanel(): void {
     numberField("Door U", envelope.doorU, set("doorU"), { min: 0.1, step: 0.1, unit: "" });
     numberField("Outside", envelope.outside, set("outside"), { min: -60, step: 1, unit: "°C" });
     numberField("Inside", envelope.inside, set("inside"), { min: -60, step: 0.5, unit: "°C" });
+    designTemperatureButton();
   });
 }
 
@@ -1613,6 +1911,7 @@ function renderPvPanel(): void {
     [`${total.peak.toFixed(1)} kWp`, `${total.count} panels`],
     [`${Math.round(total.yield)} kWh`, "per year"],
   ]);
+  pvSourceNote();
   const compass = (azimuth: number) =>
     ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(azimuth / 45) % 8];
   building.pv.forEach((array, i) => {
@@ -1676,11 +1975,13 @@ function renderPvPanel(): void {
       },
     );
   });
-  // The best free face is the face with the highest yield factor.
+  // The best free face is the face with the highest yield per kWp.
   const used = new Set(building.pv.map((a) => `${a.roofId}:${a.face}`));
+  const perKwp = (f: { tilt: number; azimuth: number }) =>
+    specificYield(building, f.tilt, f.azimuth);
   const free = faces
     .filter((f) => !used.has(`${f.roofId}:${f.index}`))
-    .sort((p, q) => yieldFactor(q.tilt, q.azimuth) - yieldFactor(p.tilt, p.azimuth));
+    .sort((p, q) => perKwp(q) - perKwp(p));
   if (free.length > 0) {
     button(
       "Add a PV field",
@@ -1821,6 +2122,9 @@ function update3d(): void {
 }
 
 function fit3d(): void {
+  // The views update in the next frame after a change, so the 3D view first takes the new
+  // building. Else the fit uses the old content, for example after a new file opens.
+  update3d();
   view3d.fit(doc.building);
 }
 
@@ -2156,18 +2460,54 @@ async function loadBackground(): Promise<void> {
 // ----- Wiring -----
 
 let shownStoryId = "";
-doc.subscribe(() => {
+
+/**
+ * During a drag, the 3D view and the panel update at most once in this time, in milliseconds.
+ * They are the slow parts of an update, and a slow computer cannot do them in each frame.
+ */
+const DRAG_INTERVAL = 120;
+let frameRequested = false;
+let slowPending = false;
+let lastSlow = 0;
+let slowTimer = 0;
+
+/** The slow parts of an update: the 3D view and the panel. */
+function updateSlow(): void {
+  slowPending = false;
+  lastSlow = performance.now();
+  update3d();
+  renderPanel();
+}
+
+/**
+ * Runs the work after a change once in the next frame, also when the document changes more than
+ * once in a frame. During a drag, the slow parts wait until DRAG_INTERVAL has passed since their
+ * last run. After the drag, they run at once.
+ */
+function afterChange(): void {
+  frameRequested = false;
   loadTopViews();
   updateTitle();
-  update3d();
   renderStories();
   renderCompass();
-  renderPanel();
+  window.clearTimeout(slowTimer);
+  const wait = DRAG_INTERVAL - (performance.now() - lastSlow);
+  if (!doc.inTransaction || wait <= 0) updateSlow();
+  else {
+    slowPending = true;
+    slowTimer = window.setTimeout(() => slowPending && updateSlow(), wait);
+  }
   // A change of the active story shows the whole new story.
   if (doc.activeStoryId !== shownStoryId) {
     shownStoryId = doc.activeStoryId;
     editor.select(null);
   }
+}
+
+doc.subscribe(() => {
+  if (frameRequested) return;
+  frameRequested = true;
+  requestAnimationFrame(afterChange);
 });
 setupCompass();
 $("#show-above").addEventListener("click", () => {
@@ -2209,6 +2549,11 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export
 }
 $("#empty-background").addEventListener("click", () => void loadBackground());
 $("#empty-wall").addEventListener("click", () => setTool("wall"));
+$("#empty-example").addEventListener("click", () => {
+  if (!confirmDiscard()) return;
+  load(makeHouse(), "example.grundriss");
+  showStatus("Opened the example house. Save it to keep your changes.");
+});
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")) {
   element.addEventListener("click", () => {
     editor.fit();

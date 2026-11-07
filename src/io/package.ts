@@ -18,6 +18,7 @@ import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { base64 } from "../furniture/names";
 import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
+import { ATTRIBUTION, ATTRIBUTION_URL } from "./climate";
 
 export const PACKAGE_EXTENSION = ".grundriss";
 export const PLAN_ENTRY = "plan.json";
@@ -89,7 +90,9 @@ export function writePackage(
   });
   files[PLAN_ENTRY] = strToU8(serializeBuilding({ ...building, stories, models }));
   const all = { ...exports };
-  if (models.length > 0 && !("CREDITS.txt" in all)) all["CREDITS.txt"] = credits(building);
+  if ((models.length > 0 || building.climate) && !("CREDITS.txt" in all)) {
+    all["CREDITS.txt"] = credits(building);
+  }
   for (const [name, content] of Object.entries(all)) {
     files[EXPORTS_FOLDER + name] = typeof content === "string" ? strToU8(content) : content;
   }
@@ -136,15 +139,33 @@ function inlineImage(owner: Raw, files: Record<string, Uint8Array>): void {
 
 /** The credits of the models: one line per model with its name, origin, license, and author. */
 export function credits(building: Building): string {
-  const lines = (building.models ?? []).map((model) =>
-    [
-      model.name,
-      model.origin,
-      model.license || "unknown license",
-      model.credit || "unknown author",
-    ].join(" | "),
-  );
-  return ["Models in this plan (name | origin | license | credit)", "", ...lines, ""].join("\n");
+  const lines: string[] = [];
+  const models = building.models ?? [];
+  if (models.length > 0) {
+    lines.push("Models in this plan (name | origin | license | credit)", "");
+    for (const model of models) {
+      lines.push(
+        [
+          model.name,
+          model.origin,
+          model.license || "unknown license",
+          model.credit || "unknown author",
+        ].join(" | "),
+      );
+    }
+    lines.push("");
+  }
+  // The climate of the location is data of Open-Meteo under CC BY 4.0, so it needs the credit.
+  const climate = building.climate;
+  if (climate) {
+    lines.push(
+      "Climate of the location",
+      "",
+      `${ATTRIBUTION} (${ATTRIBUTION_URL}), CC BY 4.0. ${climate.source}, ${climate.firstYear}–${climate.lastYear}.`,
+      "",
+    );
+  }
+  return lines.join("\n");
 }
 
 /** Puts the file of a model back into the model as a data URL. */

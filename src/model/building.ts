@@ -27,6 +27,8 @@ export function emptyBuilding(): Building {
     models: [],
     envelope: defaultEnvelope(),
     pv: [],
+    location: null,
+    climate: null,
   };
 }
 

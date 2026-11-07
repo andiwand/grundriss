@@ -5,6 +5,8 @@
 // value when a file does not have it. Examples: `hinge` and `swing` of an opening, and
 // `dimensions`.
 //
+// `location` and `climate` are such fields: a file without them gets null for both.
+//
 // Version 2 has stories, a roof, and the north direction. Version 1 had one floor plan at the
 // top level. parseBuilding reads it as a building with one story.
 
@@ -12,12 +14,14 @@ import type {
   Background,
   Building,
   Chimney,
+  Climate,
   Dimension,
   Dormer,
   Envelope,
   Fixture,
   Furniture,
   Layer,
+  Location,
   Model,
   Opening,
   Plan,
@@ -34,6 +38,7 @@ import type {
   Wall,
 } from "./types";
 
+import { decodeSeries, SERIES_NAMES } from "./climate";
 import { defaultEnvelope } from "./insulation";
 import { storyBox } from "./roof";
 
@@ -103,6 +108,8 @@ export function parseBuilding(text: string): Building {
       models: [],
       envelope: defaultEnvelope(),
       pv: [],
+      location: null,
+      climate: null,
     };
   }
   if (data.version !== FILE_VERSION) {
@@ -186,7 +193,59 @@ export function parseBuilding(text: string): Building {
       limit: d.limit == null ? null : number(d, "limit", where),
     };
   });
-  return { stories, roofs, north, models, envelope, pv };
+  const location = parseLocation(data.location);
+  const climate = parseClimate(data.climate);
+  return { stories, roofs, north, models, envelope, pv, location, climate };
+}
+
+/** A number in the interval [low, high], or an error. */
+function bounded(data: Data, key: string, where: string, low: number, high: number): number {
+  const value = number(data, key, where);
+  if (value < low || value > high) {
+    throw new Error(`The file is damaged: ${where} has no valid "${key}".`);
+  }
+  return value;
+}
+
+/** Reads the location of the building. A file without it gets null. */
+function parseLocation(data: unknown): Location | null {
+  if (data == null) return null;
+  if (!isObject(data)) throw new Error('The file is damaged: invalid "location".');
+  const where = "the location";
+  return {
+    name: typeof data.name === "string" ? data.name : "",
+    latitude: bounded(data, "latitude", where, -90, 90),
+    longitude: bounded(data, "longitude", where, -180, 180),
+  };
+}
+
+/** Reads the stored climate. Each series must decode to a whole year. */
+function parseClimate(data: unknown): Climate | null {
+  if (data == null) return null;
+  if (!isObject(data)) throw new Error('The file is damaged: invalid "climate".');
+  const where = "the climate";
+  const climate: Climate = {
+    source: typeof data.source === "string" ? data.source : "",
+    latitude: bounded(data, "latitude", where, -90, 90),
+    longitude: bounded(data, "longitude", where, -180, 180),
+    firstYear: number(data, "firstYear", where),
+    lastYear: number(data, "lastYear", where),
+    downloaded: typeof data.downloaded === "string" ? data.downloaded : "",
+    degreeDays: number(data, "degreeDays", where),
+    designTemperature: number(data, "designTemperature", where),
+    ghi: string(data, "ghi", where),
+    dni: string(data, "dni", where),
+    dhi: string(data, "dhi", where),
+    temperature: string(data, "temperature", where),
+  };
+  for (const name of SERIES_NAMES) {
+    try {
+      decodeSeries(name, climate[name]);
+    } catch {
+      throw new Error(`The file is damaged: ${where} has no valid "${name}".`);
+    }
+  }
+  return climate;
 }
 
 function pointOf(data: unknown, where: string): Point {

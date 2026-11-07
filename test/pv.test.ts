@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { emptyBuilding } from "../src/model/building";
-import { faceInfo, pvLayout, pvPanels, pvSummary, yieldFactor } from "../src/model/pv";
+import { pvYieldPerKwp } from "../src/model/climate";
+import {
+  faceInfo,
+  pvLayout,
+  pvPanels,
+  pvSummary,
+  specificYield,
+  yieldFactor,
+} from "../src/model/pv";
 import { roofGeometryOf } from "../src/model/roof";
 import { boxHouse } from "./houses";
-import type { Building, PvArray, RoofKind } from "../src/model/types";
+import type { Building, Climate, PvArray, RoofKind } from "../src/model/types";
+import vienna from "./fixtures/vienna-climate.json";
 
 /** A house of 12 × 8 m with a roof of the preset and a pitch of 35°. The ridge goes along x. */
 const house = (kind: RoofKind, north = 0): Building => boxHouse(12, 8, kind, north);
@@ -156,5 +165,22 @@ describe("holes in a field", () => {
         expect(inside).toBe(false);
       }
     }
+  });
+});
+
+describe("yield from the climate", () => {
+  it("uses the stored climate of the building, else the estimate", () => {
+    const building = house("gable");
+    const south = faceTo(building, 180);
+    const north = faceTo(building, 0);
+    const estimate = pvLayout(building, field(south))!;
+    expect(specificYield(building, 35, 180)).toBeCloseTo(1000);
+    building.climate = vienna as Climate;
+    const layout = pvLayout(building, field(south))!;
+    expect(layout.count).toBe(estimate.count);
+    expect(layout.yield / layout.peak).toBeCloseTo(pvYieldPerKwp(building.climate, 35, 180), 0);
+    expect(layout.yield / layout.peak).toBeGreaterThan(1100);
+    const back = pvLayout(building, field(north))!;
+    expect(back.yield / back.peak).toBeLessThan(0.6 * (layout.yield / layout.peak));
   });
 });

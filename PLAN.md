@@ -15,16 +15,21 @@
    connect two stories, a roof (gable, hip, flat, and shed), chimneys, and the orientation of
    the plan to north. The 3D view stacks the stories. This milestone changes the file format.
    Later: several roofs on any outline, with settings for each side, dormers, and roof
-   windows (done). The half-hip end is still open.
+   windows (done), and attics under the roof with the WoFlV living area (done). The half-hip
+   end is still open.
 7. **Building services** (done, first version): layers on the plan for photovoltaic panels on the roof, heating
    (radiators, floor heating, and the heat source), the insulation of walls, roof, and floor,
    and the electrical wiring (sockets, switches, lights, and cables). Each layer can be on or
    off in the 2D and in the 3D view.
-8. **Energy efficiency**: first, the location of the building: a place search or coordinates.
-   A button loads the climate once and stores it in the plan, so that the app works offline
-   after that: the PV yield of each roof face from PVGIS, and the monthly temperatures, the
-   heating degree days, and the design temperature from Open-Meteo (free for non-commercial
-   use, CC BY 4.0). The location goes to these services only when the user clicks the button.
+8. **Energy efficiency** (first part done, first version: the location and the climate): first, the location of the building: a place search (Open-Meteo
+   geocoding) or coordinates. A button loads the climate once and stores it in the plan, so that
+   the app works offline after that: a typical year of hourly radiation (global, direct, and
+   diffuse) and temperature from the Open-Meteo archive (CC BY 4.0, free for non-commercial use).
+   The location goes to the service only when the user clicks the button. PVGIS sends no CORS
+   header, so a browser app cannot call it; the app computes the irradiance on each roof face
+   itself (sun position and a transposition model) from the stored radiation. From the stored
+   year come the PV yield of each face, the monthly temperatures, the heating degree days, and
+   the design temperature.
    Then a model of the yearly energy for heating. It starts from the heat loss
    of milestone 7: the U-values of the walls, the windows, the doors, the roof, and the floor
    or the cellar ceiling, and the ventilation. It adds the climate (degree days or monthly
@@ -38,6 +43,33 @@
    official energy certificate.
 9. **Automatic recognition** (done, first version: a U-Net trained only on synthetic plans): a segmentation model for floor plans in ONNX Runtime Web. This is
    research work, and it must not block the other milestones.
+10. **Website** (done): a scroll story at the root of GitHub Pages that builds one house with the
+    engine of the app. The app is at `/app/`.
+
+## Known limits
+
+The first versions of the milestones have these limits. Each one is a candidate for a later
+step.
+
+- **Roofs**: no half-hip end. Where two neighboring sides have different overhangs, a small step
+  stays at their corner. In 3D, a dormer does not cut a hole in the main roof face. A flat roof
+  ignores dormers and roof windows.
+- **Attic and energy**: the clear height ignores the thickness of the roof. Where two roofs
+  overlap on the plan, the overlap counts two times. Roof windows count as roof area, not as
+  windows.
+- **Furniture**: the app does not check furniture under a roof. A tall piece under the slope
+  goes through the roof without a warning. A compound name without spaces ("gothicbed") can go
+  to the wrong group of the catalog.
+- **Recognition**: the model learned only from synthetic plans. It does not find walls that are
+  drawn as two thin lines.
+- **Climate**: the typical year is the mean of each hour of 10 years, so it has no cloudy or
+  clear days, only mean days. The annual sums are right, but the transposition of mean hours can
+  differ a little from real hours. The data comes from a reanalysis (ERA5) on a grid of about
+  10 to 25 km, not from a station. The PV yield ignores shade, snow, and the spectrum. The design
+  temperature (the coldest mean of 48 hours in 10 years) is not the value of a national annex to
+  EN 12831.
+- **Tooling**: the deploy workflow uses GitHub Actions that run on Node.js 20, which GitHub
+  deprecates.
 
 ## Decisions
 

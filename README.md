@@ -34,7 +34,7 @@ account and no server, and your plans stay on your computer as files.
 | **Roofs**     | Gable, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
 | **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                        |
 | **Services**  | Sockets, switches, lights, radiators, and heat sources, with cables and pipes and their lengths.                                                                  |
-| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, and solar panels with their yield.                                                              |
+| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, and solar panels with their yield.                                 |
 | **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                               |
 
 <p align="center">
@@ -84,6 +84,7 @@ account and no server, and your plans stay on your computer as files.
 | Shift (drag a wall)      | Move the wall freely, so that the next walls turn |
 | Alt                      | Turn off the grid and the snap of the direction   |
 | Space + drag, right drag | Pan                                               |
+| Two-finger scroll        | Pan on a trackpad. A pinch zooms.                 |
 | Mouse wheel              | Zoom                                              |
 | Arrow keys, Shift+arrow  | Move the selection by 5 cm or 50 cm               |
 | Esc                      | Stop the current action or clear the selection    |
@@ -156,6 +157,25 @@ Without a selection, the panel shows the energy of the building:
 - **Photovoltaic**: **Add a PV field** fills the best face of the roof with panels. The field
   gives the number of panels, the peak power, and the yield per year.
 
+### Location and climate
+
+The **Location** group sets the place of the building: search a town, or type the latitude and
+the longitude. **Load climate** then downloads the hourly weather of the last 10 complete years
+from [Open-Meteo](https://open-meteo.com) and stores a typical year in the plan (about 40 kB). So
+the plan works offline after that. The app sends the place to open-meteo.com only when you click
+**Search** or **Load climate**.
+
+From the stored year, the app calculates:
+
+- the PV yield of each face: the sun position for each hour, the Hay–Davies model for the
+  irradiance on the tilted face, and losses for the angle, the cell temperature, and the system
+  (14 %). The yield ignores shade.
+- the mean temperature of each month, and the heating degree days G20/15.
+- the design temperature: the coldest mean of 48 hours in the 10 years. The Energy panel can use
+  it for the temperature outside.
+
+Without a climate, the PV yield is a general estimate for Central Europe.
+
 The values are estimates for planning. They are not a calculation by a standard and not an
 energy certificate.
 
@@ -186,7 +206,8 @@ See [`AGENTS.md`](AGENTS.md) for the architecture and the conventions. On `main`
 ## Credits
 
 The furniture models come from [Kenney](https://kenney.nl) and [Poly Haven](https://polyhaven.com)
-(both CC0). Grundriss uses [Three.js](https://threejs.org), [OpenCV.js](https://opencv.org),
+(both CC0). Weather data by [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). The free
+Open-Meteo API is for non-commercial use. Grundriss uses [Three.js](https://threejs.org), [OpenCV.js](https://opencv.org),
 [ONNX Runtime Web](https://onnxruntime.ai), and [fflate](https://github.com/101arrowz/fflate).
 
 ## License

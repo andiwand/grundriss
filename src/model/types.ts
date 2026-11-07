@@ -395,6 +395,46 @@ export interface Roof {
   windows: RoofWindow[];
 }
 
+/**
+ * The place of the building. The latitude and the longitude are in degrees, with north and east
+ * positive.
+ */
+export interface Location {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * The climate of the location: a typical year of hourly values that the app downloads once.
+ * `src/model/climate.ts` encodes and decodes the series and calculates from them.
+ */
+export interface Climate {
+  /** The name of the data source, for example "Open-Meteo historical weather API". */
+  source: string;
+  /** The point of the data. The sun positions use it too. */
+  latitude: number;
+  longitude: number;
+  /** The first and the last year of the data. The typical year is the mean of these years. */
+  firstYear: number;
+  lastYear: number;
+  /** The date of the download, "YYYY-MM-DD". */
+  downloaded: string;
+  /** The heating degree days G20/15 per year (K·d), the mean of the years. */
+  degreeDays: number;
+  /** The lowest mean of 48 hours in a row in the years, in °C. */
+  designTemperature: number;
+  /**
+   * The hourly series of 8760 hours from 1 January 00:00 UTC, encoded (see `encodeSeries`).
+   * Global horizontal, direct normal, and diffuse horizontal irradiance in W/m², and the air
+   * temperature in °C. Each value is the mean of the hour that ends at its time.
+   */
+  ghi: string;
+  dni: string;
+  dhi: string;
+  temperature: string;
+}
+
 /** The whole document: the stories from the bottom to the top, the roofs, and the orientation. */
 export interface Building {
   stories: Story[];
@@ -405,4 +445,8 @@ export interface Building {
   models: Model[];
   envelope: Envelope;
   pv: PvArray[];
+  /** The place of the building, or null. */
+  location: Location | null;
+  /** The stored climate of the location, or null. Without it, pv.ts uses a general estimate. */
+  climate: Climate | null;
 }

@@ -51,6 +51,8 @@ export class Stage3D {
   private progress = 0;
   private spin = 0;
   private spinning = false;
+  /** The state of the last drawn frame. */
+  private drawn = "";
   private last = 0;
   private sunColor = new THREE.Color();
   private skyColor = new THREE.Color();
@@ -171,6 +173,22 @@ export class Stage3D {
     this.hemi.groundColor.copy(this.groundColor);
     const sunAngle = (m.sunAzimuth * Math.PI) / 180;
     this.sun.position.set(6 + 22 * Math.sin(sunAngle), 26, 4.5 + 22 * Math.cos(sunAngle));
+
+    // A still picture needs no new frame. This saves the graphics card of a slow computer.
+    const key = [
+      shot.base,
+      shot.grow,
+      this.progress.toFixed(4),
+      this.spin.toFixed(3),
+      ...[v.azimuth, v.elevation, v.distance, v.tx, v.ty, v.tz].map((n) => n.toFixed(3)),
+      this.sunColor.getHexString(),
+      this.skyColor.getHexString(),
+      this.sun.intensity.toFixed(3),
+      this.canvas.width,
+      this.canvas.height,
+    ].join("|");
+    if (key === this.drawn) return;
+    this.drawn = key;
 
     const show = (name: string | null) => {
       for (const [key, group] of this.parts) group.visible = key === name;

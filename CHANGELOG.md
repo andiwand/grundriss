@@ -4,6 +4,28 @@ The changes that a user notices.
 
 ## Unreleased
 
+- The location of the building: the panel without a selection has a "Location" group with a
+  place search and the latitude and the longitude. "Load climate" downloads the hourly weather of
+  the last 10 complete years from Open-Meteo and stores a typical year in the plan (about 40 kB),
+  so the plan works offline after that. The app sends the place to open-meteo.com only on a click.
+- With a climate, the PV yield of each field comes from the radiation of the location: the sun
+  position for each hour and the irradiance on the face, with the losses of a real system. The
+  panel shows the mean temperature, the heating degree days, the design temperature, and the PV
+  yield of the best roof face. The Energy panel can use the design temperature for the outside.
+
+- The start card lies in the middle of the 2D and the 3D view, and it can open an example house:
+  two stories, a roof with a dormer, furniture, services, and PV.
+
+- 2D: a two-finger scroll on a trackpad pans the plan, and a pinch zooms. A mouse wheel still
+  zooms.
+- 3D: a left drag turns the view around the point of the building under the cursor, with a
+  small blue mark at that point. The wheel zooms to the point under the cursor.
+
+- Faster on slow computers: after a change, the app updates the views once in the next frame.
+  During a drag, the 3D view and the panel update about 8 times per second, and at once after
+  the drag. The 3D view uses at most twice the pixel density of a normal screen. The website
+  draws its 3D picture only when it changes.
+
 - A website for Grundriss: a scroll story that builds one house with the engine of the app, from
   the scan to the solar panels. GitHub Pages serves the website at the root and the app at
   `/app/`. The README has the logo, a list of the features, and pictures.

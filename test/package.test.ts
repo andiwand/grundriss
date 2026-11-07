@@ -10,7 +10,8 @@ import {
 import { addStoryOnTop, emptyBuilding } from "../src/model/building";
 import { serializeBuilding } from "../src/model/file";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
-import type { Building } from "../src/model/types";
+import type { Building, Climate } from "../src/model/types";
+import vienna from "./fixtures/vienna-climate.json";
 
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -159,6 +160,15 @@ describe("models in the package", () => {
     const text = new TextDecoder().decode(files["exports/CREDITS.txt"]);
     expect(text).toContain("Chair | import | CC0 | Someone");
     expect(text).toContain("Desk | kenney | CC0 | Kenney");
+  });
+
+  it("credits the weather data of a climate", () => {
+    const building = emptyBuilding();
+    building.climate = vienna as Climate;
+    const text = new TextDecoder().decode(unzipSync(writePackage(building))["exports/CREDITS.txt"]);
+    expect(text).toContain("Weather data by Open-Meteo.com");
+    expect(text).toContain("CC BY 4.0");
+    expect(text).not.toContain("Models in this plan");
   });
 
   it("writes no credits without models", () => {

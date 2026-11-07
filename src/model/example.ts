@@ -1,16 +1,17 @@
-// The house of the website: a family house with a ground floor, an attic under a gable roof with
-// a dormer, furniture, services, a heat pump, and PV. The website makes it with the functions of the app, so
-// all its drawings and numbers come from the real engine.
+// The example house: a family house with a ground floor, an attic under a gable roof with a
+// dormer, furniture, services, a heat pump, and PV. The app loads it from the start card, and
+// the website tells its story. It uses only the functions of the model, so all its drawings and
+// numbers come from the real engine.
 
-import { addStoryOnTop, emptyBuilding } from "../../src/model/building";
-import { newFurniture } from "../../src/model/furniture";
-import { distance } from "../../src/model/geometry";
-import { addOpening, addStair, addVertex, addWall, wallEnds } from "../../src/model/plan";
-import { faceInfo } from "../../src/model/pv";
-import { newRoof } from "../../src/model/roof";
-import { editRoomInfo, findRooms, pointInPolygon } from "../../src/model/rooms";
-import { newFixture, newRun } from "../../src/model/services";
-import type { Building, OpeningKind, Plan, Point, Story } from "../../src/model/types";
+import { addStoryOnTop, emptyBuilding } from "./building";
+import { newFurniture } from "./furniture";
+import { distance } from "./geometry";
+import { addOpening, addStair, addVertex, addWall, wallEnds } from "./plan";
+import { faceInfo } from "./pv";
+import { newRoof } from "./roof";
+import { editRoomInfo, findRooms, pointInPolygon } from "./rooms";
+import { newFixture, newRun } from "./services";
+import type { Building, OpeningKind, Plan, Point, Story } from "./types";
 
 type Segment = [Point, Point, number];
 

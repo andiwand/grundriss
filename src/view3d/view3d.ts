@@ -161,7 +161,9 @@ export class View3D {
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    // A phone can have a pixel ratio of 3. Twice the pixels of a normal screen look as sharp, and
+    // the graphics card draws less than half the pixels.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.append(this.renderer.domElement);
 
     // The scene has no background color, so the CSS gradient of the pane shows through.
@@ -184,7 +186,102 @@ export class View3D {
     this.camera.position.set(8, 10, 12);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.addEventListener("change", () => this.requestRender());
+    // The wheel zooms to the point under the cursor, and a right drag pans in the screen plane.
+    this.controls.zoomToCursor = true;
+    this.controls.screenSpacePanning = true;
+    this.setupPivotRotation();
     new ResizeObserver(() => this.resize()).observe(container);
+  }
+
+  /**
+   * A left drag with the mouse turns the view around the point of the building under the
+   * cursor, not around the target of the controls. Without a building under the cursor, the
+   * pivot is the point on the ground, and else the target. The camera and the target turn
+   * together around the pivot, so the view does not jump. Touch keeps the rotation of the
+   * controls, because they also read two fingers for zoom and pan.
+   */
+  private setupPivotRotation(): void {
+    const element = this.renderer.domElement;
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0x2f6bff, depthTest: false, transparent: true }),
+    );
+    marker.renderOrder = 10;
+    marker.visible = false;
+    this.scene.add(marker);
+    const raycaster = new THREE.Raycaster();
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const up = new THREE.Vector3(0, 1, 0);
+
+    const pivotAt = (e: PointerEvent): THREE.Vector3 => {
+      const rect = element.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(ndc, this.camera);
+      const hit = raycaster
+        .intersectObject(this.content, true)
+        .find((h) => h.object instanceof THREE.Mesh && h.object.visible);
+      if (hit) return hit.point.clone();
+      const onGround = raycaster.ray.intersectPlane(ground, new THREE.Vector3());
+      return onGround && onGround.distanceTo(this.camera.position) < 200
+        ? onGround
+        : this.controls.target.clone();
+    };
+
+    let drag: { pivot: THREE.Vector3; x: number; y: number; id: number } | null = null;
+    // The capture phase runs before the listener of the controls, so the controls do not start
+    // their own rotation.
+    element.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.pointerType === "touch" || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey)
+          return;
+        e.stopImmediatePropagation();
+        element.setPointerCapture(e.pointerId);
+        const pivot = pivotAt(e);
+        drag = { pivot, x: e.clientX, y: e.clientY, id: e.pointerId };
+        // The marker keeps the same size on the screen.
+        marker.scale.setScalar(pivot.distanceTo(this.camera.position) * 0.006);
+        marker.position.copy(pivot);
+        marker.visible = true;
+        this.requestRender();
+      },
+      { capture: true },
+    );
+    element.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const height = element.clientHeight || 1;
+      const yaw = (-2 * Math.PI * (e.clientX - drag.x)) / height;
+      const pitch = (-2 * Math.PI * (e.clientY - drag.y)) / height;
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+      const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+      const turn = new THREE.Quaternion().setFromAxisAngle(up, yaw);
+      const tilt = new THREE.Quaternion().setFromAxisAngle(right.applyQuaternion(turn), pitch);
+      const rotation = tilt.multiply(turn);
+      const rotate = (p: THREE.Vector3) =>
+        p.sub(drag!.pivot).applyQuaternion(rotation).add(drag!.pivot);
+      // The view must not go over the top or under the bottom, where it would flip.
+      const offset = rotate(this.camera.position.clone()).sub(rotate(this.controls.target.clone()));
+      const polar = offset.angleTo(up);
+      if (polar < 0.02 || polar > Math.PI - 0.02) {
+        rotation.copy(turn);
+      }
+      rotate(this.camera.position);
+      rotate(this.controls.target);
+      this.controls.update();
+      this.requestRender();
+    });
+    const end = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      marker.visible = false;
+      this.requestRender();
+    };
+    element.addEventListener("pointerup", end);
+    element.addEventListener("pointercancel", end);
   }
 
   /** The meshes of the visible building, without the grid, the lights, and the north arrow. */

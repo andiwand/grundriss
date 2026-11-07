@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { addCellar, addStoryOnTop, emptyBuilding } from "../src/model/building";
 import { newRoof } from "../src/model/roof";
 import { parseBuilding, serializeBuilding } from "../src/model/file";
-import type { Plan } from "../src/model/types";
+import type { Climate, Plan } from "../src/model/types";
+import vienna from "./fixtures/vienna-climate.json";
 
 /** Reads a file of version 1 and gives the plan of its only story. */
 function parsePlan(text: string): Plan {
@@ -278,5 +279,42 @@ describe("numbers out of range", () => {
     expect(result.stories[0].stairs[0].run2).toBe(1);
     expect(result.stories[0].rooms[0].temperature).toBeNull();
     expect(parseBuilding(serializeBuilding(result))).toEqual(result);
+  });
+});
+
+describe("location and climate", () => {
+  const climate = vienna as Climate;
+
+  it("gives null for both to a file without them", () => {
+    const old = JSON.parse(serializeBuilding(emptyBuilding()));
+    delete old.location;
+    delete old.climate;
+    const building = parseBuilding(JSON.stringify(old));
+    expect(building.location).toBeNull();
+    expect(building.climate).toBeNull();
+    const v1 = parseBuilding(JSON.stringify({ format: "grundriss", version: 1, vertices: [] }));
+    expect(v1.location).toBeNull();
+    expect(v1.climate).toBeNull();
+  });
+
+  it("reads what it writes, and the climate adds well under 100 kB", () => {
+    const building = emptyBuilding();
+    building.location = { name: "Vienna, Austria", latitude: 48.2, longitude: 16.37 };
+    building.climate = structuredClone(climate);
+    const text = serializeBuilding(building);
+    expect(parseBuilding(text)).toEqual(building);
+    expect(text.length - serializeBuilding(emptyBuilding()).length).toBeLessThan(50000);
+  });
+
+  it("rejects a damaged location or climate", () => {
+    const building = emptyBuilding();
+    building.location = { name: "", latitude: 95, longitude: 0 };
+    expect(() => parseBuilding(serializeBuilding(building))).toThrow(/location.*latitude/);
+    building.location = null;
+    building.climate = { ...climate, dni: "AAAA" };
+    expect(() => parseBuilding(serializeBuilding(building))).toThrow(/climate.*"dni"/);
+    const { temperature: _temperature, ...partial } = climate;
+    const data = { ...JSON.parse(serializeBuilding(emptyBuilding())), climate: partial };
+    expect(() => parseBuilding(JSON.stringify(data))).toThrow(/climate.*"temperature"/);
   });
 });

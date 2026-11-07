@@ -10,7 +10,7 @@ import { pvSummary } from "../../src/model/pv";
 import { fixtureQuantities, runQuantities } from "../../src/model/quantities";
 import { roofGeometryOf } from "../../src/model/roof";
 import { findRooms } from "../../src/model/rooms";
-import { makeHouse, partOf } from "./house";
+import { makeHouse, partOf } from "../../src/model/example";
 import { planSvg, sketchSvg } from "./plan2d";
 import { Stage3D, type Mood, type Shot } from "./stage3d";
 

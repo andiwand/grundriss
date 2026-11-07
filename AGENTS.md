@@ -42,6 +42,11 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   in `Building.envelope`, and a wall can override it with its own `layers`. PV fields
   (`Building.pv`) are on the faces of `roofSurfaces`. `energy.ts`, `pv.ts`, and
   `quantities.ts` calculate from the model and store nothing.
+- `Building.location` is the place of the building, and `Building.climate` is a typical year of
+  hourly radiation and temperature for it. The app downloads the climate once, only when the user
+  clicks "Load climate", and stores it in the plan as compact series (`encodeSeries` in
+  `climate.ts`). `climate.ts` keeps the decoded series and the results of each face in a cache,
+  because a transaction copies the building. `pv.ts` uses the climate when the building has one.
 - The ceiling of a room is the roof where the roof is lower than the room. `clearHeight` in
   `roof.ts` gives the clear height under the roofs that cover a story, with dormers. A story
   inside a pitched roof, or on its own pitched roof on walls lower than 2 m, has no flat ceiling
@@ -65,6 +70,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/roofshape.ts`  | The roof engine: a weighted straight skeleton, dormers, windows.                       |
 | `src/model/roof.ts`       | The roofs of the building: inputs for the engine, a cache, lines, the roof over walls. |
 | `src/model/rooms.ts`      | The rooms from the faces of the wall graph.                                            |
+| `src/model/example.ts`    | The example house of the start card and the website. `test/example.test.ts`.           |
 | `src/model/attic.ts`      | The rooms under a roof: ceiling, roof area, volume, walls, and the WoFlV living area.  |
 | `src/model/history.ts`    | `PlanDocument`: transactions, undo, redo, and the dirty state.                         |
 | `src/model/file.ts`       | The file format: `serializePlan` and `parsePlan` with validation.                      |
@@ -76,6 +82,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/insulation.ts` | The materials and the default envelope.                                                |
 | `src/model/energy.ts`     | U-values and the heat loss of the rooms (an estimate).                                 |
 | `src/model/pv.ts`         | The layout of PV panels on the roof, and the yield.                                    |
+| `src/model/climate.ts`    | The stored climate: the series, the sun position, the irradiance on faces, PV, HDD.    |
+| `src/io/climate.ts`       | The place search and the climate download from Open-Meteo, and the typical year.       |
 | `src/model/quantities.ts` | The lengths of the lines and the counts of the devices.                                |
 | `src/model/furniture.ts`  | The generic furniture: sizes, plan symbols, 3D blocks, wall snap.                      |
 | `src/furniture/`          | The model sources: Kenney, Poly Haven, and the import.                                 |
@@ -93,7 +101,6 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/style.css`           | The layout and the style of the 2D drawing.                                            |
 | `test/`                   | Vitest tests of the model. They run in Node and need no DOM.                           |
 | `site/`                   | The website: a scroll story that builds one house with the engine of the app.          |
-| `site/src/house.ts`       | The house of the website, made with the model functions. `test/site-house.test.ts`.    |
 | `site/src/stage3d.ts`     | The 3D stage: parts of the house that grow with the scroll (a clipping plane).         |
 | `site/src/plan2d.ts`      | The 2D pictures: a sketch like a scan, and the plan from the SVG export.               |
 | `site/src/main.ts`        | The chapters, the scroll progress, the rail, and the live numbers of the cards.        |
@@ -119,7 +126,7 @@ npm run format:check
 GitHub Pages serves `dist/`: the website at the root and the app at `/app/`. The workflow
 `.github/workflows/pages.yml` checks, tests, builds, and deploys on `main`. The website imports
 the engine of the app (`src/model`, `src/export`, `src/view3d`), so a change of the engine can
-change the website. `test/site-house.test.ts` checks that its house stays valid.
+change the website. `test/example.test.ts` checks that the example house stays valid.
 
 ## Conventions
 

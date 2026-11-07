@@ -909,9 +909,22 @@ export class Editor2D {
 
   private wheel(e: WheelEvent): void {
     e.preventDefault();
+    // A trackpad scrolls with two fingers to pan, and it pinches to zoom. A pinch comes as a
+    // wheel event with the Ctrl key. A mouse wheel zooms. Chrome and Safari give `wheelDeltaY`:
+    // for a trackpad it is -3 times `deltaY`, and for a wheel it is a multiple of 120. Firefox
+    // gives lines (`deltaMode` 1) for a wheel.
+    const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+    const trackpad = legacy ? legacy === -3 * e.deltaY : e.deltaMode === 0;
+    if (trackpad && !e.ctrlKey) {
+      this.offset = { x: this.offset.x - e.deltaX, y: this.offset.y - e.deltaY };
+      this.render();
+      return;
+    }
     const world = this.toWorld(e);
     const rect = this.element.getBoundingClientRect();
-    this.zoom = clamp(this.zoom * Math.exp(-e.deltaY * 0.0015), MIN_ZOOM, MAX_ZOOM);
+    // A pinch gives small steps, so it needs a higher speed than a wheel.
+    const speed = e.ctrlKey ? 0.01 : 0.0015;
+    this.zoom = clamp(this.zoom * Math.exp(-e.deltaY * speed), MIN_ZOOM, MAX_ZOOM);
     this.offset = {
       x: e.clientX - rect.left - world.x * this.zoom,
       y: e.clientY - rect.top - world.y * this.zoom,

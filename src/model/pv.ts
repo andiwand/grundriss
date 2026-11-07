@@ -9,10 +9,13 @@
 //   direction: f  = f0 · (1 − k · ((1 − cos Δ) / 2)^1.3),  k = 0.42 · sin(tilt) / sin(35°)
 //
 // Δ is the difference of the azimuth from south. With a tilt of 35°, east and west give about
-// 0.83, and north gives about 0.58. A flat field gives the same in each direction. Real values
-// depend on the place, the shade, and the products. Use a tool with weather data for a real
-// project.
+// 0.83, and north gives about 0.58. A flat field gives the same in each direction.
+//
+// When the building has a stored climate (`Building.climate`), the yield comes from the hourly
+// radiation of the location instead (`pvYieldPerKwp` in climate.ts). Real values also depend on
+// the shade and the products, and the app ignores the shade.
 
+import { pvYieldPerKwp } from "./climate";
 import { findRoof, roofGeometries, roofGeometryOf, type Vec3 } from "./roof";
 import type { Building, Id, PvArray } from "./types";
 
@@ -138,6 +141,16 @@ export function yieldFactor(tilt: number, azimuth: number): number {
   );
   const away = ((1 - Math.cos(delta)) / 2) ** 1.3;
   return Math.max(0, f0 * (1 - k * away));
+}
+
+/**
+ * The yield of 1 kWp on a face in kWh per year: from the stored climate of the building, or from
+ * the general estimate if the building has no climate.
+ */
+export function specificYield(building: Building, tilt: number, azimuth: number): number {
+  return building.climate
+    ? pvYieldPerKwp(building.climate, tilt, azimuth)
+    : SPECIFIC_YIELD * yieldFactor(tilt, azimuth);
 }
 
 /** The interval of s where the line t of a convex polygon in (s, t) is inside, or null. */
@@ -275,7 +288,7 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
     tilt,
     azimuth,
     area: count * pw * ph,
-    yield: peak * SPECIFIC_YIELD * yieldFactor(tilt, azimuth),
+    yield: peak * specificYield(building, tilt, azimuth),
   };
 }
 

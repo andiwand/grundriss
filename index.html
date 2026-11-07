@@ -107,14 +107,6 @@
             </g>
           </svg>
         </div>
-        <div class="empty-state" id="empty-state" hidden>
-          <h2>Start a floor plan</h2>
-          <p>Load a scan or a photo of a plan and trace it, or draw the walls on the grid.</p>
-          <div class="actions">
-            <button class="primary" id="empty-background" data-icon="image">Load background</button>
-            <button id="empty-wall" data-icon="wall">Draw walls</button>
-          </div>
-        </div>
         <button
           class="icon-button fit"
           data-fit
@@ -135,6 +127,16 @@
         ></button>
       </section>
       <aside id="panel"></aside>
+      <!-- The start card lies over the 2D and the 3D pane. -->
+      <div class="empty-state" id="empty-state" hidden>
+        <h2>Start a floor plan</h2>
+        <p>Load a scan or a photo of a plan and trace it, or draw the walls on the grid.</p>
+        <div class="actions">
+          <button class="primary" id="empty-background" data-icon="image">Load background</button>
+          <button id="empty-wall" data-icon="wall">Draw walls</button>
+        </div>
+        <button class="link" id="empty-example" data-icon="roof">Or open the example house</button>
+      </div>
     </main>
     <footer id="status"></footer>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
