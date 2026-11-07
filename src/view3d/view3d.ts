@@ -1028,9 +1028,7 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
     add(roof.flat ? geometry.gables : geometry.gables.map(moveOut), materials.gable, roof.flat);
     // The roof of each dormer is a thinner slab of the same colors.
     for (const dormer of geometry.dormers) {
-      const faces = dormer.faces
-        .filter((polygon) => polygon.length >= 3)
-        .map((polygon) => ({ polygon, normal: upNormal(polygon) }));
+      const faces = dormerRoofFaces(dormer.faces, dormer.walls);
       const slab = roofSlab(faces, null, roof, DORMER_ROOF_THICKNESS);
       if (slab) object.add(slab);
     }
@@ -1065,6 +1063,74 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
 const ROOF_THICKNESS = 0.2;
 /** The thickness of the roof of a dormer: a dormer has a lighter roof. */
 const DORMER_ROOF_THICKNESS = 0.12;
+/** The roof of a dormer reaches this far out over its walls, horizontally, in meters. */
+const DORMER_OVERHANG = 0.15;
+
+/**
+ * The faces of the roof of a dormer, with an overhang: each edge of a face on the plane of a wall
+ * of the dormer moves out in the plane of the face, so that the roof reaches DORMER_OVERHANG past
+ * the wall. Without it, the edge of the slab would be in the plane of the wall and flicker.
+ */
+function dormerRoofFaces(faces: Vec3[][], walls: Vec3[][]): { polygon: Vec3[]; normal: Vec3 }[] {
+  const planes = walls
+    .filter((wall) => wall.length >= 3)
+    .map((wall) => {
+      const n = newell(wall);
+      const length = Math.hypot(n.x, n.y, n.z) || 1;
+      const normal = { x: n.x / length, y: n.y / length, z: n.z / length };
+      return { normal, offset: normal.x * wall[0].x + normal.y * wall[0].y + normal.z * wall[0].z };
+    });
+  const onWall = (p: Vec3) =>
+    planes.some(
+      ({ normal: n, offset }) => Math.abs(n.x * p.x + n.y * p.y + n.z * p.z - offset) < 1e-3,
+    );
+  return faces
+    .filter((polygon) => polygon.length >= 3)
+    .map((polygon) => {
+      const normal = upNormal(polygon);
+      const center = polygon.reduce(
+        (sum, p) => ({
+          x: sum.x + p.x / polygon.length,
+          y: sum.y + p.y / polygon.length,
+          z: sum.z + p.z / polygon.length,
+        }),
+        { x: 0, y: 0, z: 0 },
+      );
+      const moves = polygon.map(() => ({ x: 0, y: 0, z: 0 }));
+      polygon.forEach((p, i) => {
+        const j = (i + 1) % polygon.length;
+        const q = polygon[j];
+        if (!onWall(p) || !onWall(q)) return;
+        // The direction in the plane of the face, at a right angle to the edge, away from the face.
+        const e = { x: q.x - p.x, y: q.y - p.y, z: q.z - p.z };
+        let d = {
+          x: e.y * normal.z - e.z * normal.y,
+          y: e.z * normal.x - e.x * normal.z,
+          z: e.x * normal.y - e.y * normal.x,
+        };
+        const middle = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, z: (p.z + q.z) / 2 };
+        const away =
+          (middle.x - center.x) * d.x + (middle.y - center.y) * d.y + (middle.z - center.z) * d.z;
+        if (away < 0) d = { x: -d.x, y: -d.y, z: -d.z };
+        const horizontal = Math.hypot(d.x, d.y);
+        if (horizontal < 1e-9) return;
+        const k = DORMER_OVERHANG / horizontal;
+        for (const index of [i, j]) {
+          moves[index].x += d.x * k;
+          moves[index].y += d.y * k;
+          moves[index].z += d.z * k;
+        }
+      });
+      return {
+        polygon: polygon.map((p, i) => ({
+          x: p.x + moves[i].x,
+          y: p.y + moves[i].y,
+          z: p.z + moves[i].z,
+        })),
+        normal,
+      };
+    });
+}
 
 /**
  * A roof as a slab: the faces on top in the color of the roof, the same faces moved down by

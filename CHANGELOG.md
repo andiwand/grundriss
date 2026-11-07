@@ -6,7 +6,7 @@ The changes that a user notices.
 
 - 3D: each wall is one body with real holes for its doors and windows. Walls meet in a miter at
   a corner, flush in a straight line, and at the face of the other wall at a T. The lines show
-  only at real edges, not at the joints of the old boxes. A pitched roof has a thickness of 20 cm, and the roof of a dormer 12 cm,
+  only at real edges, not at the joints of the old boxes. A pitched roof has a thickness of 20 cm, and the roof of a dormer 12 cm with an overhang of 15 cm over its walls,
   with its ridges, hips, valleys, and edges as lines. The walls under a roof stop inside it, so
   they do not come through.
 - Colors: each side of a wall has a color in the 3D view. A room has a wall color for its side
