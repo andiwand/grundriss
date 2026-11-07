@@ -660,6 +660,13 @@ body[data-chapter="export"] [data-chapter="export"] .card {
   transform: none;
 }
 
+/* In the finale, the card of the last chapter does not show at the top of the screen: a card
+   that is not active moves down a little, so its edge and its shadow would come into view. */
+body[data-chapter="finale"] .card {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .kicker {
   display: flex;
   align-items: center;
