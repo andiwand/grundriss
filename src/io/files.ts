@@ -78,7 +78,13 @@ export async function openPlanFile(): Promise<OpenedFile | null> {
 
 async function write(handle: FileSystemFileHandle, blob: Blob): Promise<void> {
   const stream = await handle.createWritable();
-  await stream.write(blob);
+  try {
+    await stream.write(blob);
+  } catch (error) {
+    // The abort removes the temporary file and keeps the old content of the file.
+    await stream.abort().catch(() => {});
+    throw error;
+  }
   await stream.close();
 }
 
@@ -91,52 +97,23 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/**
- * Saves a file. With a handle, it writes to that file. Without a handle, it asks for a file, or
- * it downloads the file if the browser cannot ask. It gives null if the user cancels.
- */
-export async function saveBlob(
-  blob: Blob,
-  suggestedName: string,
-  types: FilePickerType[],
-  handle: FileSystemFileHandle | null = null,
-): Promise<{ name: string; handle: FileSystemFileHandle | null } | null> {
-  if (handle) {
-    await write(handle, blob);
-    return { name: handle.name, handle };
-  }
-  const picker = window as FilePickerWindow;
-  if (picker.showSaveFilePicker) {
-    try {
-      const chosen = await picker.showSaveFilePicker({ types, suggestedName });
-      await write(chosen, blob);
-      return { name: chosen.name, handle: chosen };
-    } catch (error) {
-      if (isAbort(error)) return null;
-      throw error;
-    }
-  }
-  download(blob, suggestedName);
-  return { name: suggestedName, handle: null };
-}
+type SaveResult = { name: string; handle: FileSystemFileHandle | null } | null;
 
 /**
- * Saves a plan file. The name decides the order of the types in the picker: a name that ends
- * with ".json" shows the JSON type first, else the package type is first. The caller makes the
- * blob in the format that the name of the result asks for. So with a picker, the caller gives a
- * function that makes the blob for the chosen name.
+ * Saves a file. With a handle, it writes to that file. Without a handle, it asks for a file, or
+ * it downloads the file if the browser cannot ask. It gives null if the user cancels. The blob
+ * comes from `makeBlob` with the name of the file, because the name can decide the format.
  */
-export async function savePlanFile(
+async function save(
   makeBlob: (name: string) => Blob | Promise<Blob>,
-  handle: FileSystemFileHandle | null,
   suggestedName: string,
-): Promise<{ name: string; handle: FileSystemFileHandle | null } | null> {
+  types: FilePickerType[],
+  handle: FileSystemFileHandle | null,
+): Promise<SaveResult> {
   if (handle) {
     await write(handle, await makeBlob(handle.name));
     return { name: handle.name, handle };
   }
-  const json = suggestedName.toLowerCase().endsWith(".json");
-  const types = json ? [JSON_TYPE, PACKAGE_TYPE] : [PACKAGE_TYPE, JSON_TYPE];
   const picker = window as FilePickerWindow;
   if (picker.showSaveFilePicker) {
     try {
@@ -152,6 +129,32 @@ export async function savePlanFile(
   return { name: suggestedName, handle: null };
 }
 
+/** Saves a blob. See `save`. */
+export function saveBlob(
+  blob: Blob,
+  suggestedName: string,
+  types: FilePickerType[],
+  handle: FileSystemFileHandle | null = null,
+): Promise<SaveResult> {
+  return save(() => blob, suggestedName, types, handle);
+}
+
+/**
+ * Saves a plan file. The name decides the order of the types in the picker: a name that ends
+ * with ".json" shows the JSON type first, else the package type is first. The caller makes the
+ * blob in the format that the name of the result asks for. So with a picker, the caller gives a
+ * function that makes the blob for the chosen name.
+ */
+export function savePlanFile(
+  makeBlob: (name: string) => Blob | Promise<Blob>,
+  handle: FileSystemFileHandle | null,
+  suggestedName: string,
+): Promise<SaveResult> {
+  const json = suggestedName.toLowerCase().endsWith(".json");
+  const types = json ? [JSON_TYPE, PACKAGE_TYPE] : [PACKAGE_TYPE, JSON_TYPE];
+  return save(makeBlob, suggestedName, types, handle);
+}
+
 /** Reads an image file as a data URL and gives its size in pixels. */
 export async function readImage(
   file: File,
@@ -165,5 +168,9 @@ export async function readImage(
   const image = new Image();
   image.src = dataUrl;
   await image.decode();
+  // An SVG without a width and a height can have no size. Its scale would then be infinite.
+  if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
+    throw new Error("The image has no size in pixels. Use a PNG or a JPEG file.");
+  }
   return { dataUrl, width: image.naturalWidth, height: image.naturalHeight };
 }

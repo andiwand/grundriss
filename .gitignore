@@ -1,2 +1,5 @@
 /node_modules/
 /dist/
+/scripts/recognition/.venv/
+/scripts/recognition/checkpoints/
+/scripts/recognition/__pycache__/

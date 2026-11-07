@@ -1,0 +1,16 @@
+[project]
+name = "grundriss-recognition"
+version = "0.1.0"
+description = "Synthetic training data and a segmentation model for floor plans"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "torch>=2.5",
+  "numpy>=2.0",
+  "opencv-python-headless>=4.10",
+  "onnx>=1.17",
+  "onnxruntime>=1.20",
+  "onnxscript>=0.1",
+]
+
+[tool.uv]
+package = false

@@ -113,3 +113,48 @@ describe("suggestWallsInGray", () => {
     }
   }, 30_000);
 });
+
+describe("suggestWallsInGray coordinates", () => {
+  it("gives the center line of a bar in continuous pixel coordinates", async () => {
+    const cv = await resolveOpenCV(createRequire(import.meta.url)("@techstark/opencv-js"));
+    // A horizontal bar over the pixels x 100 to 899 and y 100 to 115, and a vertical bar over the
+    // pixels x 500 to 515 and y 300 to 899. So the edges are at 100 and 900, and the centers are
+    // at y = 108 and x = 508.
+    const gray = new cv.Mat(1000, 1000, cv.CV_8UC1, new cv.Scalar(255));
+    try {
+      const black = new cv.Scalar(0);
+      cv.rectangle(gray, new cv.Point(100, 100), new cv.Point(899, 115), black, -1);
+      cv.rectangle(gray, new cv.Point(500, 300), new cv.Point(515, 899), black, -1);
+      for (const mask of [false, true]) {
+        const segments = suggestWallsInGray(cv, gray, 1, { mask });
+        expect(segments).toHaveLength(2);
+        const h = segments.find((s) => s.a.y === s.b.y)!;
+        const v = segments.find((s) => s.a.x === s.b.x)!;
+        expect(h.a.y).toBeCloseTo(108);
+        expect(Math.min(h.a.x, h.b.x)).toBeCloseTo(100);
+        expect(Math.max(h.a.x, h.b.x)).toBeCloseTo(900);
+        expect(v.a.x).toBeCloseTo(508);
+        expect(Math.min(v.a.y, v.b.y)).toBeCloseTo(300);
+        expect(Math.max(v.a.y, v.b.y)).toBeCloseTo(900);
+      }
+    } finally {
+      gray.delete();
+    }
+  }, 30_000);
+
+  it("finds nothing on a tiny or empty image", async () => {
+    const cv = await resolveOpenCV(createRequire(import.meta.url)("@techstark/opencv-js"));
+    for (const [width, height] of [
+      [1, 1],
+      [3, 200],
+    ]) {
+      const gray = new cv.Mat(height, width, cv.CV_8UC1, new cv.Scalar(255));
+      try {
+        expect(suggestWallsInGray(cv, gray, 1, { thickness: 0.3 })).toEqual([]);
+        expect(suggestWallsInGray(cv, gray, 1, { mask: true })).toEqual([]);
+      } finally {
+        gray.delete();
+      }
+    }
+  }, 30_000);
+});

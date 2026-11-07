@@ -18,6 +18,8 @@ export class PlanDocument {
   private redoStack: Building[] = [];
   private before: Building | null = null;
   private changed = false;
+  /** True if `commit` compares the building with the one before, as at the end of a drag. */
+  private compare = false;
   private saved: Building;
   private listeners = new Set<() => void>();
 
@@ -78,6 +80,7 @@ export class PlanDocument {
     this.before = this.building;
     this.building = structuredClone(this.building);
     this.changed = false;
+    this.compare = true;
   }
 
   /** Changes the active story inside the open transaction. The views update at once. */
@@ -96,8 +99,12 @@ export class PlanDocument {
   /** Ends the transaction. A transaction without changes leaves no entry in the history. */
   commit(): void {
     if (this.before === null) return;
+    if (this.changed) for (const story of this.building.stories) normalize(story);
+    // A drag can end where it started. Then the building is the same, and it needs no entry.
+    if (this.changed && this.compare && sameBuilding(this.before, this.building)) {
+      this.changed = false;
+    }
     if (this.changed) {
-      for (const story of this.building.stories) normalize(story);
       this.undoStack.push(this.before);
       this.redoStack = [];
     } else {
@@ -119,16 +126,35 @@ export class PlanDocument {
 
   /** Makes one change of the active story as one entry of the history. */
   edit(edit: (plan: Story) => void): void {
-    this.begin();
-    this.update(edit);
-    this.commit();
+    this.editBuilding(() => edit(this.plan));
   }
 
   /** Makes one change of the building as one entry of the history. */
   editBuilding(edit: (building: Building) => void): void {
     this.begin();
+    // One edit always changes something, so the comparison of a drag is not necessary.
+    this.compare = false;
     this.updateBuilding(edit);
     this.commit();
+  }
+
+  /**
+   * Makes one change of the active story, but only if `edit` gives true. If it gives false, the
+   * document drops the copy, so the history gets no entry. It gives the result of `edit`.
+   */
+  editIf(edit: (plan: Story) => boolean): boolean {
+    return this.editBuildingIf(() => edit(this.plan));
+  }
+
+  /** Makes one change of the building, but only if `edit` gives true. See `editIf`. */
+  editBuildingIf(edit: (building: Building) => boolean): boolean {
+    this.begin();
+    this.compare = false;
+    const changed = edit(this.building);
+    if (changed) this.changed = true;
+    // A transaction without changes puts back the building from before the copy.
+    this.commit();
+    return changed;
   }
 
   undo(): void {
@@ -169,4 +195,14 @@ export class PlanDocument {
   private emit(): void {
     for (const listener of this.listeners) listener();
   }
+}
+
+/**
+ * True if two buildings have the same content. Only the ids of the models count, because their
+ * data can be large, and no transaction changes the data of a model.
+ */
+function sameBuilding(a: Building, b: Building): boolean {
+  const content = ({ models, ...rest }: Building) =>
+    JSON.stringify([rest, models.map((m) => m.id)]);
+  return content(a) === content(b);
 }

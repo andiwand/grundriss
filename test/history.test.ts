@@ -25,6 +25,20 @@ describe("PlanDocument", () => {
     expect(getVertex(doc.plan, id).x).toBe(0);
   });
 
+  it("makes no entry for a drag that ends where it started", () => {
+    const doc = new PlanDocument();
+    let id = "";
+    doc.edit((plan) => (id = addVertex(plan, { x: 0, y: 0 }).id));
+    const before = doc.building;
+    doc.begin();
+    doc.update((plan) => (getVertex(plan, id).x = 3));
+    doc.update((plan) => (getVertex(plan, id).x = 0));
+    doc.commit();
+    expect(doc.building).toBe(before);
+    doc.undo();
+    expect(doc.plan.vertices).toHaveLength(0);
+  });
+
   it("makes no entry for a transaction without changes", () => {
     const doc = new PlanDocument();
     doc.begin();
@@ -48,6 +62,29 @@ describe("PlanDocument", () => {
     doc.begin();
     doc.update((plan) => addVertex(plan, { x: 0, y: 0 }));
     doc.cancel();
+    expect(doc.plan.vertices).toHaveLength(0);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it("makes no entry if editIf gives false, and drops the change", () => {
+    const doc = new PlanDocument();
+    const before = doc.building;
+    const changed = doc.editIf((plan) => {
+      addVertex(plan, { x: 0, y: 0 });
+      return false;
+    });
+    expect(changed).toBe(false);
+    expect(doc.building).toBe(before);
+    expect(doc.plan.vertices).toHaveLength(0);
+    expect(doc.canUndo).toBe(false);
+    expect(doc.dirty).toBe(false);
+  });
+
+  it("makes one entry if editIf gives true", () => {
+    const doc = new PlanDocument();
+    expect(doc.editIf((plan) => !!addVertex(plan, { x: 0, y: 0 }))).toBe(true);
+    expect(doc.plan.vertices).toHaveLength(1);
+    doc.undo();
     expect(doc.plan.vertices).toHaveLength(0);
     expect(doc.canUndo).toBe(false);
   });

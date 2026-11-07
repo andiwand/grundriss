@@ -13,6 +13,8 @@ import {
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
 import type { Building, Plan, Point } from "../model/types";
+import { furnitureSymbol } from "../model/furniture";
+import { fixtureSymbol } from "../model/services";
 import { riseOf, storyExtras, type StoryExtras } from "./context";
 
 /** The layers and their AutoCAD color numbers. */
@@ -24,6 +26,9 @@ export const DXF_LAYERS = {
   TEXT: 2,
   STAIRS: 4,
   CHIMNEYS: 1,
+  FURNITURE: 6,
+  ELECTRIC: 30,
+  HEATING: 1,
 } as const;
 
 type Layer = keyof typeof DXF_LAYERS;
@@ -32,6 +37,20 @@ const n = (value: number) => {
   const rounded = Math.round(value * 1e6) / 1e6;
   return String(Object.is(rounded, -0) ? 0 : rounded);
 };
+
+/**
+ * A text value for DXF. A line break would end the value, so it becomes a space. R12 has no
+ * UTF-8, so a character outside ASCII becomes the code "\U+XXXX", which CAD programs read.
+ */
+function dxfText(text: string): string {
+  return [...text.replace(/[\r\n\t]+/g, " ")]
+    .map((c) => {
+      const code = c.codePointAt(0)!;
+      if (code < 0x80) return c;
+      return code > 0xffff ? "?" : `\\U+${code.toString(16).toUpperCase().padStart(4, "0")}`;
+    })
+    .join("");
+}
 
 /** The name of a story as a prefix of a layer: upper case, with "_" for other characters. */
 export function layerPrefix(name: string): string {
@@ -74,11 +93,11 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
     xy(a, 10);
     xy(b, 11);
   };
-  const polygon = (layer: string, points: Point[]) => {
+  const polygon = (layer: string, points: Point[], closed = true) => {
     pair(0, "POLYLINE");
     pair(8, layer);
     pair(66, 1);
-    pair(70, 1);
+    pair(70, closed ? 1 : 0);
     xy({ x: 0, y: 0 });
     for (const p of points) {
       pair(0, "VERTEX");
@@ -93,7 +112,7 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
     pair(8, layer);
     xy(at, 10);
     pair(40, height);
-    pair(1, value);
+    pair(1, dxfText(value));
     // The plan angle turns from x to y down, so the DXF angle has the other sign.
     pair(50, -angle);
     pair(72, 1);
@@ -146,16 +165,37 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
     const rooms = findRooms(plan);
     for (const room of rooms) {
       polygon(L.ROOMS, room.polygon);
-      // R12 has no Unicode text, so "m²" becomes "m2" and "·" becomes "-".
+      // Plain ASCII is easier to read than codes, so "m²" becomes "m2" and "·" becomes "-".
       const lines = roomLabel(room).map((t) => t.replace(/²/g, "2").replace(/·/g, "-"));
       lines.forEach((t, i) => {
         const y = room.labelAt.y + (i - (lines.length - 1) / 2) * 0.3;
         text(L.TEXT, { x: room.labelAt.x, y }, t, 0.2);
       });
     }
+    for (const piece of plan.furniture) {
+      const symbol = furnitureSymbol(piece);
+      for (const shape of symbol.shapes) polygon(L.FURNITURE, shape);
+      for (const [a, b] of symbol.lines) line(L.FURNITURE, a, b);
+      // A piece with a model has no plan symbol, so its name tells what it is.
+      if (piece.source.kind === "model" && piece.name) {
+        text(L.FURNITURE, piece, piece.name, 0.12);
+      }
+    }
     for (const wall of plan.walls) {
       const outline = wallOutline(plan, wall);
       if (outline.length > 0) polygon(L.WALLS, outline);
+    }
+    // The building services: each system on its own layer. A line is an open polyline.
+    const serviceLayer = (system: "electric" | "heating") =>
+      system === "electric" ? L.ELECTRIC : L.HEATING;
+    for (const run of plan.runs) {
+      if (run.points.length >= 2) polygon(serviceLayer(run.system), run.points, false);
+    }
+    for (const fixture of plan.fixtures) {
+      const layer = serviceLayer(fixture.system);
+      const symbol = fixtureSymbol(fixture);
+      for (const shape of [...symbol.shapes, ...symbol.filled]) polygon(layer, shape);
+      for (const points of symbol.lines) polygon(layer, points, false);
     }
     for (const opening of plan.openings) {
       const shape = openingShape(plan, opening);

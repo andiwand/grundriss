@@ -31,17 +31,18 @@ const ICONS = {
   crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
   sparkle:
     '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
-  more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   stair: '<path d="M4 20h4v-4h4v-4h4V8h4"/><path d="M4 20V4"/>',
   chimney: '<path d="M3 21V11l9-7 9 7v10z"/><path d="M15 7V3h3v6.3"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   roof: '<path d="m2 12 10-8 10 8"/><path d="M5 10v10h14V10"/>',
-  compass:
-    '<circle cx="12" cy="12" r="9"/><path d="m12 5 3 7h-6z" fill="currentColor"/><path d="m9 12 3 7 3-7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
-  up: '<path d="m6 15 6-6 6 6"/>',
-  down: '<path d="m6 9 6 6 6-6"/>',
+  plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>',
+  flame:
+    '<path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-2 2-5 5-5 8a7 7 0 0 0 7 7z"/>',
+  sofa: '<path d="M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/><path d="M3 11a1.5 1.5 0 0 1 3 0v2h12v-2a1.5 1.5 0 0 1 3 0v6H3z"/><path d="M5 17v2M19 17v2"/>',
+  rotate: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  upload: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

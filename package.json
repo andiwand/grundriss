@@ -16,6 +16,7 @@
   "dependencies": {
     "@techstark/opencv-js": "^5.0.0-release.1",
     "fflate": "^0.8.3",
+    "onnxruntime-web": "^1.31.1",
     "three": "^0.187.0"
   },
   "devDependencies": {

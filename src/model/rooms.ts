@@ -17,6 +17,12 @@ export interface Room {
   info: RoomInfo | null;
 }
 
+interface Face {
+  cycle: Id[];
+  polygon: Point[];
+  area: number;
+}
+
 /**
  * Finds the faces of the planar wall graph. The algorithm walks each directed edge once. At each
  * vertex it takes the next edge in clockwise order from the edge it came on. Each inner face then
@@ -24,7 +30,7 @@ export interface Room {
  * only at vertices. The editor makes sure of that, because it splits a wall where a new wall
  * starts or ends on it.
  */
-export function findRooms(plan: Plan): Room[] {
+function faces(plan: Plan): Face[] {
   const position = new Map(plan.vertices.map((v) => [v.id, v]));
   const neighbors = new Map<Id, Id[]>();
   for (const wall of plan.walls) {
@@ -42,7 +48,7 @@ export function findRooms(plan: Plan): Room[] {
   }
 
   const visited = new Set<string>();
-  const rooms: Room[] = [];
+  const result: Face[] = [];
   const limit = 2 * plan.walls.length + 1;
   for (const wall of plan.walls) {
     if (!neighbors.has(wall.a) || !neighbors.has(wall.b)) continue;
@@ -66,16 +72,37 @@ export function findRooms(plan: Plan): Room[] {
         const p = position.get(id)!;
         return { x: p.x, y: p.y };
       });
-      const area = signedArea(polygon);
-      if (area > 1e-6) {
-        const key = [...cycle].sort().join("|");
-        const info =
-          plan.rooms?.find((r) => r.key === key) ??
-          plan.rooms?.find((r) => pointInPolygon(r.at, polygon)) ??
-          null;
-        rooms.push({ key, vertexIds: cycle, polygon, area, labelAt: interiorPoint(polygon), info });
-      }
+      result.push({ cycle, polygon, area: signedArea(polygon) });
     }
+  }
+  return result;
+}
+
+/** The rooms of the plan: the inner faces of the wall graph, with the data of the user. */
+export function findRooms(plan: Plan): Room[] {
+  const rooms: Room[] = faces(plan)
+    .filter((face) => face.area > 1e-6)
+    .map(({ cycle, polygon, area }) => ({
+      key: [...cycle].sort().join("|"),
+      vertexIds: cycle,
+      polygon,
+      area,
+      labelAt: interiorPoint(polygon),
+      info: null,
+    }));
+  // Each data goes to one room only. First the data finds its room by the key. Data with an old
+  // key then goes to the room that contains its point. The smallest room comes first, so that a
+  // room inside another room keeps its own data.
+  const infos = plan.rooms ?? [];
+  const taken = new Set<Id>();
+  for (const room of rooms) {
+    room.info = infos.find((r) => r.key === room.key && !taken.has(r.id)) ?? null;
+    if (room.info) taken.add(room.info.id);
+  }
+  for (const room of [...rooms].sort((p, q) => p.area - q.area)) {
+    if (room.info) continue;
+    room.info = infos.find((r) => !taken.has(r.id) && pointInPolygon(r.at, room.polygon)) ?? null;
+    if (room.info) taken.add(room.info.id);
   }
   return rooms;
 }
@@ -149,6 +176,8 @@ export function editRoomInfo(plan: Plan, room: Room, change: (info: RoomInfo) =>
       at: room.labelAt,
       name: "",
       height: null,
+      floorHeating: false,
+      temperature: null,
     };
     plan.rooms.push(info);
   }
@@ -174,4 +203,37 @@ export function roomLabel(room: Room): string[] {
   const area = `${room.area.toFixed(2)} m²`;
   lines.push(room.info?.height != null ? `${area} · h ${room.info.height.toFixed(2)} m` : area);
   return lines;
+}
+
+/**
+ * The outer outline of the walls of a plan, on the center lines of the walls: the boundary of the
+ * largest connected group of rooms. It gives null if the walls close no room. The roof of a story
+ * uses it as its outline.
+ */
+export function planOutline(plan: Plan): Point[] | null {
+  // The walk visits each outer face once, with a negative signed area. The largest outer face
+  // is the outline of the building.
+  let best: Face | null = null;
+  for (const face of faces(plan)) {
+    if (face.area < (best?.area ?? -1e-6)) best = face;
+  }
+  if (!best) return null;
+  // A wall that sticks out (a dead end) appears twice in the walk: out to its free end and back.
+  // It is not part of a roof, so the function removes each such spike.
+  const ids = [...best.cycle];
+  const polygon = [...best.polygon];
+  for (let i = 0; ids.length >= 3 && i < ids.length;) {
+    const n = ids.length;
+    if (ids[(i + n - 1) % n] !== ids[(i + 1) % n]) {
+      i++;
+      continue;
+    }
+    // Remove the free end at `i` and the second copy of the vertex before it, at `i + 1`.
+    for (const k of [Math.max(i, (i + 1) % n), Math.min(i, (i + 1) % n)]) {
+      ids.splice(k, 1);
+      polygon.splice(k, 1);
+    }
+    i = Math.max(0, i - 2);
+  }
+  return ids.length >= 3 ? polygon.reverse() : null;
 }

@@ -111,3 +111,80 @@ describe("package format", () => {
     expect(() => readPackage(zipSync({ "plan.json": strToU8("{") }))).toThrow("not valid JSON");
   });
 });
+
+describe("models in the package", () => {
+  const GLB = "data:model/gltf-binary;base64,Z2xURgIAAAAMAAAA";
+
+  function furnished(): Building {
+    const result = emptyBuilding();
+    result.models = [
+      {
+        id: "m-chair",
+        name: "Chair",
+        origin: "import",
+        ref: "chair.glb",
+        data: GLB,
+        size: { x: 0.5, y: 0.5, z: 0.9 },
+        license: "CC0",
+        credit: "Someone",
+      },
+      {
+        id: "m-kenney",
+        name: "Desk",
+        origin: "kenney",
+        ref: "desk.glb",
+        data: null,
+        size: { x: 1.4, y: 0.7, z: 0.75 },
+        license: "CC0",
+        credit: "Kenney",
+      },
+    ];
+    return result;
+  }
+
+  it("stores a model as a GLB file and reads it back", () => {
+    const original = furnished();
+    const bytes = writePackage(original);
+    const files = unzipSync(bytes);
+    expect(files["models/m-chair.glb"]).toEqual(decodeDataUrl(GLB).bytes);
+    // The bundled model has no file, because the app has it.
+    expect(files["models/m-kenney.glb"]).toBeUndefined();
+    const stored = JSON.parse(new TextDecoder().decode(files["plan.json"]));
+    expect(stored.models[0].data).toBe("models/m-chair.glb");
+    expect(readPackage(bytes)).toEqual(original);
+  });
+
+  it("writes the credits of the models", () => {
+    const files = unzipSync(writePackage(furnished()));
+    const text = new TextDecoder().decode(files["exports/CREDITS.txt"]);
+    expect(text).toContain("Chair | import | CC0 | Someone");
+    expect(text).toContain("Desk | kenney | CC0 | Kenney");
+  });
+
+  it("writes no credits without models", () => {
+    expect(unzipSync(writePackage(emptyBuilding()))["exports/CREDITS.txt"]).toBeUndefined();
+  });
+
+  it("names the missing file of a model", () => {
+    const files = unzipSync(writePackage(furnished()));
+    delete files["models/m-chair.glb"];
+    expect(() => readPackage(zipSync(files))).toThrow('"models/m-chair.glb" of Chair is missing');
+  });
+});
+
+describe("edge cases of the package", () => {
+  it("keeps the type of an image that has no known extension", () => {
+    const original = building();
+    original.stories[0].background!.image = "data:image/tiff;base64,SUkqAA==";
+    const bytes = writePackage(original);
+    expect(Object.keys(unzipSync(bytes))).toContain(`backgrounds/${original.stories[0].id}.tiff`);
+    expect(readPackage(bytes)).toEqual(original);
+  });
+
+  it("does not take a property of an object as a file", () => {
+    const json = JSON.parse(serializeBuilding(building()));
+    json.stories[0].background.image = "constructor";
+    const bytes = zipSync({ "plan.json": strToU8(JSON.stringify(json)) });
+    expect(() => readPackage(bytes)).toThrow('"constructor" is missing');
+  });
+});

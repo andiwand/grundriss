@@ -14,7 +14,18 @@ import {
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
 import type { Building, Plan, Point } from "../model/types";
-import { isEmptyStory, riseOf, storyExtras, type StoryExtras } from "./context";
+import { furnitureSymbol } from "../model/furniture";
+import { fixtureSymbol, runKind } from "../model/services";
+import { SERVICE_COLORS } from "./svg";
+import {
+  grow,
+  isEmptyStory,
+  riseOf,
+  storyExtras,
+  withFurniture,
+  type Box,
+  type StoryExtras,
+} from "./context";
 
 const MM = 72 / 25.4;
 const MARGIN = 15 * MM;
@@ -38,6 +49,13 @@ export interface PageLayout {
   height: number;
   /** The scale is 1 : denominator. */
   denominator: number;
+}
+
+/** The PDF color operands "r g b" of a CSS hex color like "#e03131". */
+export function rgb(hex: string): string {
+  const value = parseInt(hex.replace("#", ""), 16);
+  const channel = (shift: number) => n(((value >> shift) & 255) / 255);
+  return `${channel(16)} ${channel(8)} ${channel(0)}`;
 }
 
 /**
@@ -95,8 +113,22 @@ const textWidth = (text: string, size: number) =>
 
 const n = (value: number) => String(Math.round(value * 100) / 100);
 
-/** Puts a text into a PDF string literal. The characters must be in Latin-1 (WinAnsi). */
-const literal = (text: string) => `(${text.replace(/[\\()]/g, (c) => `\\${c}`)})`;
+/** The characters at the codes 0x80 to 0x9F of WinAnsi. "\0" marks a code without a character. */
+const WIN_ANSI = "€\0‚ƒ„…†‡ˆ‰Š‹Œ\0Ž\0\0‘’“”•–—˜™š›œ\0žŸ";
+
+/**
+ * Puts a text into a PDF string literal in WinAnsi, with one byte for each character. The font
+ * has no glyph for other characters, so they become "?".
+ */
+const literal = (text: string) => {
+  const bytes = [...text].map((c) => {
+    const code = c.codePointAt(0)!;
+    if (code < 0x80 || (code >= 0xa0 && code <= 0xff)) return c;
+    const index = WIN_ANSI.indexOf(c);
+    return index >= 0 ? String.fromCharCode(0x80 + index) : "?";
+  });
+  return `(${bytes.join("").replace(/[\\()]/g, (c) => `\\${c}`)})`;
+};
 
 /** A path of up to 90 degrees as one cubic Bézier curve. It gives the curve after the move. */
 function arcCurve(arc: Arc, map: (p: Point) => Point): string {
@@ -119,22 +151,12 @@ function arcCurve(arc: Arc, map: (p: Point) => Point): string {
   return `${n(p1.x)} ${n(p1.y)} ${n(p2.x)} ${n(p2.y)} ${n(p3.x)} ${n(p3.y)} c`;
 }
 
-type Box = { minX: number; minY: number; maxX: number; maxY: number };
-
 /** The box around the plan and around the chimneys that pass through it. */
 function storyBounds(plan: Plan, extras: StoryExtras): Box | null {
-  const box = planBounds(plan);
-  const points = (extras.through ?? []).flatMap((c) => chimneySymbol(c).outline);
-  if (points.length === 0) return box;
-  const all = box
-    ? [...points, { x: box.minX, y: box.minY }, { x: box.maxX, y: box.maxY }]
-    : points;
-  return {
-    minX: Math.min(...all.map((p) => p.x)),
-    minY: Math.min(...all.map((p) => p.y)),
-    maxX: Math.max(...all.map((p) => p.x)),
-    maxY: Math.max(...all.map((p) => p.y)),
-  };
+  return grow(
+    withFurniture(planBounds(plan), plan),
+    (extras.through ?? []).flatMap((c) => chimneySymbol(c).outline),
+  );
 }
 
 /** Exports one story as a PDF with one page. */
@@ -162,18 +184,16 @@ export function buildingToPdf(building: Building): Uint8Array {
     const story = building.stories[0];
     pages.push({ story, extras: storyExtras(building, story) });
   }
-  const boxes = pages
-    .map(({ story, extras }) => storyBounds(story, extras))
-    .filter((box): box is Box => box !== null);
-  const box =
-    boxes.length === 0
-      ? { minX: 0, minY: 0, maxX: 1, maxY: 1 }
-      : {
-          minX: Math.min(...boxes.map((b) => b.minX)),
-          minY: Math.min(...boxes.map((b) => b.minY)),
-          maxX: Math.max(...boxes.map((b) => b.maxX)),
-          maxY: Math.max(...boxes.map((b) => b.maxY)),
-        };
+  const corners = pages.flatMap(({ story, extras }) => {
+    const b = storyBounds(story, extras);
+    return b
+      ? [
+          { x: b.minX, y: b.minY },
+          { x: b.maxX, y: b.maxY },
+        ]
+      : [];
+  });
+  const box = grow(null, corners) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   const layout = chooseLayout(box.maxX - box.minX, box.maxY - box.minY);
   const contents = pages.map(({ story, extras }) =>
     pageContent(
@@ -242,6 +262,26 @@ function pageContent(
     ops.push("f");
   }
 
+  // The furniture is above the rooms and below the walls. The box of a piece is nearly white, so
+  // that it covers the room fill.
+  if (plan.furniture.length > 0) {
+    ops.push("0.357 0.392 0.455 RG 0.3 w 1 j");
+    for (const piece of plan.furniture) {
+      const symbol = furnitureSymbol(piece);
+      symbol.shapes.forEach((shape, i) => {
+        ops.push(i === 0 ? "0.984 0.98 0.969 rg" : "0.925 0.918 0.894 rg");
+        polygon(shape);
+        ops.push("B");
+      });
+      for (const [a, b] of symbol.lines) line(a, b);
+      // A piece with a model has no plan symbol, so its name tells what it is.
+      if (piece.source.kind === "model" && piece.name) {
+        ops.push("0.357 0.392 0.455 rg");
+        text(piece, piece.name, TEXT_SIZE * 0.75);
+      }
+    }
+  }
+
   ops.push("0.149 0.173 0.220 rg");
   for (const wall of plan.walls) {
     const outline = wallOutline(plan, wall);
@@ -275,9 +315,43 @@ function pageContent(
     const lines = roomLabel(room);
     lines.forEach((t, i) => {
       // The y of the plan points down, so a later line has a larger y.
-      const y = room.labelAt.y + (i - (lines.length - 1) / 2) * TEXT_SIZE * 1.3;
+      // TEXT_SIZE is in points, so the division by k gives meters on the plan.
+      const y = room.labelAt.y + ((i - (lines.length - 1) / 2) * TEXT_SIZE * 1.3) / k;
       text({ x: room.labelAt.x, y }, t, TEXT_SIZE);
     });
+  }
+
+  // The building services are above the room labels and below the dimensions.
+  const polyline = (points: Point[]) => {
+    const [first, ...rest] = points.map(map);
+    ops.push(`${n(first.x)} ${n(first.y)} m`);
+    for (const p of rest) ops.push(`${n(p.x)} ${n(p.y)} l`);
+    ops.push("S");
+  };
+  if (plan.runs.length > 0 || plan.fixtures.length > 0) {
+    ops.push("0.6 w 1 J 1 j");
+    for (const run of plan.runs) {
+      if (run.points.length < 2) continue;
+      const kind = runKind(run.kind);
+      ops.push(`${rgb(kind.color)} RG ${kind.dashed ? "[3 2] 0 d" : "[] 0 d"}`);
+      polyline(run.points);
+    }
+    ops.push("[] 0 d 0.4 w");
+    for (const fixture of plan.fixtures) {
+      const color = rgb(SERVICE_COLORS[fixture.system]);
+      const symbol = fixtureSymbol(fixture);
+      ops.push(`${color} RG 1 g`);
+      for (const shape of symbol.shapes) {
+        polygon(shape);
+        ops.push("B");
+      }
+      for (const points of symbol.lines) polyline(points);
+      ops.push(`${color} rg`);
+      for (const shape of symbol.filled) {
+        polygon(shape);
+        ops.push("f");
+      }
+    }
   }
 
   ops.push("0.184 0.420 1 RG 0.184 0.420 1 rg 0.4 w");
@@ -342,12 +416,10 @@ function pageContent(
   return ops.join("\n");
 }
 
-/** Writes a PDF with one page and the font Helvetica. The text must be in Latin-1. */
-export function writePdf(content: string, width: number, height: number): Uint8Array {
-  return writePdfPages([content], width, height);
-}
-
-/** Writes a PDF with one page for each content stream, all of the same size. */
+/**
+ * Writes a PDF with one page for each content stream, all of the same size, and the font
+ * Helvetica. Each character of the contents must be one byte (see `literal`).
+ */
 export function writePdfPages(contents: string[], width: number, height: number): Uint8Array {
   // Object 1 is the catalog, 2 the page tree, 3 the font. Each page has two objects after that:
   // the page and its content stream.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDimension,
   addOpening,
+  addStair,
   addVertex,
   addWall,
   copyItems,
@@ -61,6 +62,16 @@ describe("copy and paste", () => {
     const clip = copyItems(plan, [{ kind: "dimension", id: dimension.id }]);
     pasteClip(plan, clip, { x: 1, y: 1 });
     expect(plan.dimensions[1]).toMatchObject({ a: { x: 1, y: 1 }, b: { x: 5, y: 1 }, offset: 1 });
+  });
+
+  it("keeps the kind and the second flight of a pasted stair", () => {
+    const plan = square();
+    const stair = addStair(plan, { x: 1, y: 1 }, { x: 3, y: 1 });
+    Object.assign(stair, { kind: "u", turn: -1, run2: 1.7 });
+    const clip = copyItems(plan, [{ kind: "stair", id: stair.id }]);
+    pasteClip(plan, clip, { x: 0, y: 1 });
+    expect(plan.stairs[1]).toMatchObject({ kind: "u", turn: -1, run2: 1.7, a: { x: 1, y: 2 } });
+    expect(plan.stairs[1].id).not.toBe(stair.id);
   });
 });
 

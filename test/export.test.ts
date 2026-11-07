@@ -14,6 +14,8 @@ import {
   addWall,
   emptyPlan,
 } from "../src/model/plan";
+import { newFurniture } from "../src/model/furniture";
+import { newFixture, newRun, runKind } from "../src/model/services";
 import type { Plan } from "../src/model/types";
 
 /** A room of 4 m × 3 m with a door, a window, and a dimension line. */
@@ -192,5 +194,134 @@ describe("exports of a building", () => {
     ]);
     expect(Object.keys(buildingExports(house()))).not.toContain("model.glb");
     expect(slug("Erdgeschoß")).toBe("erdgescho");
+  });
+});
+
+describe("furniture in the exports", () => {
+  function furnished(): Plan {
+    const plan = room();
+    plan.furniture.push(
+      { ...newFurniture({ kind: "generic", type: "bed-double" }, { x: 2, y: 1.5 }), id: "f-bed" },
+      {
+        ...newFurniture({ kind: "model", modelId: "m1" }, { x: 6, y: 1 }),
+        id: "f-model",
+        name: "Lamp & Co",
+      },
+    );
+    return plan;
+  }
+
+  it("draws the furniture in the SVG between the rooms and the walls", () => {
+    const svg = planToSvg(furnished());
+    const furniture = svg.indexOf('<g id="furniture"');
+    expect(furniture).toBeGreaterThan(svg.indexOf('<g id="rooms"'));
+    expect(furniture).toBeLessThan(svg.indexOf('<g id="walls"'));
+    // Only a piece with a model shows its name, and the name is escaped.
+    expect(svg).toContain(">Lamp &amp; Co</text>");
+    expect(svg).not.toContain(">Double bed</text>");
+    // The model piece is outside the walls, so the view box must reach x = 6.5.
+    const [x, , width] = /viewBox="([^"]+)"/.exec(svg)![1].split(" ").map(Number);
+    expect(x + width).toBeGreaterThan(6.5);
+  });
+
+  it("draws the furniture in the PDF and the DXF", () => {
+    const pdf = latin1(planToPdf(furnished()));
+    expect(pdf).toContain("(Lamp & Co) Tj");
+    const dxf = planToDxf(furnished());
+    expect(dxf).toContain("FURNITURE");
+    const building = emptyBuilding();
+    building.stories[0].furniture.push(...furnished().furniture);
+    expect(buildingToDxf(building)).toContain("GROUND_FLOOR_FURNITURE");
+  });
+
+  it("does not skip a story with only furniture", () => {
+    const building = emptyBuilding();
+    const upper = addStoryOnTop(building);
+    upper.furniture.push(newFurniture({ kind: "generic", type: "sofa" }, { x: 0, y: 0 }));
+    const pdf = latin1(buildingToPdf(building));
+    expect(pdf).toContain("First floor");
+  });
+});
+
+describe("building services in the exports", () => {
+  function serviced(): Plan {
+    const plan = room();
+    plan.fixtures.push(newFixture("socket", { x: 1, y: 0.1 }, 2.4));
+    plan.fixtures.push(newFixture("radiator", { x: 2, y: 2.9 }, 2.4));
+    plan.runs.push(
+      newRun("cable", [
+        { x: 1, y: 0.1 },
+        { x: 3, y: 0.1 },
+      ]),
+    );
+    plan.runs.push(
+      newRun("return", [
+        { x: 0.5, y: 2.8 },
+        { x: 2, y: 2.8 },
+      ]),
+    );
+    return plan;
+  }
+
+  it("draws the lines in their colors and the devices in the SVG, above the walls", () => {
+    const svg = planToSvg(serviced());
+    expect(svg).toContain(`stroke="${runKind("cable").color}"`);
+    // A dashed kind gets a dash pattern.
+    expect(svg).toMatch(new RegExp(`stroke="${runKind("return").color}" stroke-dasharray`));
+    expect(svg).toContain('class="fixture socket"');
+    expect(svg).toContain('class="fixture radiator"');
+    expect(svg.indexOf('id="services"')).toBeGreaterThan(svg.indexOf('id="walls"'));
+    expect(svg.indexOf('id="services"')).toBeLessThan(svg.indexOf('id="dimensions"'));
+  });
+
+  it("draws the services in the PDF, and puts them on their layers in the DXF", () => {
+    const pdf = latin1(planToPdf(serviced()));
+    // The color of the cable (#e8590c) as PDF stroke color.
+    expect(pdf).toContain("0.91 0.35 0.05 RG");
+    const dxf = planToDxf(serviced());
+    expect(dxf).toContain("\nELECTRIC\n");
+    expect(dxf).toContain("\nHEATING\n");
+    const building = emptyBuilding();
+    building.stories[0].fixtures.push(newFixture("switch", { x: 0, y: 0 }, 2.4));
+    expect(buildingToDxf(building)).toContain(`${layerPrefix("Ground floor")}ELECTRIC`);
+  });
+
+  it("does not skip a story with only services", () => {
+    const building = emptyBuilding();
+    building.stories[0].runs.push(
+      newRun("flow", [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+      ]),
+    );
+    const upper = addStoryOnTop(building);
+    upper.fixtures.push(newFixture("light-ceiling", { x: 1, y: 1 }, 2.4));
+    const pdf = latin1(buildingToPdf(building));
+    expect(pdf).toContain("Ground floor");
+    expect(pdf).toContain("First floor");
+  });
+});
+
+describe("text outside ASCII in the exports", () => {
+  function named(): Plan {
+    const plan = room();
+    plan.furniture.push({
+      ...newFurniture({ kind: "model", modelId: "m1" }, { x: 2, y: 1.5 }),
+      name: "Küche € – Ж\nzwei",
+    });
+    return plan;
+  }
+
+  it("writes the PDF text in WinAnsi, with one byte for each character", () => {
+    const pdf = latin1(planToPdf(named()));
+    // "ü" has the same code in Latin-1 and WinAnsi. "€" is 0x80 and "–" is 0x96 in WinAnsi.
+    // Helvetica has no "Ж", so it becomes "?".
+    expect(pdf).toContain("(Küche \x80 \x96 ?\nzwei) Tj");
+  });
+
+  it("writes the DXF text as ASCII on one line", () => {
+    const dxf = planToDxf(named());
+    expect(dxf).toContain("\n1\nK\\U+00FCche \\U+20AC \\U+2013 \\U+0416 zwei\n");
+    expect(dxf.trim().split("\n").length % 2).toBe(0);
   });
 });

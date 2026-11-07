@@ -1,7 +1,16 @@
 // Operations on a plan. They change the plan in place. Call them inside a transaction of
 // PlanDocument, so that undo works.
 
-import { add, clamp, closestOnSegment, distance, scale, sub } from "./geometry";
+import {
+  add,
+  clamp,
+  closestOnSegment,
+  distance,
+  length as vectorLength,
+  perpendicular,
+  scale,
+  sub,
+} from "./geometry";
 import { anchorRoomInfo, findRoom } from "./rooms";
 import type {
   Chimney,
@@ -41,6 +50,9 @@ export function emptyPlan(): Plan {
     stairs: [],
     chimneys: [],
     rooms: [],
+    furniture: [],
+    fixtures: [],
+    runs: [],
     background: null,
   };
 }
@@ -131,7 +143,14 @@ export function addWall(
 ): Wall | null {
   if (a === b) return null;
   if (plan.walls.some((w) => (w.a === a && w.b === b) || (w.a === b && w.b === a))) return null;
-  const wall = { id: newId("w"), a, b, thickness: properties.thickness, height: properties.height };
+  const wall: Wall = {
+    id: newId("w"),
+    a,
+    b,
+    thickness: properties.thickness,
+    height: properties.height,
+    layers: null,
+  };
   plan.walls.push(wall);
   return wall;
 }
@@ -218,6 +237,8 @@ export function removeVertex(plan: Plan, id: Id): void {
 /**
  * Joins the vertex `fromId` into the vertex `toId`. The walls of `fromId` then end at `toId`. A
  * wall that has the same vertex at both ends, or that is a copy of a different wall, goes away.
+ * The openings of a copy go to the wall that stays. The openings of a wall with the same vertex
+ * at both ends go away.
  */
 export function mergeVertex(plan: Plan, fromId: Id, toId: Id): void {
   if (fromId === toId) return;
@@ -226,11 +247,33 @@ export function mergeVertex(plan: Plan, fromId: Id, toId: Id): void {
     if (wall.b === fromId) wall.b = toId;
   }
   plan.vertices = plan.vertices.filter((v) => v.id !== fromId);
-  const seen = new Set<string>();
+  const kept = new Map<string, Wall>();
   for (const wall of [...plan.walls]) {
     const key = wall.a < wall.b ? `${wall.a}|${wall.b}` : `${wall.b}|${wall.a}`;
-    if (wall.a === wall.b || seen.has(key)) removeWall(plan, wall.id);
-    else seen.add(key);
+    const other = kept.get(key);
+    if (other) moveOpenings(plan, wall, other);
+    if (wall.a === wall.b || other) removeWall(plan, wall.id);
+    else kept.set(key, wall);
+  }
+}
+
+/**
+ * Moves the openings of the wall `from` to the wall `to`, which has the same two vertices. If
+ * the walls go in opposite directions, the offset, the hinge, and the swing change to keep each
+ * opening in its place.
+ */
+function moveOpenings(plan: Plan, from: Wall, to: Wall): void {
+  const opposite = from.a !== to.a;
+  const length = wallLength(plan, to);
+  for (const opening of plan.openings) {
+    if (opening.wallId !== from.id) continue;
+    opening.wallId = to.id;
+    if (opposite) {
+      opening.offset = length - opening.offset;
+      opening.hinge = opening.hinge === "a" ? "b" : "a";
+      opening.swing = opening.swing === 1 ? -1 : 1;
+    }
+    clampOpening(plan, opening);
   }
 }
 
@@ -268,12 +311,15 @@ export function normalize(plan: Plan): void {
   anchorRoomInfo(plan);
 }
 
-/** Changes the length of a wall. The vertex `b` moves along the wall. */
+/**
+ * Changes the length of a wall. The vertex `b` moves along the wall. A length of zero or less
+ * changes nothing, because a wall must have a length.
+ */
 export function setWallLength(plan: Plan, wallId: Id, length: number): void {
   const wall = getWall(plan, wallId);
   const [a, b] = wallEnds(plan, wall);
   const current = distance(a, b);
-  if (current === 0) return;
+  if (current === 0 || !(length > 0)) return;
   const end = add(a, scale(sub(b, a), length / current));
   b.x = end.x;
   b.y = end.y;
@@ -289,6 +335,9 @@ export function itemExists(plan: Plan, item: Item): boolean {
   if (item.kind === "stair") return !!findStair(plan, item.id);
   if (item.kind === "chimney") return !!findChimney(plan, item.id);
   if (item.kind === "room") return !!findRoom(plan, item.id);
+  if (item.kind === "furniture") return plan.furniture.some((f) => f.id === item.id);
+  if (item.kind === "fixture") return plan.fixtures.some((f) => f.id === item.id);
+  if (item.kind === "run") return plan.runs.some((r) => r.id === item.id);
   return !!findDimension(plan, item.id);
 }
 
@@ -301,6 +350,16 @@ export function removeItems(plan: Plan, items: Item[]): void {
     if (item.kind === "dimension") removeDimension(plan, item.id);
     if (item.kind === "stair") plan.stairs = plan.stairs.filter((s) => s.id !== item.id);
     if (item.kind === "chimney") plan.chimneys = plan.chimneys.filter((c) => c.id !== item.id);
+    if (item.kind === "furniture") plan.furniture = plan.furniture.filter((f) => f.id !== item.id);
+    if (item.kind === "run") plan.runs = plan.runs.filter((r) => r.id !== item.id);
+    if (item.kind === "fixture") {
+      plan.fixtures = plan.fixtures.filter((f) => f.id !== item.id);
+      // A line that connects to the device stays, but it no longer connects.
+      for (const run of plan.runs) {
+        if (run.from === item.id) run.from = null;
+        if (run.to === item.id) run.to = null;
+      }
+    }
   }
 }
 
@@ -326,29 +385,47 @@ export interface MoveOrigin {
   /** The two points of the dimension lines and the stairs. */
   dimensions: Map<Id, { a: Point; b: Point }>;
   stairs: Map<Id, { a: Point; b: Point }>;
+  /** The centers of the chimneys and the furniture. */
   chimneys: Map<Id, Point>;
+  furniture: Map<Id, Point>;
+  fixtures: Map<Id, Point>;
+  runs: Map<Id, Point[]>;
 }
 
 export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
-  const vertices = new Map<Id, Point>();
+  const origin: MoveOrigin = {
+    vertices: new Map(),
+    dimensions: new Map(),
+    stairs: new Map(),
+    chimneys: new Map(),
+    furniture: new Map(),
+    fixtures: new Map(),
+    runs: new Map(),
+  };
   for (const id of itemVertices(plan, items)) {
     const vertex = getVertex(plan, id);
-    vertices.set(id, { x: vertex.x, y: vertex.y });
+    origin.vertices.set(id, { x: vertex.x, y: vertex.y });
   }
-  const dimensions = new Map<Id, { a: Point; b: Point }>();
-  for (const item of items) {
-    const dimension = item.kind === "dimension" ? findDimension(plan, item.id) : undefined;
-    if (dimension) dimensions.set(dimension.id, { a: { ...dimension.a }, b: { ...dimension.b } });
+  const find = <T extends { id: Id }>(list: T[], id: Id) => list.find((x) => x.id === id);
+  for (const { kind, id } of items) {
+    const dimension = kind === "dimension" ? find(plan.dimensions, id) : undefined;
+    if (dimension) origin.dimensions.set(id, { a: { ...dimension.a }, b: { ...dimension.b } });
+    const stair = kind === "stair" ? find(plan.stairs, id) : undefined;
+    if (stair) origin.stairs.set(id, { a: { ...stair.a }, b: { ...stair.b } });
+    const chimney = kind === "chimney" ? find(plan.chimneys, id) : undefined;
+    if (chimney) origin.chimneys.set(id, { x: chimney.x, y: chimney.y });
+    const piece = kind === "furniture" ? find(plan.furniture, id) : undefined;
+    if (piece) origin.furniture.set(id, { x: piece.x, y: piece.y });
+    const fixture = kind === "fixture" ? find(plan.fixtures, id) : undefined;
+    if (fixture) origin.fixtures.set(id, { x: fixture.x, y: fixture.y });
+    const run = kind === "run" ? find(plan.runs, id) : undefined;
+    if (run)
+      origin.runs.set(
+        id,
+        run.points.map((p) => ({ ...p })),
+      );
   }
-  const stairs = new Map<Id, { a: Point; b: Point }>();
-  const chimneys = new Map<Id, Point>();
-  for (const item of items) {
-    const stair = item.kind === "stair" ? findStair(plan, item.id) : undefined;
-    if (stair) stairs.set(stair.id, { a: { ...stair.a }, b: { ...stair.b } });
-    const chimney = item.kind === "chimney" ? findChimney(plan, item.id) : undefined;
-    if (chimney) chimneys.set(chimney.id, { x: chimney.x, y: chimney.y });
-  }
-  return { vertices, dimensions, stairs, chimneys };
+  return origin;
 }
 
 /** Puts the points of `origin` at their start position plus `delta`. */
@@ -373,12 +450,23 @@ export function moveFromOrigin(plan: Plan, origin: MoveOrigin, delta: Point): vo
     const chimney = findChimney(plan, id);
     if (chimney) Object.assign(chimney, add(start, delta));
   }
+  for (const [id, start] of origin.furniture) {
+    const piece = plan.furniture.find((f) => f.id === id);
+    if (piece) Object.assign(piece, add(start, delta));
+  }
+  for (const [id, start] of origin.fixtures) {
+    const fixture = plan.fixtures.find((f) => f.id === id);
+    if (fixture) Object.assign(fixture, add(start, delta));
+  }
+  for (const [id, start] of origin.runs) {
+    const run = plan.runs.find((r) => r.id === id);
+    if (run) run.points = start.map((p) => add(p, delta));
+  }
 }
 
 /**
- * Copies the items. The copy contains the selected walls with their vertices and openings, the
- * walls between two selected vertices, the selected openings of copied walls, and the selected
- * dimension lines.
+ * Copies the items. The copy contains the selected walls, the walls between two selected
+ * vertices, the vertices and the openings of these walls, and the other selected objects.
  */
 export function copyItems(plan: Plan, items: Item[]): Clip {
   const vertexIds = new Set(items.filter((i) => i.kind === "vertex").map((i) => i.id));
@@ -397,6 +485,11 @@ export function copyItems(plan: Plan, items: Item[]): Clip {
     ),
     stairs: plan.stairs.filter((x) => items.some((i) => i.kind === "stair" && i.id === x.id)),
     chimneys: plan.chimneys.filter((x) => items.some((i) => i.kind === "chimney" && i.id === x.id)),
+    furniture: plan.furniture.filter((x) =>
+      items.some((i) => i.kind === "furniture" && i.id === x.id),
+    ),
+    fixtures: plan.fixtures.filter((x) => items.some((i) => i.kind === "fixture" && i.id === x.id)),
+    runs: plan.runs.filter((x) => items.some((i) => i.kind === "run" && i.id === x.id)),
   });
 }
 
@@ -430,13 +523,38 @@ export function pasteClip(plan: Plan, clip: Clip, delta: Point): Item[] {
     items.push({ kind: "dimension", id: copy.id });
   }
   for (const stair of clip.stairs) {
-    const copy = addStair(plan, add(stair.a, delta), add(stair.b, delta), stair.width);
+    // The copy keeps the kind, the turn, and the second flight of the stair.
+    const copy = { ...stair, id: newId("s"), a: add(stair.a, delta), b: add(stair.b, delta) };
+    plan.stairs.push(copy);
     items.push({ kind: "stair", id: copy.id });
   }
   for (const chimney of clip.chimneys) {
     const copy = { ...chimney, id: newId("c"), ...add(chimney, delta) };
     plan.chimneys.push(copy);
     items.push({ kind: "chimney", id: copy.id });
+  }
+  for (const piece of clip.furniture) {
+    const copy = { ...structuredClone(piece), id: newId("f"), ...add(piece, delta) };
+    plan.furniture.push(copy);
+    items.push({ kind: "furniture", id: copy.id });
+  }
+  for (const fixture of clip.fixtures) {
+    const copy = { ...structuredClone(fixture), id: newId("x"), ...add(fixture, delta) };
+    plan.fixtures.push(copy);
+    ids.set(fixture.id, copy.id);
+    items.push({ kind: "fixture", id: copy.id });
+  }
+  for (const run of clip.runs) {
+    // A line keeps its connection only to a device that the clip also contains.
+    const copy = {
+      ...structuredClone(run),
+      id: newId("n"),
+      points: run.points.map((p) => add(p, delta)),
+      from: run.from ? (ids.get(run.from) ?? null) : null,
+      to: run.to ? (ids.get(run.to) ?? null) : null,
+    };
+    plan.runs.push(copy);
+    items.push({ kind: "run", id: copy.id });
   }
   return items;
 }
@@ -467,7 +585,7 @@ export function wallMoveTargets(
   const length = distance(a0, b0);
   if (length === 0) return [a0, b0];
   const dir = scale(sub(b0, a0), 1 / length);
-  const move = scale({ x: -dir.y, y: dir.x }, shift);
+  const move = scale(perpendicular(dir), shift);
   const target = (end: Id, start: Point): Point => {
     const straight = add(start, move);
     const others = plan.walls.filter((w) => w.id !== wall.id && (w.a === end || w.b === end));
@@ -475,7 +593,7 @@ export function wallMoveTargets(
     const other = others[0];
     const far = getVertex(plan, other.a === end ? other.b : other.a);
     const along = sub(start, far);
-    if (Math.hypot(along.x, along.y) === 0) return straight;
+    if (vectorLength(along) === 0) return straight;
     // An almost parallel wall puts the intersection very far away. Then the end moves straight.
     const hit = intersectLines(straight, dir, far, along);
     return hit && distance(hit, straight) < 5 * Math.abs(shift) + 0.5 ? hit : straight;

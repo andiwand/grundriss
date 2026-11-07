@@ -28,9 +28,14 @@ _Grundriss_ is the German word for a floor plan.
    story. The panel changes it to an L stair or a U stair with a landing. Select **Chimney**
    and click where it goes.
 10. Click in a room to give it a name and its own clear height.
-11. Without a selection, the panel shows the story, the north direction, and the roof. Drag the
+11. Click **Furniture** (I) and choose a piece. Click on the plan to place it. Near a wall, its
+    back goes against the wall. R turns it, and the panel sets its size.
+12. Click **Services** (E) and choose a device or a line. A device for a wall goes against the
+    wall. A line connects to devices; a double click ends it. The **Layers** menu shows or hides
+    electricity, heating, PV, and the insulation.
+13. Without a selection, the panel shows the story, the north direction, and the roof. Drag the
     compass at the top right to turn north.
-12. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
+14. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
     model.
 
 | Key                      | Action                                            |
@@ -79,8 +84,53 @@ The browser downloads it (about 10 MB) the first time that you use one of them.
 3. **Suggest walls**: the app finds the thick dark lines of the walls and shows them in green.
    Click a suggestion to reject it. Then click **Add walls**.
 
-The suggestions find walls with a solid fill. They do not find walls drawn as two thin lines. A
+4. **Recognize plan**: a neural network finds the walls, the doors, and the windows. Doors show
+   in orange and windows in blue. Click a suggestion to reject it. Then click **Add walls**.
+   The network runs in your browser. The first time, the browser downloads about 15 MB.
+
+The network learned only from synthetic plans that Grundriss generates. It can make mistakes on
+real scans, so check the result. The suggestions of step 3 find walls with a solid fill. They do not find walls drawn as two thin lines. A
 door gap stays open, so put a door in it and close the wall. Undo removes each step.
+
+### Roofs
+
+Without a selection, the panel lists the roofs. **Gable**, **Hip**, **Shed**, and **Flat** add a
+roof on the outline of the walls of the active story. Click a roof to change it:
+
+- **Sides**: each side of the outline is an **eave** (a face rises from it with its pitch) or a
+  **gable** (a vertical wall). The plan shows the number of each side. The gable preset puts a
+  gable at the end of each wing.
+- **Outline**: drag the corners on the plan. Drag a + in the middle of a side to add a corner.
+  Select a corner and press Delete to remove it. A second roof, for example of a garage, can have
+  its own outline.
+- **Eave height**: by default the top of the walls of the story.
+- **Dormers** and **roof windows** go on an eave side, at a position along the side and a
+  distance from the eave.
+
+### Energy and photovoltaic
+
+Without a selection, the panel shows the energy of the building:
+
+- **Energy**: the heat loss of the building in kW and in W/m². The groups below set the layers of
+  the outer walls, the roof, and the floor on the ground, the U-values of windows and doors, and
+  the temperatures. A click on a room shows its heat loss and its heating. A click on a wall
+  shows its U-value, and the wall can get its own layers.
+- **Photovoltaic**: **Add a PV field** fills the best face of the roof with panels. The field
+  gives the number of panels, the peak power, and the yield per year.
+
+The values are estimates for planning. They are not a calculation by a standard and not an
+energy certificate.
+
+### Furniture sources
+
+- **Generic**: simple shapes that the app makes, with any size.
+- **Kenney**: the [Furniture Kit](https://kenney.nl/assets/furniture-kit) by Kenney, CC0 1.0. The
+  app contains it, so it works offline.
+- **Poly Haven**: realistic models from [polyhaven.com](https://polyhaven.com), CC0 1.0. The app
+  asks Poly Haven for the list and downloads a model when you choose it. The plan file then
+  contains the model.
+- **Imported**: your own `.glb` files, or `.gltf` files with embedded data. Check the license of
+  each model yourself.
 
 ## Develop
 

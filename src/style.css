@@ -629,10 +629,11 @@ button.ghost:hover:not(:disabled) {
   margin-top: 4px;
 }
 
-/* Two buttons fit in a row. A third button goes to a new row and fills it. */
+/* Two buttons fit in a row. A third button goes to a new row and fills it. A button with a long
+   text that does not fit in half a row goes to its own row, so that its text stays inside it. */
 #panel .actions button {
   flex: 1 1 calc(50% - 4px);
-  min-width: 0;
+  min-width: min(max-content, 100%);
 }
 
 .stats {
@@ -716,6 +717,9 @@ button.ghost:hover:not(:disabled) {
 .editor2d[data-tool="dimension"],
 .editor2d[data-tool="stair"],
 .editor2d[data-tool="chimney"],
+.editor2d[data-tool="furniture"],
+.editor2d[data-tool="fixture"],
+.editor2d[data-tool="run"],
 .editor2d[data-tool="rectify"],
 .editor2d[data-tool="calibrate"] {
   cursor: crosshair;
@@ -1004,6 +1008,7 @@ button.ghost:hover:not(:disabled) {
 }
 
 .stair .step {
+  fill: none;
   stroke: var(--wall);
   stroke-width: 1;
 }
@@ -1012,10 +1017,6 @@ button.ghost:hover:not(:disabled) {
   fill: none;
   stroke: var(--wall);
   stroke-width: 1.2;
-}
-
-.stair .step {
-  fill: none;
 }
 
 .stair .landing {
@@ -1075,6 +1076,20 @@ button.ghost:hover:not(:disabled) {
   stroke-width: 1.2;
   stroke-dasharray: 8 4;
   pointer-events: none;
+}
+
+/* The lines of 1 m and 2 m clear height under a pitched roof (WoFlV). */
+
+.clear-height line {
+  stroke: #7a5c99;
+  stroke-width: 0.8;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.clear-height line.low {
+  stroke-dasharray: 2 4;
+  opacity: 0.7;
 }
 
 /* The list of stories, at the bottom left of the 2D editor. */
@@ -1207,6 +1222,514 @@ button.ghost:hover:not(:disabled) {
   color: var(--accent-ink);
 }
 
-#panel input[type="text"] {
+/* Furniture on the plan. The box covers the fill of the room. */
+
+.piece {
+  cursor: move;
+}
+
+.piece .box {
+  fill: var(--paper);
+  stroke: var(--ink-2);
+  stroke-width: 1.2;
+}
+
+.piece .part {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 0.8;
+}
+
+.piece .piece-name {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  fill: var(--ink-2);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.piece:hover .box,
+.piece.selected .box {
+  stroke: var(--accent);
+}
+
+.piece.selected .box {
+  fill: var(--accent-soft);
+}
+
+.piece.selected .part {
+  stroke: var(--accent);
+}
+
+.piece.ghost {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.overlay .ghost-box {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+/* The furniture catalog: a drawer at the left of the 2D editor. */
+
+.catalog {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100% - 24px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.catalog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 6px 14px;
+  font-weight: 600;
+}
+
+.catalog .tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 10px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.catalog .tabs button {
+  flex: 1;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.catalog .tabs button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.catalog .search {
+  margin: 8px 10px;
+}
+
+.catalog .search input {
   font: inherit;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  outline: none;
+}
+
+.catalog .search input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.catalog .body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 10px;
+}
+
+.catalog h3 {
+  margin: 10px 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.catalog .cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.catalog .card {
+  flex-direction: column;
+  height: auto;
+  padding: 6px 4px;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: normal;
+  text-align: center;
+  background: var(--surface);
+}
+
+.catalog .card .thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.catalog .card .thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.catalog .card .thumb svg {
+  width: 80%;
+  height: 80%;
+}
+
+.catalog .card .thumb svg .shape {
+  fill: var(--surface);
+  stroke: var(--ink-2);
+}
+
+.catalog .card .thumb svg .line {
+  stroke: var(--ink-2);
+}
+
+.catalog .card small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.catalog .card.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.catalog .note {
+  margin: 8px 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.catalog .note.error {
+  color: var(--danger);
+}
+
+/* Doors and windows that the recognition suggests. */
+
+/* The rule needs `.editor2d`, so that it wins over the non-scaling stroke of `.editor2d line`. */
+.editor2d .opening-suggestion {
+  stroke-linecap: butt;
+  stroke-opacity: 0.85;
+  cursor: pointer;
+  vector-effect: none;
+}
+
+.opening-suggestion.door {
+  stroke: #f08c00;
+}
+
+.opening-suggestion.window {
+  stroke: #1c7ed6;
+}
+
+.opening-suggestion.rejected {
+  stroke: var(--danger);
+  stroke-opacity: 0.3;
+}
+
+/* Devices and lines of the building services. */
+
+.fixture {
+  cursor: move;
+}
+
+.fixture .hit,
+.run .hit {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.run .hit {
+  fill: none;
+  stroke-width: 12;
+}
+
+.fixture .shape {
+  fill: var(--paper);
+  stroke-width: 1.3;
+}
+
+.fixture .stroke {
+  fill: none;
+  stroke-width: 1.3;
+}
+
+.fixture.electric .shape,
+.fixture.electric .stroke {
+  stroke: #d9480f;
+}
+
+.fixture.electric .fill {
+  fill: #d9480f;
+}
+
+.fixture.heating .shape,
+.fixture.heating .stroke {
+  stroke: #c92a2a;
+}
+
+.fixture.heating .fill {
+  fill: #c92a2a;
+}
+
+.fixture.selected .shape,
+.fixture.selected .stroke {
+  stroke: var(--accent);
+}
+
+.fixture.selected .shape {
+  fill: var(--accent-soft);
+}
+
+.fixture.ghost {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.run {
+  cursor: move;
+}
+
+.run .line,
+.overlay .run-preview {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.run.selected .line {
+  stroke-width: 3.5;
+}
+
+.overlay .run-preview {
+  opacity: 0.7;
+}
+
+.services-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 360px;
+}
+
+.services-menu h4 {
+  grid-column: span 2;
+  margin: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.services-menu button {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+
+.services-menu svg.symbol {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.services-menu .swatch {
+  width: 22px;
+  height: 3px;
+  flex: none;
+  border-radius: 2px;
+}
+
+.menu .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.menu .check:hover {
+  background: var(--surface-2);
+}
+
+/* Groups that open and close in the panel, and the rows of a layer editor. */
+
+/* The margin below gives the space between the rows. A gap here adds to it, so there is no gap.
+   Not all browsers make a details element a flex container, but all apply the margin. */
+#panel details.group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+#panel details.group[open] {
+  padding-bottom: 10px;
+}
+
+#panel details.group > summary {
+  cursor: pointer;
+  color: var(--ink-2);
+  font-weight: 500;
+  padding: 2px 0;
+}
+
+#panel details.group > * + * {
+  margin-top: 8px;
+}
+
+#panel .layer-row {
+  display: grid;
+  grid-template-columns: 1fr 52px auto 28px;
+  align-items: center;
+  gap: 4px;
+}
+
+#panel .layer-row select,
+#panel .layer-row input,
+#panel .side-row select,
+#panel .side-row input {
+  font: inherit;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 0 4px;
+}
+
+#panel .layer-row span {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+#panel .layer-row .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+#panel .check-field input {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+#panel p.warning {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* The insulation layer: the outer walls in the color of their U-value. */
+
+/* The rule needs `.editor2d`, so that it wins over the non-scaling stroke of `.editor2d line`. */
+.editor2d .insulation-wall {
+  fill: none;
+  stroke-linecap: butt;
+  stroke-opacity: 0.85;
+  pointer-events: none;
+  vector-effect: none;
+}
+
+.heat-label {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-weight: 700;
+  fill: #c92a2a;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* The outline of a selected roof, with its corners and the handles that add a corner. */
+
+.roof-outline .outline {
+  fill: rgb(176 83 47 / 0.08);
+  stroke: #b0532f;
+  stroke-width: 1.5;
+}
+
+.roof-outline .corner {
+  fill: var(--surface);
+  stroke: #b0532f;
+  stroke-width: 1.5;
+  cursor: move;
+  vector-effect: non-scaling-stroke;
+}
+
+.roof-outline .corner.selected {
+  fill: #b0532f;
+}
+
+.roof-outline .insert {
+  fill: var(--surface);
+  stroke: #b0532f;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  cursor: copy;
+}
+
+/* A row of the table of the sides of a roof: the number, the kind, the pitch, the overhang. */
+
+#panel .side-row {
+  display: grid;
+  grid-template-columns: 18px 1fr 52px 56px;
+  align-items: center;
+  gap: 4px;
+}
+
+#panel .side-row span {
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: right;
+}
+
+#panel .side-row input:disabled {
+  opacity: 0.4;
+}
+
+.roof-outline .side-number {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-weight: 700;
+  fill: #b0532f;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-linejoin: round;
+  pointer-events: none;
 }

@@ -10,12 +10,17 @@ import {
   stairDrawing,
   wallOutline,
 } from "../model/drawing";
-import { riseOf, type StoryExtras } from "./context";
+import { furnitureSymbol } from "../model/furniture";
+import { fixtureSymbol, runKind } from "../model/services";
+import { grow, riseOf, withFurniture, type StoryExtras } from "./context";
 import { findRooms, roomLabel } from "../model/rooms";
 
 import type { Plan, Point } from "../model/types";
 
 const MARGIN = 0.5;
+/** The colors of the devices of each system. The lines use the colors of their kinds. */
+export const SERVICE_COLORS = { electric: "#d9480f", heating: "#c92a2a" } as const;
+
 const COLORS = {
   wall: "#262c38",
   room: "#f1e6d2",
@@ -24,6 +29,10 @@ const COLORS = {
   dimension: "#2f6bff",
   paper: "#ffffff",
   stair: "#4b5363",
+  furniture: "#5b6474",
+  /** The fill of the box of a piece, so that it covers the room fill. */
+  furnitureFill: "#fbfaf7",
+  furnitureDetail: "#eceae4",
   /** A chimney of a story below that passes through. */
   through: "#9aa1ad",
 };
@@ -46,23 +55,21 @@ export interface SvgOptions extends StoryExtras {
 }
 
 export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
-  const box = planBounds(plan) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   const through = options.through ?? [];
-  for (const chimney of through) {
-    for (const p of chimneySymbol(chimney).outline) {
-      box.minX = Math.min(box.minX, p.x);
-      box.minY = Math.min(box.minY, p.y);
-      box.maxX = Math.max(box.maxX, p.x);
-      box.maxY = Math.max(box.maxY, p.y);
-    }
-  }
   const background = options.background ? plan.background : null;
-  if (background) {
-    box.minX = Math.min(box.minX, background.x);
-    box.minY = Math.min(box.minY, background.y);
-    box.maxX = Math.max(box.maxX, background.x + background.width * background.scale);
-    box.maxY = Math.max(box.maxY, background.y + background.height * background.scale);
-  }
+  const corners = background
+    ? [
+        { x: background.x, y: background.y },
+        {
+          x: background.x + background.width * background.scale,
+          y: background.y + background.height * background.scale,
+        },
+      ]
+    : [];
+  const box = grow(withFurniture(planBounds(plan), plan), [
+    ...through.flatMap((chimney) => chimneySymbol(chimney).outline),
+    ...corners,
+  ]) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   const font = textSize(plan);
   const line = font / 12;
   // The north arrow stands in a column on the right of the plan.
@@ -97,6 +104,33 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
   out.push(`<g id="rooms" fill="${COLORS.room}" stroke="none">`);
   for (const room of rooms) out.push(`<polygon points="${points(room.polygon)}"/>`);
   out.push(`</g>`);
+
+  // The furniture is above the rooms and below the walls.
+  if (plan.furniture.length > 0) {
+    out.push(
+      `<g id="furniture" stroke="${COLORS.furniture}" stroke-width="${n(line)}" ` +
+        `stroke-linejoin="round">`,
+    );
+    for (const piece of plan.furniture) {
+      const symbol = furnitureSymbol(piece);
+      symbol.shapes.forEach((shape, i) => {
+        const fill = i === 0 ? COLORS.furnitureFill : COLORS.furnitureDetail;
+        out.push(`<polygon points="${points(shape)}" fill="${fill}"/>`);
+      });
+      for (const [a, b] of symbol.lines) {
+        out.push(`<line x1="${n(a.x)}" y1="${n(a.y)}" x2="${n(b.x)}" y2="${n(b.y)}"/>`);
+      }
+      // A piece with a model has no plan symbol, so its name tells what it is.
+      if (piece.source.kind === "model" && piece.name) {
+        out.push(
+          `<text x="${n(piece.x)}" y="${n(piece.y)}" stroke="none" fill="${COLORS.furniture}" ` +
+            `font-size="${n(font * 0.7)}" text-anchor="middle" dominant-baseline="middle">` +
+            `${escape(piece.name)}</text>`,
+        );
+      }
+    }
+    out.push(`</g>`);
+  }
 
   out.push(`<g id="walls" fill="${COLORS.wall}" stroke="none">`);
   for (const wall of plan.walls) {
@@ -146,6 +180,35 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
     });
   }
   out.push(`</g>`);
+
+  // The building services are above the furniture, the walls, and the room labels, and below
+  // the dimensions. Each line has the color of its kind.
+  if (plan.runs.length > 0 || plan.fixtures.length > 0) {
+    out.push(
+      `<g id="services" fill="none" stroke-width="${n(line * 1.5)}" stroke-linecap="round" ` +
+        `stroke-linejoin="round">`,
+    );
+    for (const run of plan.runs) {
+      if (run.points.length < 2) continue;
+      const kind = runKind(run.kind);
+      const dash = kind.dashed ? ` stroke-dasharray="${n(line * 6)} ${n(line * 4)}"` : "";
+      out.push(`<polyline points="${points(run.points)}" stroke="${kind.color}"${dash}/>`);
+    }
+    for (const fixture of plan.fixtures) {
+      const color = SERVICE_COLORS[fixture.system];
+      const symbol = fixtureSymbol(fixture);
+      out.push(`<g class="fixture ${escape(fixture.type)}" stroke="${color}">`);
+      for (const shape of symbol.shapes) {
+        out.push(`<polygon points="${points(shape)}" fill="${COLORS.paper}"/>`);
+      }
+      for (const polyline of symbol.lines) out.push(`<polyline points="${points(polyline)}"/>`);
+      for (const shape of symbol.filled) {
+        out.push(`<polygon points="${points(shape)}" fill="${color}"/>`);
+      }
+      out.push(`</g>`);
+    }
+    out.push(`</g>`);
+  }
 
   out.push(
     `<g id="dimensions" stroke="${COLORS.dimension}" stroke-width="${n(line)}" ` +

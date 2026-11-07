@@ -8,6 +8,7 @@ import {
   mergeVertex,
   removeVertex,
   removeWall,
+  setWallLength,
   splitWall,
   wallExtents,
 } from "../src/model/plan";
@@ -96,6 +97,46 @@ describe("plan", () => {
     expect(plan.walls.every((w) => w.a !== w.b)).toBe(true);
   });
 
+  it("moves the openings of a copy of a wall to the wall that stays", () => {
+    const plan = emptyPlan();
+    const a = addVertex(plan, { x: 0, y: 0 });
+    const b = addVertex(plan, { x: 4, y: 0 });
+    const c = addVertex(plan, { x: 4, y: 0.1 });
+    const kept = addWall(plan, a.id, b.id)!;
+    // The copy goes from c to a, so it has the direction opposite to the kept wall.
+    const copy = addWall(plan, c.id, a.id)!;
+    const door = addOpening(plan, copy.id, "door", 1);
+    door.hinge = "a";
+    door.swing = 1;
+    const window = addOpening(plan, copy.id, "window", 3.9);
+    const before = window.offset;
+    mergeVertex(plan, c.id, b.id);
+    expect(plan.walls).toEqual([kept]);
+    expect(plan.openings).toHaveLength(2);
+    expect(door.wallId).toBe(kept.id);
+    expect(door.offset).toBeCloseTo(3);
+    expect(door.hinge).toBe("b");
+    expect(door.swing).toBe(-1);
+    // The offset of the window counts from the other end now.
+    expect(window.wallId).toBe(kept.id);
+    expect(window.offset).toBeCloseTo(4 - before, 2);
+  });
+
+  it("keeps the offset of an opening on a copy in the same direction", () => {
+    const plan = emptyPlan();
+    const a = addVertex(plan, { x: 0, y: 0 });
+    const b = addVertex(plan, { x: 4, y: 0 });
+    const c = addVertex(plan, { x: 4, y: 0.1 });
+    const kept = addWall(plan, a.id, b.id)!;
+    const copy = addWall(plan, a.id, c.id)!;
+    const door = addOpening(plan, copy.id, "door", 1);
+    mergeVertex(plan, c.id, b.id);
+    expect(plan.walls).toEqual([kept]);
+    expect(door.wallId).toBe(kept.id);
+    expect(door.offset).toBeCloseTo(1);
+    expect(door.hinge).toBe("a");
+  });
+
   it("extends a wall at the corners only", () => {
     const plan = emptyPlan();
     const a = addVertex(plan, { x: 0, y: 0 });
@@ -110,5 +151,13 @@ describe("plan", () => {
     const plan = rectangle(4, 3);
     const door = addOpening(plan, plan.walls[0].id, "door", 10);
     expect(door.offset).toBeCloseTo(4 - door.width / 2);
+  });
+
+  it("does not change a wall to a length of zero", () => {
+    const plan = rectangle(4, 3);
+    setWallLength(plan, plan.walls[0].id, 0);
+    expect(plan.vertices[1]).toMatchObject({ x: 4, y: 0 });
+    setWallLength(plan, plan.walls[0].id, 2);
+    expect(plan.vertices[1]).toMatchObject({ x: 2, y: 0 });
   });
 });

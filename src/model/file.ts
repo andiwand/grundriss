@@ -1,5 +1,5 @@
 // The file format: JSON with a format name and a version. A change that old versions of the app
-// cannot read needs a new version and a migration in parsePlan.
+// cannot read needs a new version and a migration in parseBuilding.
 //
 // A new field that old versions can ignore needs no new version. parsePlan gives it a default
 // value when a file does not have it. Examples: `hinge` and `swing` of an opening, and
@@ -13,16 +13,29 @@ import type {
   Building,
   Chimney,
   Dimension,
+  Dormer,
+  Envelope,
+  Fixture,
+  Furniture,
+  Layer,
+  Model,
   Opening,
   Plan,
   Point,
+  PvArray,
   Roof,
+  RoofSide,
+  RoofWindow,
   RoomInfo,
+  Run,
   Stair,
   Story,
   Vertex,
   Wall,
 } from "./types";
+
+import { defaultEnvelope } from "./insulation";
+import { storyBox } from "./roof";
 
 export const FILE_FORMAT = "grundriss";
 export const FILE_VERSION = 2;
@@ -52,6 +65,10 @@ function string(data: Data, key: string, where: string): string {
   return value;
 }
 
+/** The value if it is a finite number, else the fallback. */
+const finite = <T>(value: unknown, fallback: T): number | T =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
 function list(data: Data, key: string): Data[] {
   const value = data[key] ?? [];
   if (!Array.isArray(value) || !value.every(isObject)) {
@@ -79,7 +96,14 @@ export function parseBuilding(text: string): Building {
       height: 2.75,
       ...parsePlanData(data, ""),
     };
-    return { stories: [story], roof: null, north: 0 };
+    return {
+      stories: [story],
+      roofs: [],
+      north: 0,
+      models: [],
+      envelope: defaultEnvelope(),
+      pv: [],
+    };
   }
   if (data.version !== FILE_VERSION) {
     throw new Error(
@@ -100,30 +124,205 @@ export function parseBuilding(text: string): Building {
   if (stories.length === 0) throw new Error("The file is damaged: it has no story.");
   stories.sort((a, b) => a.elevation - b.elevation);
 
-  let roof: Roof | null = null;
+  const roofs: Roof[] = list(data, "roofs").map((r, i) => parseRoof(r, `roof ${i}`));
+  // Files before the roofs had one roof on the box around the walls of its story.
   if (data.roof != null) {
     if (!isObject(data.roof)) throw new Error('The file is damaged: invalid "roof".');
-    const r = data.roof;
-    const kind = r.kind;
-    if (kind !== "gable" && kind !== "hip" && kind !== "flat" && kind !== "shed") {
-      throw new Error('The file is damaged: the roof has no valid "kind".');
-    }
-    roof = {
-      kind,
-      storyId: string(r, "storyId", "the roof"),
-      pitch: number(r, "pitch", "the roof"),
-      overhang: number(r, "overhang", "the roof"),
-      ridge: r.ridge === "y" ? "y" : "x",
-    };
-    if (!stories.some((s) => s.id === roof!.storyId)) {
-      throw new Error("The file is damaged: the roof refers to a story that does not exist.");
+    const old = oldRoof(data.roof, stories);
+    if (old) roofs.push(old);
+  }
+  for (const roof of roofs) {
+    if (!stories.some((s) => s.id === roof.storyId)) {
+      throw new Error(`The file is damaged: ${roof.name} refers to a story that does not exist.`);
     }
   }
-  const north = typeof data.north === "number" && Number.isFinite(data.north) ? data.north : 0;
-  return { stories, roof, north };
+  const north = finite(data.north, 0);
+  const models: Model[] = list(data, "models").map((m, i) => {
+    const where = `model ${i}`;
+    const origin = m.origin;
+    if (origin !== "import" && origin !== "kenney" && origin !== "polyhaven") {
+      throw new Error(`The file is damaged: ${where} has no valid "origin".`);
+    }
+    if (!isObject(m.size)) throw new Error(`The file is damaged: ${where} has no valid "size".`);
+    return {
+      id: string(m, "id", where),
+      name: string(m, "name", where),
+      origin,
+      ref: typeof m.ref === "string" ? m.ref : "",
+      data: m.data == null ? null : string(m, "data", where),
+      size: {
+        x: number(m.size, "x", where),
+        y: number(m.size, "y", where),
+        z: number(m.size, "z", where),
+      },
+      license: typeof m.license === "string" ? m.license : "",
+      credit: typeof m.credit === "string" ? m.credit : "",
+    };
+  });
+  const modelIds = new Set(models.map((m) => m.id));
+  for (const story of stories) {
+    for (const piece of story.furniture) {
+      if (piece.source.kind === "model" && !modelIds.has(piece.source.modelId)) {
+        throw new Error(
+          `The file is damaged: furniture "${piece.name}" refers to a model that does not exist.`,
+        );
+      }
+    }
+  }
+  const envelope = parseEnvelope(data.envelope);
+  const pv: PvArray[] = list(data, "pv").map((d, i) => {
+    const where = `PV field ${i}`;
+    return {
+      id: string(d, "id", where),
+      // A field of a file before the roofs is on the only roof.
+      roofId: typeof d.roofId === "string" ? d.roofId : (roofs[0]?.id ?? ""),
+      face: number(d, "face", where),
+      panelWidth: number(d, "panelWidth", where),
+      panelHeight: number(d, "panelHeight", where),
+      panelPower: number(d, "panelPower", where),
+      portrait: d.portrait !== false,
+      margin: number(d, "margin", where),
+      gap: number(d, "gap", where),
+      limit: d.limit == null ? null : number(d, "limit", where),
+    };
+  });
+  return { stories, roofs, north, models, envelope, pv };
 }
 
-/** Reads the floor plan of one story. `where` names the story in the error messages. */
+function pointOf(data: unknown, where: string): Point {
+  if (!isObject(data)) throw new Error(`The file is damaged: ${where} is not a point.`);
+  return { x: number(data, "x", where), y: number(data, "y", where) };
+}
+
+/** Reads a roof: its outline, one side for each side of the outline, dormers, and windows. */
+function parseRoof(r: Data, where: string): Roof {
+  if (!Array.isArray(r.outline) || r.outline.length < 3) {
+    throw new Error(`The file is damaged: ${where} has no valid outline.`);
+  }
+  const outline = r.outline.map((p, i) => pointOf(p, `${where}, point ${i}`));
+  const sides: RoofSide[] = list(r, "sides").map((side, i) => {
+    const at = `${where}, side ${i}`;
+    return {
+      kind: side.kind === "gable" ? "gable" : "eave",
+      pitch: number(side, "pitch", at),
+      overhang: number(side, "overhang", at),
+    };
+  });
+  if (sides.length !== outline.length) {
+    throw new Error(`The file is damaged: ${where} needs one side for each side of its outline.`);
+  }
+  const dormers: Dormer[] = list(r, "dormers").map((d, i) => {
+    const at = `${where}, dormer ${i}`;
+    const kind = d.kind === "shed" || d.kind === "flat" ? d.kind : "gable";
+    return {
+      id: string(d, "id", at),
+      side: number(d, "side", at),
+      offset: number(d, "offset", at),
+      distance: number(d, "distance", at),
+      width: number(d, "width", at),
+      height: number(d, "height", at),
+      kind,
+      pitch: number(d, "pitch", at),
+    };
+  });
+  const windows: RoofWindow[] = list(r, "windows").map((w, i) => {
+    const at = `${where}, window ${i}`;
+    return {
+      id: string(w, "id", at),
+      side: number(w, "side", at),
+      offset: number(w, "offset", at),
+      distance: number(w, "distance", at),
+      width: number(w, "width", at),
+      length: number(w, "length", at),
+    };
+  });
+  return {
+    id: string(r, "id", where),
+    name: typeof r.name === "string" ? r.name : "Roof",
+    storyId: string(r, "storyId", where),
+    outline,
+    sides,
+    base: r.base == null ? null : number(r, "base", where),
+    flat: r.flat === true,
+    dormers,
+    windows,
+  };
+}
+
+/**
+ * Converts the single roof of an older file: { kind, storyId, pitch, overhang, ridge }. The new
+ * roof has the outline of the box around the walls of the story, and the kind and the ridge
+ * decide its sides. The sides of the box go: 0 along x at the small y, 1 along y at the large x,
+ * 2 along x at the large y, 3 along y at the small x.
+ */
+function oldRoof(r: Data, stories: Story[]): Roof | null {
+  const kind = r.kind;
+  if (kind !== "gable" && kind !== "hip" && kind !== "flat" && kind !== "shed") {
+    throw new Error('The file is damaged: the roof has no valid "kind".');
+  }
+  const storyId = string(r, "storyId", "the roof");
+  const story = stories.find((s) => s.id === storyId);
+  if (!story) {
+    throw new Error("The file is damaged: the roof refers to a story that does not exist.");
+  }
+  const outline = storyBox(story);
+  if (!outline) return null;
+  const pitch = number(r, "pitch", "the roof");
+  const overhang = number(r, "overhang", "the roof");
+  const alongX = r.ridge !== "y";
+  const eaves: number[] =
+    kind === "hip" || kind === "flat"
+      ? [0, 1, 2, 3]
+      : kind === "gable"
+        ? alongX
+          ? [0, 2]
+          : [1, 3]
+        : // The old shed roof was high at the small side across the ridge, so its eave is at the
+          // large side.
+          alongX
+          ? [2]
+          : [1];
+  return {
+    id: "roof-1",
+    name: "Roof 1",
+    storyId,
+    outline,
+    sides: outline.map((_, i) => ({
+      kind: eaves.includes(i) ? "eave" : "gable",
+      pitch: kind === "flat" ? 0 : pitch,
+      overhang,
+    })),
+    base: null,
+    flat: kind === "flat",
+    dormers: [],
+    windows: [],
+  };
+}
+
+/** Reads a list of layers. */
+function layers(data: Data, key: string, where: string): Layer[] {
+  return list(data, key).map((l, i) => ({
+    material: string(l, "material", `${where}, layer ${i}`),
+    thickness: number(l, "thickness", `${where}, layer ${i}`),
+  }));
+}
+
+/** Reads the envelope. A file without it gets the default envelope. */
+function parseEnvelope(data: unknown): Envelope {
+  const defaults = defaultEnvelope();
+  if (!isObject(data)) return defaults;
+  return {
+    wall: data.wall == null ? defaults.wall : layers(data, "wall", "the outer walls"),
+    roof: data.roof == null ? defaults.roof : layers(data, "roof", "the roof"),
+    floor: data.floor == null ? defaults.floor : layers(data, "floor", "the floor"),
+    windowU: finite(data.windowU, defaults.windowU),
+    doorU: finite(data.doorU, defaults.doorU),
+    outside: finite(data.outside, defaults.outside),
+    inside: finite(data.inside, defaults.inside),
+  };
+}
+
+/** Reads the floor plan of one story. `prefix` names the story in the error messages. */
 function parsePlanData(data: Data, prefix: string): Plan {
   const vertices: Vertex[] = list(data, "vertices").map((v, i) => ({
     id: string(v, "id", `${prefix}vertex ${i}`),
@@ -139,6 +338,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
       a: string(w, "a", where),
       b: string(w, "b", where),
       thickness: number(w, "thickness", where),
+      layers: w.layers == null ? null : layers(w, "layers", where),
       height: number(w, "height", where),
     };
     if (!vertexIds.has(wall.a) || !vertexIds.has(wall.b)) {
@@ -171,16 +371,12 @@ function parsePlanData(data: Data, prefix: string): Plan {
     return opening;
   });
 
-  const point = (data: unknown, where: string): Point => {
-    if (!isObject(data)) throw new Error(`The file is damaged: ${where} is not a point.`);
-    return { x: number(data, "x", where), y: number(data, "y", where) };
-  };
   const dimensions: Dimension[] = list(data, "dimensions").map((d, i) => {
     const where = `${prefix}dimension ${i}`;
     return {
       id: string(d, "id", where),
-      a: point(d.a, `${where}, point a`),
-      b: point(d.b, `${where}, point b`),
+      a: pointOf(d.a, `${where}, point a`),
+      b: pointOf(d.b, `${where}, point b`),
       offset: number(d, "offset", where),
     };
   });
@@ -189,12 +385,12 @@ function parsePlanData(data: Data, prefix: string): Plan {
     const where = `${prefix}stair ${i}`;
     return {
       id: string(d, "id", where),
-      a: point(d.a, `${where}, point a`),
-      b: point(d.b, `${where}, point b`),
+      a: pointOf(d.a, `${where}, point a`),
+      b: pointOf(d.b, `${where}, point b`),
       width: number(d, "width", where),
       kind: d.kind === "l" || d.kind === "u" ? d.kind : "straight",
       turn: d.turn === -1 ? -1 : 1,
-      run2: typeof d.run2 === "number" && Number.isFinite(d.run2) ? d.run2 : 1,
+      run2: finite(d.run2, 1),
     };
   });
   const rooms: RoomInfo[] = list(data, "rooms").map((d, i) => {
@@ -202,9 +398,62 @@ function parsePlanData(data: Data, prefix: string): Plan {
     return {
       id: string(d, "id", where),
       key: typeof d.key === "string" ? d.key : "",
-      at: point(d.at, where),
+      at: pointOf(d.at, where),
       name: typeof d.name === "string" ? d.name : "",
+      floorHeating: d.floorHeating === true,
+      temperature: finite(d.temperature, null),
       height: d.height == null ? null : number(d, "height", where),
+    };
+  });
+  const furniture: Furniture[] = list(data, "furniture").map((d, i) => {
+    const where = `${prefix}furniture ${i}`;
+    const source = d.source;
+    if (!isObject(source)) throw new Error(`The file is damaged: ${where} has no valid "source".`);
+    return {
+      id: string(d, "id", where),
+      source:
+        source.kind === "model"
+          ? { kind: "model", modelId: string(source, "modelId", where) }
+          : { kind: "generic", type: string(source, "type", where) },
+      name: typeof d.name === "string" ? d.name : "",
+      x: number(d, "x", where),
+      y: number(d, "y", where),
+      rotation: number(d, "rotation", where),
+      width: number(d, "width", where),
+      depth: number(d, "depth", where),
+      height: number(d, "height", where),
+      elevation: finite(d.elevation, 0),
+    };
+  });
+  const fixtures: Fixture[] = list(data, "fixtures").map((d, i) => {
+    const where = `${prefix}device ${i}`;
+    return {
+      id: string(d, "id", where),
+      system: d.system === "heating" ? "heating" : "electric",
+      type: string(d, "type", where),
+      x: number(d, "x", where),
+      y: number(d, "y", where),
+      rotation: number(d, "rotation", where),
+      elevation: number(d, "elevation", where),
+      width: number(d, "width", where),
+      power: d.power == null ? null : number(d, "power", where),
+      label: typeof d.label === "string" ? d.label : "",
+    };
+  });
+  const fixtureIds = new Set(fixtures.map((f) => f.id));
+  const runs: Run[] = list(data, "runs").map((d, i) => {
+    const where = `${prefix}line ${i}`;
+    if (!Array.isArray(d.points)) throw new Error(`The file is damaged: ${where} has no points.`);
+    const link = (key: string) =>
+      typeof d[key] === "string" && fixtureIds.has(d[key] as string) ? (d[key] as string) : null;
+    return {
+      id: string(d, "id", where),
+      system: d.system === "heating" ? "heating" : "electric",
+      kind: string(d, "kind", where),
+      points: d.points.map((p, j) => pointOf(p, `${where}, point ${j}`)),
+      elevation: number(d, "elevation", where),
+      from: link("from"),
+      to: link("to"),
     };
   });
   const chimneys: Chimney[] = list(data, "chimneys").map((d, i) => {
@@ -234,5 +483,17 @@ function parsePlanData(data: Data, prefix: string): Plan {
     };
   }
 
-  return { vertices, walls, openings, dimensions, stairs, chimneys, rooms, background };
+  return {
+    vertices,
+    walls,
+    openings,
+    dimensions,
+    stairs,
+    chimneys,
+    rooms,
+    furniture,
+    fixtures,
+    runs,
+    background,
+  };
 }

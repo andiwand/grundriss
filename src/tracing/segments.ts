@@ -222,9 +222,9 @@ export function joinCorners(segments: WallSegment[], tolerance: number): WallSeg
       const onT = along(t, x);
       const onS = along(s, x);
       const small = 1e-6 * Math.max(1, l);
+      // The point must be really on both segments, not only on their lines.
       if (onT < -small || onT > distance(t.a, t.b) + small) continue;
       if (onS <= small || onS >= l - small) continue;
-      // The point must be really on the segment, not only on its line.
       cuts.push(onS);
     }
     cuts.sort((p, q) => p - q);

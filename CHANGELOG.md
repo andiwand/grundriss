@@ -4,6 +4,85 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Roofs: a building can have several roofs, each on its own outline. "Add roof" takes the
+  outline of the walls of the active story, with the presets gable, hip, shed, and flat. Each
+  side of the outline is an eave or a gable, with its own pitch and overhang, so a roof can be a
+  hip roof on an L, or a gable roof with a hip at one end. The eave height can differ from the
+  top of the walls.
+- A selected roof shows its outline with the numbers of its sides. Drag a corner to move it, or
+  drag a + in the middle of a side to add a corner. Delete removes a corner.
+- Dormers (gable, shed, flat) and roof windows on the faces of a roof. PV fields leave them out.
+- The 3D view has no more parts that go through each other:
+  - A roof sits on the outer face of the walls, so the walls do not come up through the roof.
+  - A roof under an upper story starts at the floor of that story, so the floor does not come
+    out under the roof. The walls go up to that floor, so no gap stays at the edge of the floor.
+  - The walls of a story under a roof, for example of an attic, stop at the roof.
+  - A dormer or a roof window that does not fit on its roof face, for example past the ridge, does
+    not show. The roof panel shows a warning for it. A roof window has a closed edge.
+  - The north label does not show through the building.
+- Attics: the heat loss of a room under a pitched roof uses the sloped area of the roof over the
+  room, the walls up to the roof (knee walls and gable triangles), and the volume under the roof.
+  The walls and the windows of dormers count too.
+- The room panel and the story panel show the living area by the German WoFlV for rooms under a
+  roof: a clear height of 2 m or more counts fully, 1 m to 2 m counts half. The 2D editor shows
+  the lines of 1 m and 2 m clear height as thin dashed lines.
+- In the 3D view, an attic wall under a dormer goes up to the roof of the dormer. A gable of the
+  roof no longer flickers on the outer face of the attic wall under it.
+- A button of the panel with a long text gets its own row, so its text stays inside it.
+- The furniture catalog has the new groups Storage, Lighting, and Decor, so "Living" holds only
+  the living room pieces. All tabs show the groups in the same order, and Poly Haven has groups
+  too. A word of a name matches only at the start of a word, so "Woven basket" is not kitchen.
+- Fixes from a review of all the code:
+  - The position of a dormer or a roof window on its side was mirrored on most roofs. A roof
+    outline with a repeated corner made a flat roof. The sides of a flat roof on an L faced inward.
+  - The roof heat loss goes to the highest room under the roof, for example the attic, not to the
+    ground floor under it. The outline of a U stair has no more empty area next to its first flight.
+  - When the user dropped a corner on a wall, the wall did not split. An undo during a drag stopped
+    the drag with an error. A pasted L or U stair became straight. Arrow keys moved a door along
+    its wall when the wall moved too. "Fit" ignored stairs, chimneys, and furniture.
+  - A room inside another room no longer takes the data of the other room. A wall that sticks out
+    of the building no longer goes into the outline of a new roof.
+  - Recognized openings went on the wrong wall after the user rejected a wall. The traced walls
+    were about one pixel off.
+  - Without a network, the Poly Haven catalog sent requests without end. A second click during a
+    download added the model two times. The Furniture button stayed active after the catalog closed.
+  - The PDF export showed "€", "–", and other characters wrong. A line break or an umlaut in a name
+    broke the DXF export. A background in an unusual image format lost its type in a package.
+  - Esc during a drag stops only the drag and puts back the state before it. A second Esc
+    stops the wall chain or clears the selection.
+  - A double click with the select tool no longer clears the selection.
+  - A click that adds no wall, for example a copy of a wall, or a delete that removes nothing,
+    makes no undo step.
+  - A corner that joins a copy of a wall keeps the doors and windows of the copy on the wall
+    that stays.
+  - The panel of a selection of more objects counts all kinds, for example furniture and
+    devices, and shows only the kinds in the selection.
+  - The rows of a group in the panel have the same space of 8 px between them.
+
+- Building services (E): devices for electricity (sockets, switches, lights, network sockets,
+  smoke detectors, the distribution board) and heating (radiators, boilers, heat pumps, the
+  manifold of a floor heating). A device for a wall snaps to the wall. Lines for cables and
+  pipes connect to the devices. The Layers menu shows or hides each system.
+- Insulation: the layers of the outer walls, the roof, and the floor, with their U-values. A wall
+  can have its own layers. The insulation layer colors the outer walls by their U-value.
+- Heat loss: an estimate for each room and for the building. The room panel compares it with the
+  power of the heating in the room, and it has floor heating and its own temperature.
+- Photovoltaic: fields of panels on the faces of the roof, with the peak power and an estimate of
+  the yield per year. The 3D view shows the panels.
+- The panel shows the lengths of the cables and pipes and the number of devices.
+
+- Recognize plan: a neural network in the browser finds the walls, the doors, and the windows
+  of the background. They show as suggestions to accept or reject. The network learned only from
+  plans that Grundriss generates, so its license is the license of the app.
+
+- Furniture (I): a catalog with four sources. Generic pieces with free sizes and plan symbols,
+  the Kenney Furniture Kit (CC0, part of the app), realistic models from Poly Haven (CC0,
+  downloaded on demand), and the import of your own glTF or GLB files. Near a wall, a piece
+  turns with its back to the wall. R turns a piece by 90°, and Shift+R by 15°. The panel sets
+  the size, the height above the floor, and the rotation.
+- The 2D editor shows a model as an image from above. The exports draw the furniture, and a
+  package contains the downloaded and imported models and a list of credits.
+
 - Stories: a building has more than one story, with cellars under the ground and an attic.
   The list at the bottom left of the 2D editor selects the active story and adds stories. The
   2D editor shows the walls of the story below as dashed lines.

@@ -1,242 +1,335 @@
-// The surfaces of the roof, for the 3D view and the 2D editor. The roof covers the box of
-// `roofFrame`. The functions are pure, so the tests run in Node.
+// The bridge from the building to the roof engine (src/model/roofshape.ts). A building has a
+// list of roofs. Each roof is on a story and has its own outline and sides. The functions here
+// give the engine its input from the building, and they keep the results in a cache.
 //
 // The points use the plan coordinates x and y, and z is the height above the ground. The 3D
-// view maps (x, y, z) to the world (x, z, y). Each polygon goes counterclockwise when you look
-// at it from outside the roof in that world, so its normal points out.
+// view maps (x, y, z) to the world (x, z, y).
 
-import { FLAT_ROOF, roofFrame, type RoofFrame } from "./building";
-import type { Building, Point } from "./types";
+import { findStory, storyAbove, wallTop } from "./building";
+import { signedArea } from "./geometry";
+import { newId } from "./plan";
+import { planOutline, pointInPolygon } from "./rooms";
+import {
+  presetSides,
+  roofGeometry,
+  type RoofGeometry,
+  type RoofInput,
+  type Vec3,
+} from "./roofshape";
+import type { Building, Id, Point, Roof, RoofKind, Story } from "./types";
 
-export interface Vec3 {
-  x: number;
-  y: number;
-  z: number;
-}
+export type { Vec3 } from "./roofshape";
 
-export interface RoofSurfaces {
-  /** The surfaces of the roof itself. */
-  faces: Vec3[][];
-  /** The walls under the roof that close the attic: the gable triangles and the shed walls. */
-  gables: Vec3[][];
+/** The usual pitch and overhang of a new roof. */
+export const ROOF_DEFAULTS = { pitch: 35, overhang: 0.4 };
+
+/**
+ * The usual height of the eaves of a roof on the story: the top of its walls. If a story is above,
+ * the roof sits on the floor of that story, so that the floor does not come out under the roof.
+ */
+export function roofBase(building: Building, story: Story): number {
+  const above = storyAbove(building, story);
+  return Math.max(wallTop(story), above ? above.elevation : -Infinity);
 }
 
 /**
- * The roof works in local coordinates: u goes along the ridge, v goes across it. For a ridge
- * along the plan x axis, u is x and v is y. For a ridge along the y axis, u is y and v is x.
+ * The input of the engine for a roof of the building. The eaves are at `roofBase`, or at the
+ * base of the roof if it has one. The outline of the roof is on the center lines of the walls, but a real roof sits on the outer
+ * face of the walls. So the engine gets the outline moved out by half the thickness of the
+ * thickest wall of the story. Else the outer half of each wall comes up through the roof.
  */
-interface Local {
-  u0: number;
-  u1: number;
-  v0: number;
-  v1: number;
-  base: number;
-  top: number;
-  /** The overhang: the distance from the edge of the roof to the wall line. */
-  overhang: number;
-  point: (u: number, v: number, z: number) => Vec3;
-}
-
-function local(frame: RoofFrame, ridge: "x" | "y", overhang: number): Local {
-  const alongX = ridge === "x";
+export function roofInput(building: Building, roof: Roof): RoofInput {
+  const story = findStory(building, roof.storyId);
+  const base = roof.base ?? (story ? roofBase(building, story) : 0);
+  const thickness = story ? Math.max(0, ...story.walls.map((w) => w.thickness)) : 0;
+  const outline = offsetOutline(roof.outline, thickness / 2);
+  // The offset of a dormer or a window counts from the start of its side on the center lines.
+  // The moved side starts at another point, so the offset changes by the distance between them.
+  const n = roof.outline.length;
+  const shift = <T extends { side: number; offset: number }>(item: T): T => {
+    const a = roof.outline[item.side];
+    const b = roof.outline[(item.side + 1) % n];
+    const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+    if (length === 0) return item;
+    const moved = outline[item.side];
+    const delta = ((a.x - moved.x) * (b.x - a.x) + (a.y - moved.y) * (b.y - a.y)) / length;
+    return { ...item, offset: item.offset + delta };
+  };
   return {
-    u0: alongX ? frame.minX : frame.minY,
-    u1: alongX ? frame.maxX : frame.maxY,
-    v0: alongX ? frame.minY : frame.minX,
-    v1: alongX ? frame.maxY : frame.maxX,
-    base: frame.base,
-    top: frame.top,
-    overhang,
-    point: alongX ? (u, v, z) => ({ x: u, y: v, z }) : (u, v, z) => ({ x: v, y: u, z }),
+    outline,
+    sides: roof.sides,
+    base,
+    flat: roof.flat,
+    dormers: roof.dormers.map(shift),
+    windows: roof.windows.map(shift),
   };
-}
-
-/** The point in the 3D world (x, height, y), where the cross product is right-handed. */
-const world = (p: Vec3) => ({ x: p.x, y: p.z, z: p.y });
-
-/** Removes a point that is equal to the point before it, for example at the top of a hip. */
-function dedupe(polygon: Vec3[]): Vec3[] {
-  return polygon.filter((p, i) => {
-    const q = polygon[(i + polygon.length - 1) % polygon.length];
-    return Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > 1e-9;
-  });
 }
 
 /**
- * Turns the polygon so that its normal in the world points away from `center`. The polygon must
- * be flat and convex.
+ * The cache of the geometry. The key is the roof object, because the history makes a new
+ * object for each change. A drag changes the roof in place inside a transaction, so the cache
+ * also keeps the inputs and computes again when they change.
  */
-function orient(polygon: Vec3[], center: Vec3): Vec3[] {
-  const points = dedupe(polygon);
-  if (points.length < 3) return points;
-  const [a, b, c] = points.map(world);
-  const e1 = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
-  const e2 = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
-  const normal = {
-    x: e1.y * e2.z - e1.z * e2.y,
-    y: e1.z * e2.x - e1.x * e2.z,
-    z: e1.x * e2.y - e1.y * e2.x,
-  };
-  const n = points.length;
-  const mid = world({
-    x: points.reduce((s, p) => s + p.x, 0) / n,
-    y: points.reduce((s, p) => s + p.y, 0) / n,
-    z: points.reduce((s, p) => s + p.z, 0) / n,
-  });
-  const out = world(center);
-  const dot = normal.x * (mid.x - out.x) + normal.y * (mid.y - out.y) + normal.z * (mid.z - out.z);
-  return dot < 0 ? points.reverse() : points;
+const cache = new WeakMap<Roof, { key: string; geometry: RoofGeometry }>();
+
+/** The faces, gables, edges, dormers, and windows of a roof. */
+export function roofGeometryOf(building: Building, roof: Roof): RoofGeometry {
+  const input = roofInput(building, roof);
+  const key = JSON.stringify(input);
+  const cached = cache.get(roof);
+  if (cached && cached.key === key) return cached.geometry;
+  const geometry = roofGeometry(input);
+  cache.set(roof, { key, geometry });
+  return geometry;
 }
 
-export function roofSurfaces(building: Building): RoofSurfaces | null {
-  const roof = building.roof;
-  const frame = roofFrame(building);
-  if (!roof || !frame) return null;
-  const l = local(frame, roof.ridge, roof.overhang);
-  const { u0, u1, v0, v1, base, top, point } = l;
-  const vm = (v0 + v1) / 2;
-  const um = (u0 + u1) / 2;
-  const center = point(um, vm, (base + top) / 2);
-  const faces: Vec3[][] = [];
-  const gables: Vec3[][] = [];
-  // The wall lines are inside the edge of the roof by the overhang. A very large overhang must
-  // not put the wall lines past each other.
-  const inset = Math.min(roof.overhang, (u1 - u0) / 2 - 1e-3, (v1 - v0) / 2 - 1e-3);
-  const w0 = u0 + Math.max(0, inset);
-  const w1 = u1 - Math.max(0, inset);
-  const x0 = v0 + Math.max(0, inset);
-  const x1 = v1 - Math.max(0, inset);
+/** The geometry of all roofs of the building. A roof with less than three points has none. */
+export function roofGeometries(building: Building): { roof: Roof; geometry: RoofGeometry }[] {
+  return building.roofs
+    .filter((roof) => roof.outline.length >= 3 && findStory(building, roof.storyId))
+    .map((roof) => ({ roof, geometry: roofGeometryOf(building, roof) }));
+}
 
-  switch (roof.kind) {
-    case "flat": {
-      const z0 = base;
-      const z1 = base + FLAT_ROOF;
-      const corners = [
-        [u0, v0],
-        [u1, v0],
-        [u1, v1],
-        [u0, v1],
-      ];
-      faces.push(corners.map(([u, v]) => point(u, v, z1)));
-      faces.push(corners.map(([u, v]) => point(u, v, z0)));
-      for (let i = 0; i < 4; i++) {
-        const [ua, va] = corners[i];
-        const [ub, vb] = corners[(i + 1) % 4];
-        faces.push([point(ua, va, z0), point(ub, vb, z0), point(ub, vb, z1), point(ua, va, z1)]);
-      }
-      break;
-    }
-    case "shed": {
-      // The roof is high at v0 and low at v1.
-      const height = (v: number) => base + ((top - base) * (v1 - v)) / (v1 - v0);
-      faces.push([
-        point(u0, v1, base),
-        point(u1, v1, base),
-        point(u1, v0, top),
-        point(u0, v0, top),
-      ]);
-      for (const u of [w0, w1]) {
-        gables.push([
-          point(u, x1, base),
-          point(u, x0, base),
-          point(u, x0, height(x0)),
-          point(u, x1, height(x1)),
-        ]);
-      }
-      // The high wall under the high eave, and the low wall under the low eave.
-      for (const v of [x0, x1]) {
-        if (height(v) - base < 1e-6) continue;
-        gables.push([
-          point(w0, v, base),
-          point(w1, v, base),
-          point(w1, v, height(v)),
-          point(w0, v, height(v)),
-        ]);
-      }
-      break;
-    }
-    case "gable": {
-      faces.push([
-        point(u0, v0, base),
-        point(u1, v0, base),
-        point(u1, vm, top),
-        point(u0, vm, top),
-      ]);
-      faces.push([
-        point(u1, v1, base),
-        point(u0, v1, base),
-        point(u0, vm, top),
-        point(u1, vm, top),
-      ]);
-      // The height of the roof at the distance v across the ridge.
-      const height = (v: number) => top - ((top - base) * Math.abs(v - vm)) / ((v1 - v0) / 2);
-      for (const u of [w0, w1]) {
-        gables.push([
-          point(u, x0, base),
-          point(u, x1, base),
-          point(u, x1, height(x1)),
-          point(u, vm, top),
-          point(u, x0, height(x0)),
-        ]);
-      }
-      break;
-    }
-    case "hip": {
-      // The hips go up at the same slope as the long faces, so the ridge is shorter than the
-      // roof by half the span at each end. A roof shorter than its span becomes a pyramid.
-      const half = (v1 - v0) / 2;
-      const r0 = Math.min(u0 + half, um);
-      const r1 = Math.max(u1 - half, um);
-      faces.push([
-        point(u0, v0, base),
-        point(u1, v0, base),
-        point(r1, vm, top),
-        point(r0, vm, top),
-      ]);
-      faces.push([
-        point(u1, v1, base),
-        point(u0, v1, base),
-        point(r0, vm, top),
-        point(r1, vm, top),
-      ]);
-      faces.push([point(u0, v1, base), point(u0, v0, base), point(r0, vm, top)]);
-      faces.push([point(u1, v0, base), point(u1, v1, base), point(r1, vm, top)]);
-      break;
-    }
+export const findRoof = (building: Building, id: Id): Roof | undefined =>
+  building.roofs.find((r) => r.id === id);
+
+/**
+ * A plane of the roof over the plan: the height above the ground is z = c + gx·x + gy·y.
+ * `slope` is the sloped area over 1 m² of the plan: 1 / cos(pitch).
+ */
+export interface RoofPlane {
+  c: number;
+  gx: number;
+  gy: number;
+  slope: number;
+}
+
+/** The height of the plane over a point of the plan. */
+export const planeHeight = (plane: RoofPlane, p: Point): number =>
+  plane.c + plane.gx * p.x + plane.gy * p.y;
+
+/** The plane of a flat polygon in 3D, by Newell's method. A vertical polygon gives null. */
+export function planeOf(polygon: Vec3[]): RoofPlane | null {
+  let nx = 0;
+  let ny = 0;
+  let nz = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    nx += (a.y - b.y) * (a.z + b.z);
+    ny += (a.z - b.z) * (a.x + b.x);
+    nz += (a.x - b.x) * (a.y + b.y);
   }
+  const size = Math.hypot(nx, ny, nz);
+  if (size < 1e-12 || Math.abs(nz) < 1e-9 * size) return null;
+  const at = polygon[0];
+  const gx = -nx / nz;
+  const gy = -ny / nz;
+  return { c: at.z - gx * at.x - gy * at.y, gx, gy, slope: size / Math.abs(nz) };
+}
 
-  return {
-    faces: faces.map((f) => orient(f, center)),
-    gables: gables.map((g) => orient(g, center)),
+/**
+ * A part of the roof surface over the plan. The parts of a roof with their signs give its
+ * surface: each main face adds its part, the hole under each dormer removes its part of the
+ * main face, and the faces of each dormer add their parts. The part on the plan can be
+ * non-convex.
+ */
+export interface RoofPatch {
+  plan: Point[];
+  plane: RoofPlane;
+  sign: 1 | -1;
+}
+
+const toPlan = (polygon: Vec3[]): Point[] => polygon.map((p) => ({ x: p.x, y: p.y }));
+
+/** The parts of the surface of a roof, with dormers. */
+export function roofPatches(geometry: RoofGeometry): RoofPatch[] {
+  const patches: RoofPatch[] = [];
+  const push = (polygon: Vec3[], sign: 1 | -1) => {
+    const plane = planeOf(polygon);
+    if (plane && polygon.length >= 3) patches.push({ plan: toPlan(polygon), plane, sign });
+  };
+  for (const face of geometry.faces) push(face.polygon, 1);
+  for (const dormer of geometry.dormers) {
+    push(dormer.hole, -1);
+    for (const face of dormer.faces) push(face, 1);
+  }
+  return patches;
+}
+
+/**
+ * A function that gives the height above the ground of the surface of one roof over a point of
+ * the plan, or null if the roof is not over the point. Under a dormer, the surface is the roof
+ * of the dormer, not the main face.
+ */
+export function roofSurface(geometry: RoofGeometry): (p: Point) => number | null {
+  const faces = geometry.faces
+    .map((face) => ({ plan: toPlan(face.polygon), plane: planeOf(face.polygon) }))
+    .filter((f): f is { plan: Point[]; plane: RoofPlane } => f.plane !== null);
+  const dormers = geometry.dormers
+    .flatMap((d) => d.faces)
+    .map((face) => ({ plan: toPlan(face), plane: planeOf(face) }))
+    .filter((f): f is { plan: Point[]; plane: RoofPlane } => f.plane !== null);
+  const lowest = (list: typeof faces, p: Point): number | null => {
+    let z: number | null = null;
+    for (const face of list) {
+      if (!pointInPolygon(p, face.plan)) continue;
+      const h = planeHeight(face.plane, p);
+      if (z === null || h < z) z = h;
+    }
+    return z;
+  };
+  return (p) => lowest(dormers, p) ?? lowest(faces, p);
+}
+
+/** The lowest surface of the roofs over a point, or null if none of them is over it. */
+function lowestSurface(roofs: RoofGeometry[]): (p: Point) => number | null {
+  const surfaces = roofs.map(roofSurface);
+  return (p) => {
+    let lowest: number | null = null;
+    for (const surface of surfaces) {
+      const z = surface(p);
+      if (z !== null && (lowest === null || z < lowest)) lowest = z;
+    }
+    return lowest;
   };
 }
 
-/** The lines of the roof seen from above: the edge of the roof, the ridge, and the hips. */
-export function roofLines(building: Building): [Point, Point][] {
-  const roof = building.roof;
-  const frame = roofFrame(building);
-  if (!roof || !frame) return [];
-  const { u0, u1, v0, v1, point } = local(frame, roof.ridge, roof.overhang);
-  const p = (u: number, v: number): Point => {
-    const q = point(u, v, 0);
-    return { x: q.x, y: q.y };
+/**
+ * A function that gives the height above the ground of the lowest pitched roof over a point of
+ * the plan, or null if no such roof is over it. Only the roofs of the stories below `story`
+ * count: they are the roofs that the walls of `story` must stay under, for example the walls of
+ * an attic. Flat roofs do not count, because a story on a flat roof is usual, for example with a
+ * terrace around it. Under a dormer, the height is the roof of the dormer.
+ */
+export function roofCeiling(building: Building, story: Story): (p: Point) => number | null {
+  const roofs = roofGeometries(building)
+    .filter(({ roof }) => {
+      const own = findStory(building, roof.storyId);
+      return !roof.flat && own != null && own.elevation < story.elevation;
+    })
+    .map(({ geometry }) => geometry);
+  return lowestSurface(roofs);
+}
+
+/**
+ * The roofs that cover a story. A roof covers its own story. A pitched roof also covers the
+ * stories above its story up to its top, for example an attic: its eaves are on the floor of
+ * the story above. A story on a flat roof is not under that roof.
+ */
+export function coveringRoofs(
+  building: Building,
+  story: Story,
+): { roof: Roof; geometry: RoofGeometry }[] {
+  return roofGeometries(building).filter(({ roof, geometry }) => {
+    const own = findStory(building, roof.storyId);
+    if (!own) return false;
+    if (own.id === story.id) return true;
+    return !roof.flat && story.elevation > own.elevation && story.elevation < geometry.top;
+  });
+}
+
+/**
+ * A function that gives the clear height above the floor of the story at a point of the plan,
+ * under the roofs that cover the story (`coveringRoofs`), or null if no such roof is over the
+ * point. The roof on the story itself counts too, for example the roof on an attic with knee
+ * walls. Under a dormer, the clear height goes up to the roof of the dormer. The height can be
+ * below zero, for example under the eaves outside the walls. The function ignores the
+ * thickness of the roof.
+ */
+export function clearHeight(building: Building, story: Story): (p: Point) => number | null {
+  const surface = lowestSurface(coveringRoofs(building, story).map(({ geometry }) => geometry));
+  return (p) => {
+    const z = surface(p);
+    return z === null ? null : z - story.elevation;
   };
-  const lines: [Point, Point][] = [
-    [p(u0, v0), p(u1, v0)],
-    [p(u1, v0), p(u1, v1)],
-    [p(u1, v1), p(u0, v1)],
-    [p(u0, v1), p(u0, v0)],
-  ];
-  const vm = (v0 + v1) / 2;
-  const um = (u0 + u1) / 2;
-  if (roof.kind === "gable") lines.push([p(u0, vm), p(u1, vm)]);
-  if (roof.kind === "hip") {
-    const half = (v1 - v0) / 2;
-    const r0 = Math.min(u0 + half, um);
-    const r1 = Math.max(u1 - half, um);
-    if (r1 - r0 > 1e-9) lines.push([p(r0, vm), p(r1, vm)]);
-    lines.push([p(u0, v0), p(r0, vm)], [p(u0, v1), p(r0, vm)]);
-    lines.push([p(u1, v0), p(r1, vm)], [p(u1, v1), p(r1, vm)]);
+}
+
+/** The lines of the roofs of a story seen from above: the eaves, ridges, hips, and valleys. */
+export function roofLines(building: Building, storyId: Id): [Point, Point][] {
+  const lines: [Point, Point][] = [];
+  for (const { roof, geometry } of roofGeometries(building)) {
+    if (roof.storyId !== storyId) continue;
+    for (const [a, b] of geometry.edges) {
+      // A vertical edge, for example the corner of a gable wall, is a point on the plan.
+      if (Math.hypot(a.x - b.x, a.y - b.y) < 1e-6) continue;
+      lines.push([
+        { x: a.x, y: a.y },
+        { x: b.x, y: b.y },
+      ]);
+    }
   }
   return lines;
+}
+
+/**
+ * A new roof on the story, with the outline of its walls and the sides of the preset. It gives
+ * null if the walls of the story close no room.
+ */
+export function newRoof(building: Building, story: Story, preset: RoofKind): Roof | null {
+  const outline = planOutline(story);
+  if (!outline || outline.length < 3) return null;
+  const { pitch, overhang } = ROOF_DEFAULTS;
+  return {
+    id: newId("roof"),
+    name: `Roof ${building.roofs.length + 1}`,
+    storyId: story.id,
+    outline,
+    sides: presetSides(outline, preset, pitch, overhang),
+    base: null,
+    flat: preset === "flat",
+    dormers: [],
+    windows: [],
+  };
+}
+
+/** The rectangle around the walls of a story, or null if the story has no walls. */
+export function storyBox(story: Story): Point[] | null {
+  const points = story.vertices.filter((v) =>
+    story.walls.some((w) => w.a === v.id || w.b === v.id),
+  );
+  if (points.length === 0) return null;
+  const minX = Math.min(...points.map((p) => p.x));
+  const maxX = Math.max(...points.map((p) => p.x));
+  const minY = Math.min(...points.map((p) => p.y));
+  const maxY = Math.max(...points.map((p) => p.y));
+  return [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+}
+
+/**
+ * The polygon moved out by `d` on each side. Each corner goes to the point where the two moved
+ * sides meet. The polygon can go in either direction.
+ */
+export function offsetOutline(points: Point[], d: number): Point[] {
+  const n = points.length;
+  if (n < 3 || d === 0) return points.map((p) => ({ ...p }));
+  const sign = signedArea(points) >= 0 ? 1 : -1;
+  // The outward normal of the side from i to i + 1. A side of zero length, for example from a
+  // repeated point, has no normal: the nearest side in the direction `step` gives it, so that
+  // both copies of a repeated point go to the same corner.
+  const normal = (i: number, step: 1 | -1): Point => {
+    for (let k = 0; k < n; k++) {
+      const j = (((i + step * k) % n) + n) % n;
+      const p = points[j];
+      const q = points[(j + 1) % n];
+      const length = Math.hypot(q.x - p.x, q.y - p.y);
+      if (length > 1e-9)
+        return { x: (sign * (q.y - p.y)) / length, y: (sign * -(q.x - p.x)) / length };
+    }
+    return { x: 0, y: 0 };
+  };
+  return points.map((p, i) => {
+    const n1 = normal(i - 1, -1);
+    const n2 = normal(i, 1);
+    const cos = n1.x * n2.x + n1.y * n2.y;
+    // A spike (the sides go back on themselves) has no meeting point: use the first normal.
+    if (cos < -0.99) return { x: p.x + d * n1.x, y: p.y + d * n1.y };
+    const k = d / (1 + cos);
+    return { x: p.x + k * (n1.x + n2.x), y: p.y + k * (n1.y + n2.y) };
+  });
 }

@@ -206,6 +206,12 @@ export interface SuggestOptions {
   minLength?: number;
   /** The thickness of the walls in pixels of the input image. Without it, the function finds it. */
   thickness?: number;
+  /**
+   * True if the image is a clean mask of the walls, for example from the recognition network.
+   * Then the function keeps thin walls: it does not remove the lines that are thinner than the
+   * usual wall, and the shortest wall does not depend on the thickness.
+   */
+  mask?: boolean;
 }
 
 /**
@@ -214,7 +220,12 @@ export interface SuggestOptions {
  * lines and text have small values. The result is the median of the larger values, with the
  * value as a weight, because a thick line has more ink.
  */
-function estimateThickness(cv: CV, ink: Mat, track: <M extends Deletable>(mat: M) => M): number {
+function estimateThickness(
+  cv: CV,
+  ink: Mat,
+  track: <M extends Deletable>(mat: M) => M,
+  quantile = 0.5,
+): number {
   const dist = track(new cv.Mat());
   cv.distanceTransform(ink, dist, cv.DIST_L2, 3);
   const d = dist.data32F;
@@ -235,7 +246,7 @@ function estimateThickness(cv: CV, ink: Mat, track: <M extends Deletable>(mat: M
   let sum = 0;
   for (const v of values) {
     sum += v;
-    if (sum >= total / 2) return 2 * v;
+    if (sum >= total * quantile) return 2 * v;
   }
   return 2 * values[values.length - 1];
 }
@@ -256,6 +267,8 @@ function barSegments(
   const s = stats.data32S;
   const c = centroids.data64F;
   const result: WallSegment[] = [];
+  // The centroid is in pixel indices. The center of pixel i is at i + 0.5, and the box goes from
+  // the edge of its first pixel to the edge of its last pixel.
   for (let i = 1; i < count; i++) {
     const left = s[i * 5 + cv.CC_STAT_LEFT];
     const top = s[i * 5 + cv.CC_STAT_TOP];
@@ -268,10 +281,10 @@ function barSegments(
     // A large filled area is not a wall.
     if (across > 2.5 * thickness) continue;
     if (vertical) {
-      const x = c[i * 2];
+      const x = c[i * 2] + 0.5;
       result.push({ a: { x, y: top }, b: { x, y: top + height }, thickness: across });
     } else {
-      const y = c[i * 2 + 1];
+      const y = c[i * 2 + 1] + 0.5;
       result.push({ a: { x: left, y }, b: { x: left + width, y }, thickness: across });
     }
   }
@@ -313,19 +326,31 @@ export function suggestWallsInGray(
   try {
     const ink = binarize(cv, gray, track);
     const longSide = Math.max(gray.cols, gray.rows);
+    // A mask has thin inner walls and thick outer walls. A high quantile gives the thickness of
+    // the thickest walls, so that the check of the width below keeps all of them.
     const thickness = options.thickness
       ? options.thickness * factor
-      : estimateThickness(cv, ink, track);
-    const minLength = Math.max((options.minLength ?? 0.02) * longSide, 3 * thickness);
+      : estimateThickness(cv, ink, track, options.mask ? 0.95 : 0.5);
+    const shortest = (options.minLength ?? 0.02) * longSide;
+    // A wall must be longer than the thickest wall. Else a thick wall gives a short bar across.
+    const minLength = options.mask
+      ? Math.max(shortest, 1.2 * thickness)
+      : Math.max(shortest, 3 * thickness);
 
-    // 1. Keep only the lines that are about as thick as the walls.
+    // 1. Keep only the lines that are about as thick as the walls. A clean mask has no thin
+    // lines of text or furniture, so its thin inner walls stay.
     const walls = track(new cv.Mat());
-    const size = odd(thickness * 0.6);
-    const square = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size, size)));
-    cv.morphologyEx(ink, walls, cv.MORPH_OPEN, square);
+    if (options.mask) {
+      ink.copyTo(walls);
+    } else {
+      const size = odd(thickness * 0.6);
+      const square = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size, size)));
+      cv.morphologyEx(ink, walls, cv.MORPH_OPEN, square);
+    }
 
-    // 2. The horizontal and the vertical walls.
-    const long = Math.round(minLength);
+    // 2. The horizontal and the vertical walls. The kernel length is odd, because an opening with
+    // an even kernel moves the result by one pixel.
+    const long = odd(minLength);
     const horizontal = track(new cv.Mat());
     const vertical = track(new cv.Mat());
     const hKernel = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(long, 1)));
@@ -346,11 +371,13 @@ export function suggestWallsInGray(
     const rest = track(new cv.Mat());
     cv.subtract(walls, straight, rest);
     const lines = track(new cv.Mat());
-    cv.HoughLinesP(rest, lines, 1, Math.PI / 180, Math.round(minLength / 2), minLength, thickness);
+    const votes = Math.max(1, Math.round(minLength / 2));
+    cv.HoughLinesP(rest, lines, 1, Math.PI / 180, votes, minLength, thickness);
     const l = lines.data32S;
     const axisTolerance = (5 * Math.PI) / 180;
     for (let i = 0; i < Math.min(lines.rows, 5000); i++) {
-      const [x1, y1, x2, y2] = [l[i * 4], l[i * 4 + 1], l[i * 4 + 2], l[i * 4 + 3]];
+      // The ends are pixel indices, so the centers of the pixels are 0.5 further.
+      const [x1, y1, x2, y2] = [0, 1, 2, 3].map((k) => l[i * 4 + k] + 0.5);
       const angle = Math.abs(Math.atan2(y2 - y1, x2 - x1)) % (Math.PI / 2);
       if (angle < axisTolerance || angle > Math.PI / 2 - axisTolerance) continue;
       segments.push({ a: { x: x1, y: y1 }, b: { x: x2, y: y2 }, thickness });

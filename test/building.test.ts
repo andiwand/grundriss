@@ -4,13 +4,13 @@ import {
   addStoryOnTop,
   chimneyExtent,
   chimneysThrough,
-  defaultRoof,
+  buildingTop,
   emptyBuilding,
-  roofFrame,
   stairRise,
   stairShape,
 } from "../src/model/building";
 import { PlanDocument } from "../src/model/history";
+import { newRoof } from "../src/model/roof";
 import { addChimney, addVertex, addWall, normalize } from "../src/model/plan";
 import {
   editRoomInfo,
@@ -69,17 +69,17 @@ describe("roof and chimneys", () => {
   function house(): Building {
     const building = emptyBuilding();
     walls(building.stories[0], 10, 6);
-    building.roof = defaultRoof(building);
+    building.roofs.push(newRoof(building, building.stories[0], "gable")!);
     return building;
   }
 
   it("puts the ridge along the longer side", () => {
     const building = house();
-    expect(building.roof!.ridge).toBe("x");
-    const frame = roofFrame(building)!;
-    expect(frame.base).toBeCloseTo(2.5);
-    // The span across the ridge is 6 m plus two overhangs of 0.4 m.
-    expect(frame.top).toBeCloseTo(2.5 + 3.4 * Math.tan((35 * Math.PI) / 180));
+    // The sides along x are the eaves, so the ridge goes along x, 3 m in from the center lines
+    // of the walls, and 3.1 m in from the eaves on the outer faces of the walls.
+    const sides = building.roofs[0].sides.map((s) => s.kind);
+    expect(sides.filter((k) => k === "eave")).toHaveLength(2);
+    expect(buildingTop(building)).toBeCloseTo(2.5 + 3.1 * Math.tan((35 * Math.PI) / 180));
   });
 
   it("puts a chimney above the roof and shows it on the stories above", () => {
@@ -88,7 +88,7 @@ describe("roof and chimneys", () => {
     const chimney = addChimney(ground, { x: 5, y: 3 });
     const top = addStoryOnTop(building);
     const extent = chimneyExtent(building, ground, chimney);
-    expect(extent.top).toBeCloseTo(roofFrame(building)!.top + 0.8);
+    expect(extent.top).toBeCloseTo(buildingTop(building) + 0.8);
     expect(chimneysThrough(building, top)).toHaveLength(1);
   });
 });
@@ -136,6 +136,13 @@ describe("L and U stairs", () => {
     expect(Math.min(...last.map((p) => p.x))).toBeCloseTo(0);
     expect(Math.min(...last.map((p) => p.y))).toBeCloseTo(0.6);
     expect(shape.outline).toHaveLength(8);
+  });
+
+  it("keeps the outline of a U stair on its steps when the second flight is longer", () => {
+    const shape = stairShape({ ...base, kind: "u", run2: 4 }, 2.75);
+    // The second flight goes back to x = -1. Next to the first flight at x < 0 is no step.
+    expect(pointInPolygon({ x: -0.5, y: 1.1 }, shape.outline)).toBe(true);
+    expect(pointInPolygon({ x: -0.5, y: 0 }, shape.outline)).toBe(false);
   });
 });
 

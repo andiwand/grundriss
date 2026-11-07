@@ -6,6 +6,9 @@
     <meta name="color-scheme" content="light dark" />
     <title>Grundriss</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <!-- The CSS loads in the head, so the page never shows without it. An import in main.ts
+         applies it only after the scripts run, and in dev mode the page then flashes. -->
+    <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <header class="topbar">
@@ -14,7 +17,7 @@
         <span>Grundriss</span>
       </div>
       <div class="file-name" id="file-name" title="The name of the plan file">
-        <span id="file-title">plan.json</span>
+        <span id="file-title">plan.grundriss</span>
         <span class="dirty-dot" title="Unsaved changes"></span>
       </div>
       <div class="spacer"></div>
@@ -34,6 +37,9 @@
           title="Save as (Ctrl+Shift+S)"
         ></button>
       </div>
+      <button id="layers-button" class="ghost" data-icon="layers" data-menu title="Layers">
+        Layers
+      </button>
       <button id="export" class="ghost" data-icon="export" data-menu title="Export the plan">
         Export
       </button>
@@ -71,6 +77,12 @@
           <button data-tool="chimney" data-icon="chimney" title="Put a chimney (H)">
             Chimney<kbd>H</kbd>
           </button>
+          <button id="furniture" data-icon="sofa" title="Open the furniture catalog (I)">
+            Furniture<kbd>I</kbd>
+          </button>
+          <button id="services" data-icon="plug" data-menu title="Electric and heating (E)">
+            Services<kbd>E</kbd>
+          </button>
           <span class="divider"></span>
           <button id="background" data-icon="image" title="Load a scan or a photo of a plan">
             Background
@@ -84,6 +96,7 @@
           </button>
         </div>
         <div class="stories" id="stories" aria-label="Stories"></div>
+        <div class="catalog" id="catalog" hidden></div>
         <div class="compass" id="compass" title="North. Drag to turn it.">
           <svg viewBox="-24 -24 48 48" aria-hidden="true">
             <circle r="21" class="ring" />
@@ -124,6 +137,15 @@
       <aside id="panel"></aside>
     </main>
     <footer id="status"></footer>
+    <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
+    <div class="menu" id="layers-menu" role="menu" hidden>
+      <label class="check"><input type="checkbox" data-layer="electric" checked /> Electric</label>
+      <label class="check"><input type="checkbox" data-layer="heating" checked /> Heating</label>
+      <label class="check"><input type="checkbox" data-layer="pv" checked /> Photovoltaic</label>
+      <label class="check"
+        ><input type="checkbox" data-layer="insulation" /> Insulation and heat loss</label
+      >
+    </div>
     <div class="menu" id="story-menu" role="menu" hidden>
       <button data-add-story="top" role="menuitem">
         <span>Story on top</span><small>A full story above the highest story</small>

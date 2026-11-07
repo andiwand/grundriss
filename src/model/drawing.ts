@@ -160,12 +160,15 @@ export function planBounds(
   for (const stair of plan.stairs ?? []) points.push(...stairShape(stair, 1).outline);
   for (const chimney of plan.chimneys ?? []) points.push(...chimneyOutline(chimney));
   if (points.length === 0) return null;
-  return {
-    minX: Math.min(...points.map((p) => p.x)),
-    minY: Math.min(...points.map((p) => p.y)),
-    maxX: Math.max(...points.map((p) => p.x)),
-    maxY: Math.max(...points.map((p) => p.y)),
-  };
+  // A loop, not Math.min(...points): a spread of a very large plan exceeds the call stack.
+  const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const p of points) {
+    box.minX = Math.min(box.minX, p.x);
+    box.minY = Math.min(box.minY, p.y);
+    box.maxX = Math.max(box.maxX, p.x);
+    box.maxY = Math.max(box.maxY, p.y);
+  }
+  return box;
 }
 
 // ----- Stairs and chimneys -----

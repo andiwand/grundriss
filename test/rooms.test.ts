@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { addVertex, addWall, emptyPlan, splitWall } from "../src/model/plan";
-import { findRooms } from "../src/model/rooms";
+import type { Plan } from "../src/model/types";
+
+/** Adds a closed ring of walls through the points. */
+function ring(plan: Plan, points: [number, number][]): void {
+  const v = points.map(([x, y]) => addVertex(plan, { x, y }));
+  for (let i = 0; i < v.length; i++) addWall(plan, v[i].id, v[(i + 1) % v.length].id);
+}
+import { findRooms, planOutline } from "../src/model/rooms";
 
 describe("findRooms", () => {
   it("finds no room in open walls", () => {
@@ -69,5 +76,75 @@ describe("findRooms", () => {
     const rooms = findRooms(plan);
     expect(rooms).toHaveLength(1);
     expect(rooms[0].area).toBeCloseTo(16);
+  });
+});
+
+describe("room data", () => {
+  it("gives the data of a room inside another room only to the inner room", () => {
+    const plan = emptyPlan();
+    ring(plan, [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ]);
+    ring(plan, [
+      [4, 4],
+      [6, 4],
+      [6, 6],
+      [4, 6],
+    ]);
+    const inner = findRooms(plan).find((r) => r.area < 5)!;
+    plan.rooms.push({
+      id: "r-1",
+      key: inner.key,
+      at: inner.labelAt,
+      name: "Shaft",
+      height: null,
+      floorHeating: false,
+      temperature: null,
+    });
+    const named = findRooms(plan).filter((r) => r.info);
+    expect(named).toHaveLength(1);
+    expect(named[0].key).toBe(inner.key);
+  });
+});
+
+describe("planOutline", () => {
+  it("gives the outer outline of two rooms side by side", () => {
+    const plan = emptyPlan();
+    const p = [
+      [0, 0],
+      [4, 0],
+      [8, 0],
+      [8, 3],
+      [4, 3],
+      [0, 3],
+    ].map(([x, y]) => addVertex(plan, { x, y }));
+    for (let i = 0; i < 6; i++) addWall(plan, p[i].id, p[(i + 1) % 6].id);
+    addWall(plan, p[1].id, p[4].id);
+    const outline = planOutline(plan)!;
+    expect(outline).toHaveLength(6);
+    const xs = outline.map((q) => q.x);
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(8);
+  });
+});
+
+describe("planOutline with a wall that sticks out", () => {
+  it("leaves out the free end of the wall", () => {
+    const plan = emptyPlan();
+    ring(plan, [
+      [0, 0],
+      [4, 0],
+      [4, 3],
+      [0, 3],
+    ]);
+    const corner = plan.vertices[1];
+    const end = addVertex(plan, { x: 6, y: -1 });
+    addWall(plan, corner.id, end.id);
+    const outline = planOutline(plan)!;
+    expect(outline).toHaveLength(4);
+    expect(outline.some((p) => p.x === 6)).toBe(false);
   });
 });

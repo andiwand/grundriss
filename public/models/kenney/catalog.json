@@ -1,0 +1,1042 @@
+[
+  {
+    "file": "bathroomCabinet.glb",
+    "name": "Bathroom cabinet",
+    "size": {
+      "x": 0.414,
+      "y": 0.234,
+      "z": 0.702
+    },
+    "thumbnail": "thumbs/bathroomCabinet.png"
+  },
+  {
+    "file": "bathroomMirror.glb",
+    "name": "Bathroom mirror",
+    "size": {
+      "x": 0.542,
+      "y": 0.26,
+      "z": 0.782
+    },
+    "thumbnail": "thumbs/bathroomMirror.png"
+  },
+  {
+    "file": "bathroomSink.glb",
+    "name": "Bathroom sink",
+    "size": {
+      "x": 0.612,
+      "y": 0.522,
+      "z": 1.008
+    },
+    "thumbnail": "thumbs/bathroomSink.png"
+  },
+  {
+    "file": "bathtub.glb",
+    "name": "Bathtub",
+    "size": {
+      "x": 2.142,
+      "y": 1.008,
+      "z": 0.756
+    },
+    "thumbnail": "thumbs/bathtub.png"
+  },
+  {
+    "file": "bear.glb",
+    "name": "Bear",
+    "size": {
+      "x": 0.701,
+      "y": 0.445,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/bear.png"
+  },
+  {
+    "file": "bedBunk.glb",
+    "name": "Bed bunk",
+    "size": {
+      "x": 1.028,
+      "y": 1.971,
+      "z": 1.53
+    },
+    "thumbnail": "thumbs/bedBunk.png"
+  },
+  {
+    "file": "bedDouble.glb",
+    "name": "Bed double",
+    "size": {
+      "x": 1.721,
+      "y": 2.025,
+      "z": 0.675
+    },
+    "thumbnail": "thumbs/bedDouble.png"
+  },
+  {
+    "file": "bedSingle.glb",
+    "name": "Bed single",
+    "size": {
+      "x": 1.028,
+      "y": 2.025,
+      "z": 0.675
+    },
+    "thumbnail": "thumbs/bedSingle.png"
+  },
+  {
+    "file": "bench.glb",
+    "name": "Bench",
+    "size": {
+      "x": 0.72,
+      "y": 0.36,
+      "z": 0.846
+    },
+    "thumbnail": "thumbs/bench.png"
+  },
+  {
+    "file": "benchCushion.glb",
+    "name": "Bench cushion",
+    "size": {
+      "x": 0.72,
+      "y": 0.36,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/benchCushion.png"
+  },
+  {
+    "file": "benchCushionLow.glb",
+    "name": "Bench cushion low",
+    "size": {
+      "x": 0.756,
+      "y": 0.396,
+      "z": 0.36
+    },
+    "thumbnail": "thumbs/benchCushionLow.png"
+  },
+  {
+    "file": "bookcaseClosed.glb",
+    "name": "Bookcase closed",
+    "size": {
+      "x": 0.72,
+      "y": 0.45,
+      "z": 1.53
+    },
+    "thumbnail": "thumbs/bookcaseClosed.png"
+  },
+  {
+    "file": "bookcaseClosedDoors.glb",
+    "name": "Bookcase closed doors",
+    "size": {
+      "x": 0.72,
+      "y": 0.45,
+      "z": 1.53
+    },
+    "thumbnail": "thumbs/bookcaseClosedDoors.png"
+  },
+  {
+    "file": "bookcaseClosedWide.glb",
+    "name": "Bookcase closed wide",
+    "size": {
+      "x": 1.44,
+      "y": 0.45,
+      "z": 1.422
+    },
+    "thumbnail": "thumbs/bookcaseClosedWide.png"
+  },
+  {
+    "file": "bookcaseOpen.glb",
+    "name": "Bookcase open",
+    "size": {
+      "x": 0.72,
+      "y": 0.45,
+      "z": 1.584
+    },
+    "thumbnail": "thumbs/bookcaseOpen.png"
+  },
+  {
+    "file": "bookcaseOpenLow.glb",
+    "name": "Bookcase open low",
+    "size": {
+      "x": 0.72,
+      "y": 0.45,
+      "z": 0.72
+    },
+    "thumbnail": "thumbs/bookcaseOpenLow.png"
+  },
+  {
+    "file": "books.glb",
+    "name": "Books",
+    "size": {
+      "x": 0.271,
+      "y": 0.17,
+      "z": 0.187
+    },
+    "thumbnail": "thumbs/books.png"
+  },
+  {
+    "file": "cabinetBed.glb",
+    "name": "Cabinet bed",
+    "size": {
+      "x": 0.479,
+      "y": 0.387,
+      "z": 0.42
+    },
+    "thumbnail": "thumbs/cabinetBed.png"
+  },
+  {
+    "file": "cabinetBedDrawer.glb",
+    "name": "Cabinet bed drawer",
+    "size": {
+      "x": 0.479,
+      "y": 0.391,
+      "z": 0.474
+    },
+    "thumbnail": "thumbs/cabinetBedDrawer.png"
+  },
+  {
+    "file": "cabinetBedDrawerTable.glb",
+    "name": "Cabinet bed drawer table",
+    "size": {
+      "x": 0.479,
+      "y": 0.391,
+      "z": 0.474
+    },
+    "thumbnail": "thumbs/cabinetBedDrawerTable.png"
+  },
+  {
+    "file": "cabinetTelevision.glb",
+    "name": "Cabinet television",
+    "size": {
+      "x": 1.44,
+      "y": 0.45,
+      "z": 0.558
+    },
+    "thumbnail": "thumbs/cabinetTelevision.png"
+  },
+  {
+    "file": "cabinetTelevisionDoors.glb",
+    "name": "Cabinet television doors",
+    "size": {
+      "x": 1.44,
+      "y": 0.468,
+      "z": 0.558
+    },
+    "thumbnail": "thumbs/cabinetTelevisionDoors.png"
+  },
+  {
+    "file": "cardboardBoxClosed.glb",
+    "name": "Cardboard box closed",
+    "size": {
+      "x": 0.383,
+      "y": 0.383,
+      "z": 0.506
+    },
+    "thumbnail": "thumbs/cardboardBoxClosed.png"
+  },
+  {
+    "file": "cardboardBoxOpen.glb",
+    "name": "Cardboard box open",
+    "size": {
+      "x": 0.669,
+      "y": 0.383,
+      "z": 0.506
+    },
+    "thumbnail": "thumbs/cardboardBoxOpen.png"
+  },
+  {
+    "file": "ceilingFan.glb",
+    "name": "Ceiling fan",
+    "size": {
+      "x": 0.819,
+      "y": 0.945,
+      "z": 0.241
+    },
+    "thumbnail": "thumbs/ceilingFan.png"
+  },
+  {
+    "file": "chair.glb",
+    "name": "Chair",
+    "size": {
+      "x": 0.36,
+      "y": 0.36,
+      "z": 0.846
+    },
+    "thumbnail": "thumbs/chair.png"
+  },
+  {
+    "file": "chairCushion.glb",
+    "name": "Chair cushion",
+    "size": {
+      "x": 0.36,
+      "y": 0.36,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/chairCushion.png"
+  },
+  {
+    "file": "chairDesk.glb",
+    "name": "Chair desk",
+    "size": {
+      "x": 0.603,
+      "y": 0.566,
+      "z": 1.094
+    },
+    "thumbnail": "thumbs/chairDesk.png"
+  },
+  {
+    "file": "chairRounded.glb",
+    "name": "Chair rounded",
+    "size": {
+      "x": 0.36,
+      "y": 0.36,
+      "z": 0.819
+    },
+    "thumbnail": "thumbs/chairRounded.png"
+  },
+  {
+    "file": "coatRack.glb",
+    "name": "Coat rack",
+    "size": {
+      "x": 0.806,
+      "y": 0.242,
+      "z": 0.504
+    },
+    "thumbnail": "thumbs/coatRack.png"
+  },
+  {
+    "file": "coatRackStanding.glb",
+    "name": "Coat rack standing",
+    "size": {
+      "x": 0.491,
+      "y": 0.491,
+      "z": 1.386
+    },
+    "thumbnail": "thumbs/coatRackStanding.png"
+  },
+  {
+    "file": "computerKeyboard.glb",
+    "name": "Computer keyboard",
+    "size": {
+      "x": 0.508,
+      "y": 0.213,
+      "z": 0.05
+    },
+    "thumbnail": "thumbs/computerKeyboard.png"
+  },
+  {
+    "file": "computerMouse.glb",
+    "name": "Computer mouse",
+    "size": {
+      "x": 0.089,
+      "y": 0.153,
+      "z": 0.042
+    },
+    "thumbnail": "thumbs/computerMouse.png"
+  },
+  {
+    "file": "computerScreen.glb",
+    "name": "Computer screen",
+    "size": {
+      "x": 0.707,
+      "y": 0.187,
+      "z": 0.53
+    },
+    "thumbnail": "thumbs/computerScreen.png"
+  },
+  {
+    "file": "desk.glb",
+    "name": "Desk",
+    "size": {
+      "x": 1.322,
+      "y": 0.706,
+      "z": 0.692
+    },
+    "thumbnail": "thumbs/desk.png"
+  },
+  {
+    "file": "deskCorner.glb",
+    "name": "Desk corner",
+    "size": {
+      "x": 1.754,
+      "y": 1.754,
+      "z": 0.692
+    },
+    "thumbnail": "thumbs/deskCorner.png"
+  },
+  {
+    "file": "dryer.glb",
+    "name": "Dryer",
+    "size": {
+      "x": 0.702,
+      "y": 0.684,
+      "z": 0.846
+    },
+    "thumbnail": "thumbs/dryer.png"
+  },
+  {
+    "file": "kitchenBar.glb",
+    "name": "Kitchen bar",
+    "size": {
+      "x": 0.774,
+      "y": 0.378,
+      "z": 0.756
+    },
+    "thumbnail": "thumbs/kitchenBar.png"
+  },
+  {
+    "file": "kitchenBarEnd.glb",
+    "name": "Kitchen bar end",
+    "size": {
+      "x": 0.183,
+      "y": 0.378,
+      "z": 0.756
+    },
+    "thumbnail": "thumbs/kitchenBarEnd.png"
+  },
+  {
+    "file": "kitchenBlender.glb",
+    "name": "Kitchen blender",
+    "size": {
+      "x": 0.244,
+      "y": 0.196,
+      "z": 0.41
+    },
+    "thumbnail": "thumbs/kitchenBlender.png"
+  },
+  {
+    "file": "kitchenCabinet.glb",
+    "name": "Kitchen cabinet",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenCabinet.png"
+  },
+  {
+    "file": "kitchenCabinetCornerInner.glb",
+    "name": "Kitchen cabinet corner inner",
+    "size": {
+      "x": 0.828,
+      "y": 0.828,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenCabinetCornerInner.png"
+  },
+  {
+    "file": "kitchenCabinetCornerRound.glb",
+    "name": "Kitchen cabinet corner round",
+    "size": {
+      "x": 0.81,
+      "y": 0.81,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenCabinetCornerRound.png"
+  },
+  {
+    "file": "kitchenCabinetDrawer.glb",
+    "name": "Kitchen cabinet drawer",
+    "size": {
+      "x": 0.774,
+      "y": 0.576,
+      "z": 0.849
+    },
+    "thumbnail": "thumbs/kitchenCabinetDrawer.png"
+  },
+  {
+    "file": "kitchenCabinetDrawer 1.glb",
+    "name": "Kitchen cabinet drawer 1",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenCabinetDrawer 1.png"
+  },
+  {
+    "file": "kitchenCabinetUpper.glb",
+    "name": "Kitchen cabinet upper",
+    "size": {
+      "x": 0.774,
+      "y": 0.396,
+      "z": 0.702
+    },
+    "thumbnail": "thumbs/kitchenCabinetUpper.png"
+  },
+  {
+    "file": "kitchenCabinetUpperCorner.glb",
+    "name": "Kitchen cabinet upper corner",
+    "size": {
+      "x": 0.387,
+      "y": 0.378,
+      "z": 0.702
+    },
+    "thumbnail": "thumbs/kitchenCabinetUpperCorner.png"
+  },
+  {
+    "file": "kitchenCabinetUpperDouble.glb",
+    "name": "Kitchen cabinet upper double",
+    "size": {
+      "x": 0.774,
+      "y": 0.396,
+      "z": 0.702
+    },
+    "thumbnail": "thumbs/kitchenCabinetUpperDouble.png"
+  },
+  {
+    "file": "kitchenCabinetUpperLow.glb",
+    "name": "Kitchen cabinet upper low",
+    "size": {
+      "x": 0.774,
+      "y": 0.396,
+      "z": 0.351
+    },
+    "thumbnail": "thumbs/kitchenCabinetUpperLow.png"
+  },
+  {
+    "file": "kitchenCoffeeMachine.glb",
+    "name": "Kitchen coffee machine",
+    "size": {
+      "x": 0.341,
+      "y": 0.432,
+      "z": 0.319
+    },
+    "thumbnail": "thumbs/kitchenCoffeeMachine.png"
+  },
+  {
+    "file": "kitchenFridge.glb",
+    "name": "Kitchen fridge",
+    "size": {
+      "x": 0.774,
+      "y": 0.525,
+      "z": 1.656
+    },
+    "thumbnail": "thumbs/kitchenFridge.png"
+  },
+  {
+    "file": "kitchenFridgeBuiltIn.glb",
+    "name": "Kitchen fridge built in",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 1.564
+    },
+    "thumbnail": "thumbs/kitchenFridgeBuiltIn.png"
+  },
+  {
+    "file": "kitchenFridgeSmall.glb",
+    "name": "Kitchen fridge small",
+    "size": {
+      "x": 0.774,
+      "y": 0.525,
+      "z": 1.08
+    },
+    "thumbnail": "thumbs/kitchenFridgeSmall.png"
+  },
+  {
+    "file": "kitchenMicrowave.glb",
+    "name": "Kitchen microwave",
+    "size": {
+      "x": 0.522,
+      "y": 0.414,
+      "z": 0.324
+    },
+    "thumbnail": "thumbs/kitchenMicrowave.png"
+  },
+  {
+    "file": "kitchenSink.glb",
+    "name": "Kitchen sink",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 0.882
+    },
+    "thumbnail": "thumbs/kitchenSink.png"
+  },
+  {
+    "file": "kitchenStove.glb",
+    "name": "Kitchen stove",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenStove.png"
+  },
+  {
+    "file": "kitchenStoveElectric.glb",
+    "name": "Kitchen stove electric",
+    "size": {
+      "x": 0.774,
+      "y": 0.81,
+      "z": 0.81
+    },
+    "thumbnail": "thumbs/kitchenStoveElectric.png"
+  },
+  {
+    "file": "lampRoundFloor.glb",
+    "name": "Lamp round floor",
+    "size": {
+      "x": 0.274,
+      "y": 0.316,
+      "z": 1.548
+    },
+    "thumbnail": "thumbs/lampRoundFloor.png"
+  },
+  {
+    "file": "lampRoundTable.glb",
+    "name": "Lamp round table",
+    "size": {
+      "x": 0.274,
+      "y": 0.316,
+      "z": 0.566
+    },
+    "thumbnail": "thumbs/lampRoundTable.png"
+  },
+  {
+    "file": "lampSquareCeiling.glb",
+    "name": "Lamp square ceiling",
+    "size": {
+      "x": 0.216,
+      "y": 0.216,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/lampSquareCeiling.png"
+  },
+  {
+    "file": "lampSquareFloor.glb",
+    "name": "Lamp square floor",
+    "size": {
+      "x": 0.216,
+      "y": 0.216,
+      "z": 1.548
+    },
+    "thumbnail": "thumbs/lampSquareFloor.png"
+  },
+  {
+    "file": "lampSquareTable.glb",
+    "name": "Lamp square table",
+    "size": {
+      "x": 0.216,
+      "y": 0.216,
+      "z": 0.522
+    },
+    "thumbnail": "thumbs/lampSquareTable.png"
+  },
+  {
+    "file": "laptop.glb",
+    "name": "Laptop",
+    "size": {
+      "x": 0.475,
+      "y": 0.432,
+      "z": 0.291
+    },
+    "thumbnail": "thumbs/laptop.png"
+  },
+  {
+    "file": "loungeChair.glb",
+    "name": "Lounge chair",
+    "size": {
+      "x": 0.882,
+      "y": 0.738,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/loungeChair.png"
+  },
+  {
+    "file": "loungeChairRelax.glb",
+    "name": "Lounge chair relax",
+    "size": {
+      "x": 0.882,
+      "y": 1.214,
+      "z": 1.134
+    },
+    "thumbnail": "thumbs/loungeChairRelax.png"
+  },
+  {
+    "file": "loungeSofa.glb",
+    "name": "Lounge sofa",
+    "size": {
+      "x": 1.764,
+      "y": 0.738,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/loungeSofa.png"
+  },
+  {
+    "file": "loungeSofaCorner.glb",
+    "name": "Lounge sofa corner",
+    "size": {
+      "x": 1.764,
+      "y": 1.764,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/loungeSofaCorner.png"
+  },
+  {
+    "file": "loungeSofaLong.glb",
+    "name": "Lounge sofa long",
+    "size": {
+      "x": 1.764,
+      "y": 1.476,
+      "z": 0.828
+    },
+    "thumbnail": "thumbs/loungeSofaLong.png"
+  },
+  {
+    "file": "loungeSofaOttoman.glb",
+    "name": "Lounge sofa ottoman",
+    "size": {
+      "x": 0.792,
+      "y": 0.81,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/loungeSofaOttoman.png"
+  },
+  {
+    "file": "pillow.glb",
+    "name": "Pillow",
+    "size": {
+      "x": 0.414,
+      "y": 0.159,
+      "z": 0.4
+    },
+    "thumbnail": "thumbs/pillow.png"
+  },
+  {
+    "file": "pillowLong.glb",
+    "name": "Pillow long",
+    "size": {
+      "x": 0.696,
+      "y": 0.159,
+      "z": 0.4
+    },
+    "thumbnail": "thumbs/pillowLong.png"
+  },
+  {
+    "file": "plantSmall1.glb",
+    "name": "Plant small1",
+    "size": {
+      "x": 0.17,
+      "y": 0.17,
+      "z": 0.252
+    },
+    "thumbnail": "thumbs/plantSmall1.png"
+  },
+  {
+    "file": "plantSmall2.glb",
+    "name": "Plant small2",
+    "size": {
+      "x": 0.17,
+      "y": 0.17,
+      "z": 0.252
+    },
+    "thumbnail": "thumbs/plantSmall2.png"
+  },
+  {
+    "file": "plantSmall3.glb",
+    "name": "Plant small3",
+    "size": {
+      "x": 0.176,
+      "y": 0.153,
+      "z": 0.261
+    },
+    "thumbnail": "thumbs/plantSmall3.png"
+  },
+  {
+    "file": "pottedPlant.glb",
+    "name": "Potted plant",
+    "size": {
+      "x": 0.382,
+      "y": 0.435,
+      "z": 1.177
+    },
+    "thumbnail": "thumbs/pottedPlant.png"
+  },
+  {
+    "file": "radio.glb",
+    "name": "Radio",
+    "size": {
+      "x": 0.567,
+      "y": 0.176,
+      "z": 0.411
+    },
+    "thumbnail": "thumbs/radio.png"
+  },
+  {
+    "file": "rugRectangle.glb",
+    "name": "Rug rectangle",
+    "size": {
+      "x": 2.826,
+      "y": 1.656,
+      "z": 0.018
+    },
+    "thumbnail": "thumbs/rugRectangle.png"
+  },
+  {
+    "file": "rugRound.glb",
+    "name": "Rug round",
+    "size": {
+      "x": 1.656,
+      "y": 1.656,
+      "z": 0.018
+    },
+    "thumbnail": "thumbs/rugRound.png"
+  },
+  {
+    "file": "rugRounded.glb",
+    "name": "Rug rounded",
+    "size": {
+      "x": 2.826,
+      "y": 1.656,
+      "z": 0.018
+    },
+    "thumbnail": "thumbs/rugRounded.png"
+  },
+  {
+    "file": "rugSquare.glb",
+    "name": "Rug square",
+    "size": {
+      "x": 1.628,
+      "y": 1.656,
+      "z": 0.018
+    },
+    "thumbnail": "thumbs/rugSquare.png"
+  },
+  {
+    "file": "shower.glb",
+    "name": "Shower",
+    "size": {
+      "x": 1.011,
+      "y": 1.047,
+      "z": 1.969
+    },
+    "thumbnail": "thumbs/shower.png"
+  },
+  {
+    "file": "sideTable.glb",
+    "name": "Side table",
+    "size": {
+      "x": 0.962,
+      "y": 0.396,
+      "z": 0.692
+    },
+    "thumbnail": "thumbs/sideTable.png"
+  },
+  {
+    "file": "sideTableDrawers.glb",
+    "name": "Side table drawers",
+    "size": {
+      "x": 0.962,
+      "y": 0.4,
+      "z": 0.692
+    },
+    "thumbnail": "thumbs/sideTableDrawers.png"
+  },
+  {
+    "file": "speaker.glb",
+    "name": "Speaker",
+    "size": {
+      "x": 0.266,
+      "y": 0.266,
+      "z": 1.146
+    },
+    "thumbnail": "thumbs/speaker.png"
+  },
+  {
+    "file": "speakerSmall.glb",
+    "name": "Speaker small",
+    "size": {
+      "x": 0.266,
+      "y": 0.24,
+      "z": 0.536
+    },
+    "thumbnail": "thumbs/speakerSmall.png"
+  },
+  {
+    "file": "stoolBar.glb",
+    "name": "Stool bar",
+    "size": {
+      "x": 0.478,
+      "y": 0.414,
+      "z": 0.783
+    },
+    "thumbnail": "thumbs/stoolBar.png"
+  },
+  {
+    "file": "stoolBarSquare.glb",
+    "name": "Stool bar square",
+    "size": {
+      "x": 0.276,
+      "y": 0.266,
+      "z": 0.729
+    },
+    "thumbnail": "thumbs/stoolBarSquare.png"
+  },
+  {
+    "file": "table.glb",
+    "name": "Table",
+    "size": {
+      "x": 1.515,
+      "y": 0.805,
+      "z": 0.588
+    },
+    "thumbnail": "thumbs/table.png"
+  },
+  {
+    "file": "tableCloth.glb",
+    "name": "Table cloth",
+    "size": {
+      "x": 1.515,
+      "y": 0.805,
+      "z": 0.588
+    },
+    "thumbnail": "thumbs/tableCloth.png"
+  },
+  {
+    "file": "tableCoffee.glb",
+    "name": "Table coffee",
+    "size": {
+      "x": 1.19,
+      "y": 0.72,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/tableCoffee.png"
+  },
+  {
+    "file": "tableCoffeeGlass.glb",
+    "name": "Table coffee glass",
+    "size": {
+      "x": 1.19,
+      "y": 0.72,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/tableCoffeeGlass.png"
+  },
+  {
+    "file": "tableCoffeeGlassSquare.glb",
+    "name": "Table coffee glass square",
+    "size": {
+      "x": 0.72,
+      "y": 0.72,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/tableCoffeeGlassSquare.png"
+  },
+  {
+    "file": "tableCoffeeSquare.glb",
+    "name": "Table coffee square",
+    "size": {
+      "x": 0.72,
+      "y": 0.72,
+      "z": 0.414
+    },
+    "thumbnail": "thumbs/tableCoffeeSquare.png"
+  },
+  {
+    "file": "tableCross.glb",
+    "name": "Table cross",
+    "size": {
+      "x": 1.534,
+      "y": 0.805,
+      "z": 0.625
+    },
+    "thumbnail": "thumbs/tableCross.png"
+  },
+  {
+    "file": "tableCrossCloth.glb",
+    "name": "Table cross cloth",
+    "size": {
+      "x": 1.534,
+      "y": 0.805,
+      "z": 0.625
+    },
+    "thumbnail": "thumbs/tableCrossCloth.png"
+  },
+  {
+    "file": "tableGlass.glb",
+    "name": "Table glass",
+    "size": {
+      "x": 1.515,
+      "y": 0.805,
+      "z": 0.588
+    },
+    "thumbnail": "thumbs/tableGlass.png"
+  },
+  {
+    "file": "tableRound.glb",
+    "name": "Table round",
+    "size": {
+      "x": 1.247,
+      "y": 1.44,
+      "z": 0.66
+    },
+    "thumbnail": "thumbs/tableRound.png"
+  },
+  {
+    "file": "televisionAntenna.glb",
+    "name": "Television antenna",
+    "size": {
+      "x": 0.476,
+      "y": 0.144,
+      "z": 0.185
+    },
+    "thumbnail": "thumbs/televisionAntenna.png"
+  },
+  {
+    "file": "televisionModern.glb",
+    "name": "Television modern",
+    "size": {
+      "x": 1.233,
+      "y": 0.231,
+      "z": 0.819
+    },
+    "thumbnail": "thumbs/televisionModern.png"
+  },
+  {
+    "file": "televisionVintage.glb",
+    "name": "Television vintage",
+    "size": {
+      "x": 0.738,
+      "y": 0.486,
+      "z": 0.486
+    },
+    "thumbnail": "thumbs/televisionVintage.png"
+  },
+  {
+    "file": "toilet.glb",
+    "name": "Toilet",
+    "size": {
+      "x": 0.563,
+      "y": 0.859,
+      "z": 0.812
+    },
+    "thumbnail": "thumbs/toilet.png"
+  },
+  {
+    "file": "trashcan.glb",
+    "name": "Trashcan",
+    "size": {
+      "x": 0.374,
+      "y": 0.421,
+      "z": 0.77
+    },
+    "thumbnail": "thumbs/trashcan.png"
+  },
+  {
+    "file": "washer.glb",
+    "name": "Washer",
+    "size": {
+      "x": 0.702,
+      "y": 0.702,
+      "z": 0.846
+    },
+    "thumbnail": "thumbs/washer.png"
+  },
+  {
+    "file": "washerDryerStacked.glb",
+    "name": "Washer dryer stacked",
+    "size": {
+      "x": 0.702,
+      "y": 0.702,
+      "z": 1.692
+    },
+    "thumbnail": "thumbs/washerDryerStacked.png"
+  }
+]

@@ -2,8 +2,10 @@
 // The functions here are pure, so the 2D editor, the 3D view, and the exports share them.
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
-import { emptyPlan, newId, wallEnds } from "./plan";
-import type { Building, Chimney, Id, Point, Roof, Stair, Story } from "./types";
+import { defaultEnvelope } from "./insulation";
+import { emptyPlan, newId } from "./plan";
+import { roofGeometries } from "./roof";
+import type { Building, Chimney, Id, Point, Stair, Story } from "./types";
 
 /** The thickness of the floor slab between two stories. */
 export const SLAB = 0.25;
@@ -12,16 +14,20 @@ export const STORY_DEFAULTS = { height: 2.75, cellarHeight: 2.5, atticHeight: 1.
 export const STEP_HEIGHT = 0.18;
 /** A chimney without a given top ends this much above the roof. */
 export const CHIMNEY_ABOVE_ROOF = 0.8;
-export const ROOF_DEFAULTS = { pitch: 35, overhang: 0.4 };
-/** The thickness of a flat roof. */
-export const FLAT_ROOF = 0.3;
 
 export function newStory(name: string, elevation: number, height: number): Story {
   return { id: newId("st"), name, elevation, height, ...emptyPlan() };
 }
 
 export function emptyBuilding(): Building {
-  return { stories: [newStory("Ground floor", 0, STORY_DEFAULTS.height)], roof: null, north: 0 };
+  return {
+    stories: [newStory("Ground floor", 0, STORY_DEFAULTS.height)],
+    roofs: [],
+    north: 0,
+    models: [],
+    envelope: defaultEnvelope(),
+    pv: [],
+  };
 }
 
 export const findStory = (building: Building, id: Id): Story | undefined =>
@@ -187,71 +193,25 @@ export function stairShape(stair: Stair, rise: number): StairShape {
     steps,
     landing: n1,
     outline: [
-      at(Math.min(0, end), -h),
+      at(0, -h),
       at(run1 + w, -h),
       at(run1 + w, v2 + h),
       at(end, v2 + h),
       at(end, v2 - h),
       at(run1, v2 - h),
       at(run1, h),
-      at(Math.min(0, end), h),
+      at(0, h),
     ],
     arrow: [at(d1 / 2, 0), at(run1 + h, 0), at(run1 + h, v2), at(end + d2 / 2, v2)],
   };
-}
-
-// ----- The roof -----
-
-export interface RoofFrame {
-  /** The box of the roof on the plan, with the overhang. */
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  /** The height of the eaves above the ground. */
-  base: number;
-  /** The height of the highest point of the roof above the ground. */
-  top: number;
-}
-
-/**
- * The box and the heights of the roof, or null if the roof has no story or its story has no
- * walls. The box is around the vertices of the story, plus the overhang.
- */
-export function roofFrame(building: Building, roof: Roof | null = building.roof): RoofFrame | null {
-  if (!roof) return null;
-  const story = findStory(building, roof.storyId);
-  if (!story || story.walls.length === 0) return null;
-  const points = story.walls.flatMap((wall) => wallEnds(story, wall));
-  const o = roof.overhang;
-  const minX = Math.min(...points.map((p) => p.x)) - o;
-  const maxX = Math.max(...points.map((p) => p.x)) + o;
-  const minY = Math.min(...points.map((p) => p.y)) - o;
-  const maxY = Math.max(...points.map((p) => p.y)) + o;
-  const base = wallTop(story);
-  // The span is the width across the ridge.
-  const span = roof.ridge === "x" ? maxY - minY : maxX - minX;
-  const slope = Math.tan((roof.pitch * Math.PI) / 180);
-  const rise =
-    roof.kind === "flat" ? FLAT_ROOF : roof.kind === "shed" ? span * slope : (span / 2) * slope;
-  return { minX, minY, maxX, maxY, base, top: base + rise };
-}
-
-/** A new roof on the top story. The ridge goes along the longer side of the story. */
-export function defaultRoof(building: Building): Roof {
-  const story = building.stories[building.stories.length - 1];
-  const roof: Roof = { kind: "gable", storyId: story.id, ...ROOF_DEFAULTS, ridge: "x" };
-  const frame = roofFrame(building, roof);
-  if (frame && frame.maxY - frame.minY > frame.maxX - frame.minX) roof.ridge = "y";
-  return roof;
 }
 
 // ----- Chimneys -----
 
 /** The height of the top of the building: the roof, or else the top of the highest story. */
 export function buildingTop(building: Building): number {
-  const frame = roofFrame(building);
-  if (frame) return frame.top;
+  const roofs = roofGeometries(building);
+  if (roofs.length > 0) return Math.max(...roofs.map((r) => r.geometry.top));
   const top = building.stories[building.stories.length - 1];
   return top ? wallTop(top) : 0;
 }

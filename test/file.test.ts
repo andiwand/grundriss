@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addCellar, addStoryOnTop, defaultRoof, emptyBuilding } from "../src/model/building";
+import { addCellar, addStoryOnTop, emptyBuilding } from "../src/model/building";
+import { newRoof } from "../src/model/roof";
 import { parseBuilding, serializeBuilding } from "../src/model/file";
 import type { Plan } from "../src/model/types";
 
@@ -74,21 +75,56 @@ describe("file format", () => {
   it("reads what it writes for a building with stories, stairs, chimneys, and a roof", () => {
     const building = emptyBuilding();
     const ground = building.stories[0];
-    const a = addVertex(ground, { x: 0, y: 0 });
-    const b = addVertex(ground, { x: 6, y: 0 });
-    addWall(ground, a.id, b.id);
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 4 },
+      { x: 0, y: 4 },
+    ].map((p) => addVertex(ground, p));
+    for (let i = 0; i < 4; i++) addWall(ground, corners[i].id, corners[(i + 1) % 4].id);
     addStair(ground, { x: 1, y: 1 }, { x: 4, y: 1 });
     addChimney(ground, { x: 3, y: 3 });
     addCellar(building);
     addStoryOnTop(building, true);
-    building.roof = defaultRoof(building);
+    const roof = newRoof(building, ground, "gable")!;
+    roof.dormers.push({
+      id: "d",
+      side: 0,
+      offset: 3,
+      distance: 0.8,
+      width: 1.2,
+      height: 1.1,
+      kind: "gable",
+      pitch: 40,
+    });
+    roof.windows.push({ id: "w", side: 2, offset: 2, distance: 1, width: 0.8, length: 1.2 });
+    building.roofs.push(roof);
+    building.pv.push({
+      id: "pv",
+      roofId: roof.id,
+      face: 0,
+      panelWidth: 1.13,
+      panelHeight: 1.72,
+      panelPower: 430,
+      portrait: true,
+      margin: 0.3,
+      gap: 0.02,
+      limit: null,
+    });
     building.north = 30;
     expect(parseBuilding(serializeBuilding(building))).toEqual(building);
   });
 
   it("rejects a roof on a story that does not exist", () => {
     const building = emptyBuilding();
-    building.roof = { ...defaultRoof(building), storyId: "nothing" };
+    const story = building.stories[0];
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 4 },
+    ].map((p) => addVertex(story, p));
+    for (let i = 0; i < 3; i++) addWall(story, corners[i].id, corners[(i + 1) % 3].id);
+    building.roofs.push({ ...newRoof(building, story, "hip")!, storyId: "nothing" });
     expect(() => parseBuilding(serializeBuilding(building))).toThrow("does not exist");
   });
 
@@ -112,5 +148,135 @@ describe("file format", () => {
       walls: [{ id: "w", a: "x", b: "y", thickness: 0.2, height: 2.5 }],
     });
     expect(() => parsePlan(text)).toThrow("does not exist");
+  });
+});
+
+describe("files with the old single roof", () => {
+  /** A file of a house of 10 × 6 m with the old roof, as the app wrote it before the roofs. */
+  function oldFile(roof: Record<string, unknown>, pv: unknown[] = []): string {
+    const corners = [
+      [0, 0],
+      [10, 0],
+      [10, 6],
+      [0, 6],
+    ];
+    const story = {
+      id: "st-1",
+      name: "Ground floor",
+      elevation: 0,
+      height: 2.75,
+      vertices: corners.map(([x, y], i) => ({ id: `v${i}`, x, y })),
+      walls: corners.map((_, i) => ({
+        id: `w${i}`,
+        a: `v${i}`,
+        b: `v${(i + 1) % 4}`,
+        thickness: 0.2,
+        height: 2.5,
+      })),
+    };
+    return JSON.stringify({
+      format: "grundriss",
+      version: 2,
+      stories: [story],
+      roof: { storyId: "st-1", pitch: 30, overhang: 0.5, ...roof },
+      north: 0,
+      pv,
+    });
+  }
+
+  const kinds = (text: string) => parseBuilding(text).roofs[0].sides.map((s) => s.kind);
+
+  it("makes a gable roof with the eaves along the ridge", () => {
+    expect(kinds(oldFile({ kind: "gable", ridge: "x" }))).toEqual([
+      "eave",
+      "gable",
+      "eave",
+      "gable",
+    ]);
+    expect(kinds(oldFile({ kind: "gable", ridge: "y" }))).toEqual([
+      "gable",
+      "eave",
+      "gable",
+      "eave",
+    ]);
+    const roof = parseBuilding(oldFile({ kind: "gable", ridge: "x" })).roofs[0];
+    expect(roof.outline).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 6 },
+      { x: 0, y: 6 },
+    ]);
+    expect(roof.sides.every((s) => s.pitch === 30 && s.overhang === 0.5)).toBe(true);
+    expect(roof.flat).toBe(false);
+  });
+
+  it("puts the eave of a shed roof at the large side, and keeps a flat roof flat", () => {
+    expect(kinds(oldFile({ kind: "shed", ridge: "x" }))).toEqual([
+      "gable",
+      "gable",
+      "eave",
+      "gable",
+    ]);
+    expect(kinds(oldFile({ kind: "shed", ridge: "y" }))).toEqual([
+      "gable",
+      "eave",
+      "gable",
+      "gable",
+    ]);
+    const flat = parseBuilding(oldFile({ kind: "flat", ridge: "x" })).roofs[0];
+    expect(flat.flat).toBe(true);
+    expect(kinds(oldFile({ kind: "hip", ridge: "x" }))).toEqual(["eave", "eave", "eave", "eave"]);
+  });
+
+  it("puts the old PV fields on the converted roof", () => {
+    const building = parseBuilding(
+      oldFile({ kind: "gable", ridge: "x" }, [
+        {
+          id: "pv",
+          face: 1,
+          panelWidth: 1.13,
+          panelHeight: 1.72,
+          panelPower: 430,
+          portrait: true,
+          margin: 0.3,
+          gap: 0.02,
+          limit: null,
+        },
+      ]),
+    );
+    expect(building.pv[0].roofId).toBe(building.roofs[0].id);
+    expect(building.pv[0].face).toBe(1);
+  });
+});
+
+describe("numbers out of range", () => {
+  it("gives an optional number its default if the file has an infinite value", () => {
+    const building = emptyBuilding();
+    building.north = 12345;
+    building.stories[0].stairs.push({
+      id: "s1",
+      a: { x: 0, y: 0 },
+      b: { x: 3, y: 0 },
+      width: 1,
+      kind: "l",
+      turn: 1,
+      run2: 12345,
+    });
+    building.stories[0].rooms.push({
+      id: "r1",
+      key: "",
+      at: { x: 1, y: 1 },
+      name: "",
+      height: null,
+      floorHeating: false,
+      temperature: 12345,
+    });
+    // JSON.parse reads "1e999" as Infinity.
+    const text = serializeBuilding(building).replaceAll("12345", "1e999");
+    const result = parseBuilding(text);
+    expect(result.north).toBe(0);
+    expect(result.stories[0].stairs[0].run2).toBe(1);
+    expect(result.stories[0].rooms[0].temperature).toBeNull();
+    expect(parseBuilding(serializeBuilding(result))).toEqual(result);
   });
 });
