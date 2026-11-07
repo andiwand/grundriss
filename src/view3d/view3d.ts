@@ -954,6 +954,47 @@ function newell(polygon: Vec3[]): Vec3 {
   return n;
 }
 
+/**
+ * True if all points of `polygon` (3 or more) are in the plane of `plane`, within 5 cm. The glass
+ * of a dormer is a little in front of its wall.
+ */
+function inPlane(polygon: Vec3[], plane: Vec3[]): boolean {
+  if (polygon.length < 3 || plane.length < 3) return false;
+  const n = newell(plane);
+  const length = Math.hypot(n.x, n.y, n.z);
+  if (length < 1e-12) return false;
+  const o = plane[0];
+  return polygon.every(
+    (p) => Math.abs((n.x * (p.x - o.x) + n.y * (p.y - o.y) + n.z * (p.z - o.z)) / length) < 0.05,
+  );
+}
+
+/**
+ * The triangles of a flat polygon with holes in the same plane, for example a wall with a
+ * window. The triangles go the same way as the polygon, so that their normal points out.
+ */
+function withHoles(polygon: Vec3[], holes: Vec3[][]): Vec3[][] {
+  if (holes.length === 0) return triangles(polygon);
+  const n = newell(polygon);
+  const [ax, ay, az] = [Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)];
+  const flat = (p: Vec3) =>
+    az >= ax && az >= ay
+      ? new THREE.Vector2(p.x, p.y)
+      : ay >= ax
+        ? new THREE.Vector2(p.z, p.x)
+        : new THREE.Vector2(p.y, p.z);
+  const points = [...polygon, ...holes.flat()];
+  const shape = THREE.ShapeUtils.triangulateShape(
+    polygon.map(flat),
+    holes.map((hole) => hole.map(flat)),
+  );
+  return shape.map(([a, b, c]) => {
+    const t = newell([points[a], points[b], points[c]]);
+    const same = t.x * n.x + t.y * n.y + t.z * n.z >= 0;
+    return same ? [points[a], points[b], points[c]] : [points[a], points[c], points[b]];
+  });
+}
+
 /** A mesh of flat polygons, convex or not. */
 function polygonMesh(
   polygons: Vec3[][],
@@ -1019,7 +1060,13 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
         colorMaterial(roof.color),
       );
     } else {
-      const slab = roofSlab(geometry.faces, geometry.edges, roof, ROOF_THICKNESS);
+      // The main faces have a hole under each dormer, so that the window of the dormer shows the
+      // room behind it and not the roof.
+      const faces = geometry.faces.map((face) => ({
+        ...face,
+        holes: geometry.dormers.map((d) => d.hole).filter((hole) => inPlane(hole, face.polygon)),
+      }));
+      const slab = roofSlab(faces, geometry.edges, roof, ROOF_THICKNESS);
       if (slab) object.add(slab);
     }
     // A gable of a pitched roof is in the plane of the outer face of the walls under it, for
@@ -1032,8 +1079,11 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
       const slab = roofSlab(faces, null, roof, DORMER_ROOF_THICKNESS);
       if (slab) object.add(slab);
     }
+    // The wall of a dormer with the window has a hole for it, so that the glass is see-through.
     add(
-      geometry.dormers.flatMap((d) => d.walls),
+      geometry.dormers.flatMap((d) =>
+        d.walls.flatMap((wall) => (inPlane(d.window, wall) ? withHoles(wall, [d.window]) : [wall])),
+      ),
       materials.gable,
     );
     add(
@@ -1140,7 +1190,7 @@ function dormerRoofFaces(faces: Vec3[][], walls: Vec3[][]): { polygon: Vec3[]; n
  * `edges` is null, not the triangles of the faces.
  */
 function roofSlab(
-  faces: { polygon: Vec3[]; normal: Vec3 }[],
+  faces: { polygon: Vec3[]; normal: Vec3; holes?: Vec3[][] }[],
   edges: [Vec3, Vec3][] | null,
   roof: Roof,
   thickness: number,
@@ -1168,7 +1218,7 @@ function roofSlab(
   for (const face of faces) {
     const polygon = face.polygon;
     if (polygon.length < 3) continue;
-    for (const triangle of triangles(polygon)) {
+    for (const triangle of withHoles(polygon, face.holes ?? [])) {
       body.polygon(TOP, triangle.map(world));
       body.polygon(
         BOTTOM,
