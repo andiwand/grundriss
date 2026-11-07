@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- 2D: a Pan tool (P) moves the view with a drag. The Select tool has the normal arrow, because
+  it selects. The cursor is an open hand while you hold Space, and a closed hand during a pan.
+
 - The location of the building: the panel without a selection has a "Location" group with a
   place search and the latitude and the longitude. "Load climate" downloads the hourly weather of
   the last 10 complete years from Open-Meteo and stores a typical year in the plan (about 40 kB),

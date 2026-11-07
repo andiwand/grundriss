@@ -116,6 +116,7 @@ let calibration: { a: Point; b: Point } | null = null;
 const HINTS: Record<Tool, string> = {
   select:
     "Click to select, Shift+click to add. Click in a room to name it or to set its height. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: two-finger scroll, Space+drag, or right drag.",
+  pan: "Drag to move the view. The wheel or a pinch zooms. V goes back to Select. In other tools, hold Space and drag, or drag with the right button.",
   wall: "Click to add corners. A click on a corner or a wall ends the chain. The direction snaps to 15°. Shift: 45° steps. Alt: free. Esc: stop.",
   door: "Click on a wall to put a door in it.",
   window: "Click on a wall to put a window in it.",
@@ -2569,6 +2570,7 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-view]"
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
+  p: "pan",
   w: "wall",
   d: "door",
   n: "window",

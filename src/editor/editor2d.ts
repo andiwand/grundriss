@@ -106,6 +106,7 @@ const FIT_TOP_INSET = 56;
 
 export type Tool =
   | "select"
+  | "pan"
   | "wall"
   | "door"
   | "window"
@@ -232,10 +233,17 @@ export class Editor2D {
     const keyDown = (e: KeyboardEvent) => {
       // Space in a form field types a space. It does not start a pan.
       const field = e.target instanceof Element && e.target.matches("input, select, textarea");
-      if (e.code === "Space" && !field) this.spaceDown = true;
+      if (e.code === "Space" && !field) {
+        this.spaceDown = true;
+        // An open hand shows that a drag pans now.
+        this.element.classList.add("space");
+      }
     };
     const keyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") this.spaceDown = false;
+      if (e.code === "Space") {
+        this.spaceDown = false;
+        this.element.classList.remove("space");
+      }
     };
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
@@ -376,6 +384,7 @@ export class Editor2D {
     const drag = this.drag;
     if (drag) {
       this.drag = null;
+      this.element.classList.remove("panning");
       // A drag goes back to the state before the drag.
       if (drag.kind === "pan") this.offset = drag.startOffset;
       else if (drag.kind === "marquee") this.select(drag.base);
@@ -568,6 +577,8 @@ export class Editor2D {
   }
 
   private startPan(e: PointerEvent): void {
+    // The cursor shows a closed hand while the plan moves.
+    this.element.classList.add("panning");
     this.drag = {
       kind: "pan",
       startScreen: { x: e.clientX, y: e.clientY },
@@ -578,7 +589,7 @@ export class Editor2D {
   private pointerDown(e: PointerEvent): void {
     this.element.setPointerCapture(e.pointerId);
     const world = this.toWorld(e);
-    if (e.button === 1 || e.button === 2 || this.spaceDown) {
+    if (e.button === 1 || e.button === 2 || this.spaceDown || this.currentTool === "pan") {
       this.startPan(e);
       return;
     }
@@ -871,6 +882,7 @@ export class Editor2D {
   private pointerUp(): void {
     const drag = this.drag;
     this.drag = null;
+    this.element.classList.remove("panning");
     if (!drag || drag.kind === "pan" || this.lostTransaction(drag)) return;
     if (drag.kind === "marquee") {
       const pixels = distance(drag.start, drag.end) * this.zoom;

@@ -77,7 +77,7 @@ account and no server, and your plans stay on your computer as files.
 
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |
-| V, W, D, N, M, C         | Select, Wall, Door, Window, Measure, Set scale    |
+| V, P, W, D, N, M, C      | Select, Pan, Wall, Door, Window, Measure, Scale   |
 | Shift+click              | Add an object to the selection, or remove it      |
 | Drag on the empty plan   | Select the objects in a box                       |
 | Shift (wall tool)        | Keep the direction at a multiple of 45°           |

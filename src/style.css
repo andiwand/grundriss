@@ -753,7 +753,18 @@ button.ghost:hover:not(:disabled) {
   background: var(--paper);
   touch-action: none;
   user-select: none;
+  /* The select tool selects, so it has the normal arrow. Only a pan shows a hand. */
+  cursor: default;
+}
+
+.editor2d[data-tool="pan"],
+.editor2d.space {
   cursor: grab;
+}
+
+.editor2d.panning,
+.editor2d.panning * {
+  cursor: grabbing !important;
 }
 
 .editor2d[data-tool="wall"],
