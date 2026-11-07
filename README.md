@@ -1,10 +1,47 @@
-# Grundriss
+<p align="center">
+  <img src="public/icon.svg" alt="Grundriss logo" width="96" height="96" />
+</p>
 
-Grundriss is a browser app for floor plans. Load a scan or a photo of a plan, trace the walls on
-it, add doors and windows, and see the plan in 3D. The app runs fully in your browser. Your plans
-stay on your computer as files.
+<h1 align="center">Grundriss</h1>
 
-_Grundriss_ is the German word for a floor plan.
+<p align="center">
+  <strong>From a sketch to a house you can walk around.</strong><br />
+  Trace a scanned floor plan, edit it in 2D, and see it in 3D – in your browser.
+</p>
+
+<p align="center">
+  <a href="https://andiwand.github.io/grundriss/app/"><strong>Open the app</strong></a> ·
+  <a href="https://andiwand.github.io/grundriss/">Website</a> ·
+  <a href="#use">Use</a> ·
+  <a href="AGENTS.md">Develop</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/app.jpg" alt="The app: the plan of a house in 2D and the same house in 3D" width="900" />
+</p>
+
+_Grundriss_ is the German word for a floor plan. The app runs fully in your browser. It needs no
+account and no server, and your plans stay on your computer as files.
+
+## Features
+
+| Part          | What it does                                                                                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.           |
+| **Draw**      | Walls with snapping and angles, doors and windows, dimensions, and rooms that close by themselves with their names and areas.                                     |
+| **3D**        | The 3D view shows the plan at the same time as you edit it, with holes for each door and window.                                                                  |
+| **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                         |
+| **Roofs**     | Gable, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
+| **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                        |
+| **Services**  | Sockets, switches, lights, radiators, and heat sources, with cables and pipes and their lengths.                                                                  |
+| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, and solar panels with their yield.                                                              |
+| **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                               |
+
+<p align="center">
+  <a href="https://andiwand.github.io/grundriss/">
+    <img src="docs/images/website.jpg" alt="The website of Grundriss" width="900" />
+  </a>
+</p>
 
 ## Use
 
@@ -89,8 +126,9 @@ The browser downloads it (about 10 MB) the first time that you use one of them.
    The network runs in your browser. The first time, the browser downloads about 15 MB.
 
 The network learned only from synthetic plans that Grundriss generates. It can make mistakes on
-real scans, so check the result. The suggestions of step 3 find walls with a solid fill. They do not find walls drawn as two thin lines. A
-door gap stays open, so put a door in it and close the wall. Undo removes each step.
+real scans, so check the result. The suggestions of step 3 find walls with a solid fill. They do
+not find walls drawn as two thin lines. A door gap stays open, so put a door in it and close the
+wall. Undo removes each step.
 
 ### Roofs
 
@@ -134,7 +172,22 @@ energy certificate.
 
 ## Develop
 
-See [`AGENTS.md`](AGENTS.md).
+```sh
+npm ci
+npm run dev        # the app on http://localhost:5173/
+npm run dev:site   # the website
+npm test
+npm run build      # the website in dist/ and the app in dist/app/
+```
+
+See [`AGENTS.md`](AGENTS.md) for the architecture and the conventions. On `main`, the workflow
+`.github/workflows/pages.yml` deploys the website and the app to GitHub Pages.
+
+## Credits
+
+The furniture models come from [Kenney](https://kenney.nl) and [Poly Haven](https://polyhaven.com)
+(both CC0). Grundriss uses [Three.js](https://threejs.org), [OpenCV.js](https://opencv.org),
+[ONNX Runtime Web](https://onnxruntime.ai), and [fflate](https://github.com/101arrowz/fflate).
 
 ## License
 

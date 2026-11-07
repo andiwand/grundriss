@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grundriss – from a sketch to a house you can walk around</title>
+    <meta
+      name="description"
+      content="Grundriss traces a scanned floor plan, lets you edit it in 2D, and shows it in 3D – with stories, roofs, furniture, services, energy, and solar. Free, open source, and it runs in your browser."
+    />
+    <meta property="og:title" content="Grundriss" />
+    <meta
+      property="og:description"
+      content="From a sketch to a house you can walk around. Free and open source, in your browser."
+    />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body data-chapter="hero">
+    <div id="stage" aria-hidden="true">
+      <div id="sky"></div>
+      <div id="three"></div>
+      <div id="paper"></div>
+      <div id="blueprint"></div>
+    </div>
+
+    <nav id="rail" aria-label="Chapters"></nav>
+
+    <header class="topbar">
+      <a class="brand" href="./">
+        <img src="./icon.svg" alt="" width="28" height="28" />
+        <span>Grundriss</span>
+      </a>
+      <div class="topbar-links">
+        <a href="https://github.com/andiwand/grundriss">GitHub</a>
+        <a class="button small primary" href="./app/">Open the app</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" data-chapter="hero">
+        <div class="hero-inner">
+          <div class="logo-glow">
+            <img src="./icon.svg" alt="Grundriss logo" width="96" height="96" />
+          </div>
+          <h1>Grundriss</h1>
+          <p class="tagline">From a sketch to a house you can walk around.</p>
+          <p class="lead">
+            Trace a scanned floor plan, draw and edit it in 2D, and see it in 3D at the same time –
+            with stories, stairs, any roof, furniture, wiring, heating, energy, and solar.
+          </p>
+          <div class="cta">
+            <a class="button primary" href="./app/"
+              >Open the app <span aria-hidden="true">→</span></a
+            >
+            <a class="button" href="https://github.com/andiwand/grundriss">Source on GitHub</a>
+          </div>
+          <p class="pills">
+            <span>Free</span><span>Open source</span><span>No account</span
+            ><span>Your files stay with you</span>
+          </p>
+        </div>
+        <p class="scroll-hint">Scroll to build the house <span aria-hidden="true">↓</span></p>
+      </section>
+
+      <section class="chapter" data-chapter="scan" data-icon="image">
+        <article class="card">
+          <p class="kicker"><span class="number">01</span> Trace</p>
+          <h2>Start with the paper you have</h2>
+          <p>
+            Load a scan or a photo of an old plan. A neural network finds the walls, the doors, and
+            the windows right in your browser, and you accept or reject each suggestion. Calibrate
+            one known length, and the plan has the right scale.
+          </p>
+          <div class="readout" data-readout="scan"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="plan" data-icon="wall">
+        <article class="card">
+          <p class="kicker"><span class="number">02</span> Draw</p>
+          <h2>Walls that know their rooms</h2>
+          <p>
+            Draw walls with snapping and angles, drop in doors and windows, and move a wall – the
+            next walls follow. Rooms close by themselves, with their names and areas.
+          </p>
+          <div class="readout" data-readout="plan"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="walls" data-icon="split">
+        <article class="card">
+          <p class="kicker"><span class="number">03</span> 3D</p>
+          <h2>See it rise</h2>
+          <p>
+            Each line you draw is a wall in the 3D view next to it, with its thickness, its height,
+            and holes for every door and window. Orbit around it while you edit.
+          </p>
+          <div class="readout" data-readout="walls"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="stories" data-icon="stair">
+        <article class="card">
+          <p class="kicker"><span class="number">04</span> Stories</p>
+          <h2>Up the stairs</h2>
+          <p>
+            Add a cellar, more floors, or an attic. Straight, L, and U stairs climb to the next
+            story, and chimneys go up through all of them.
+          </p>
+          <div class="readout" data-readout="stories"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="roof" data-icon="roof">
+        <article class="card">
+          <p class="kicker"><span class="number">05</span> Roof</p>
+          <h2>Any roof, on any outline</h2>
+          <p>
+            Gable, hip, shed, or flat – or set each side on its own. A straight-skeleton engine
+            builds the faces on any outline, with dormers and roof windows. The attic walls stop
+            where the roof starts.
+          </p>
+          <div class="readout" data-readout="roof"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="furnish" data-icon="sofa">
+        <article class="card">
+          <p class="kicker"><span class="number">06</span> Furniture</p>
+          <h2>Make it a home</h2>
+          <p>
+            Pick from simple pieces with free sizes, the Kenney Furniture Kit, realistic models from
+            Poly Haven, or your own glTF files. A piece near a wall turns its back to it.
+          </p>
+          <div class="readout" data-readout="furnish"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="services" data-icon="plug">
+        <article class="card">
+          <p class="kicker"><span class="number">07</span> Services</p>
+          <h2>Every socket, every pipe</h2>
+          <p>
+            Place sockets, switches, lights, radiators, and the heat pump, and connect them with
+            cables and pipes. Grundriss counts the devices and measures every line.
+          </p>
+          <div class="readout" data-readout="services"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="energy" data-icon="flame">
+        <article class="card">
+          <p class="kicker"><span class="number">08</span> Energy</p>
+          <h2>Know the heat, catch the sun</h2>
+          <p>
+            Give the walls, the roof, and the floor their layers, and get the U-values and the heat
+            loss of each room. Fill the roof with solar panels and see their yield.
+          </p>
+          <div class="readout" data-readout="energy"></div>
+        </article>
+      </section>
+
+      <section class="chapter" data-chapter="export" data-icon="export">
+        <article class="card">
+          <p class="kicker"><span class="number">09</span> Export</p>
+          <h2>Take it anywhere</h2>
+          <p>
+            Print the plan to PDF at 1:50 or 1:100, open it in CAD as DXF, or take the house to
+            Blender as glTF. One package file keeps everything: the plan, the scans, and the models.
+          </p>
+          <div class="readout" data-readout="export"></div>
+        </article>
+      </section>
+
+      <section class="finale" data-chapter="finale">
+        <div class="finale-inner">
+          <h2>Draw your house tonight.</h2>
+          <p class="lead">
+            Grundriss runs in your browser. There is nothing to install, no account, and no server:
+            your plans never leave your computer.
+          </p>
+          <div class="cta">
+            <a class="button primary large" href="./app/"
+              >Open Grundriss <span aria-hidden="true">→</span></a
+            >
+          </div>
+          <div class="facts">
+            <div>
+              <strong>In the browser</strong
+              ><span>TypeScript, Three.js, OpenCV, and ONNX Runtime – no server.</span>
+            </div>
+            <div>
+              <strong>Private</strong
+              ><span>Your files stay on your computer. Open and save like in a desktop app.</span>
+            </div>
+            <div>
+              <strong>Open source</strong
+              ><span>MPL-2.0. Read the code, file an issue, or send a pull request.</span>
+            </div>
+            <div>
+              <strong>Real numbers</strong
+              ><span>Every number on this page comes from the engine of the app.</span>
+            </div>
+          </div>
+          <p class="credits">
+            Furniture models: <a href="https://kenney.nl">Kenney</a> (CC0) and
+            <a href="https://polyhaven.com">Poly Haven</a> (CC0). Built with
+            <a href="https://threejs.org">Three.js</a>, <a href="https://opencv.org">OpenCV</a>, and
+            <a href="https://onnxruntime.ai">ONNX Runtime</a>.
+          </p>
+        </div>
+        <footer>
+          <span>Grundriss · MPL-2.0</span>
+          <a href="https://github.com/andiwand/grundriss">github.com/andiwand/grundriss</a>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -92,6 +92,12 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/icons.ts`            | The icons of the user interface.                                                       |
 | `src/style.css`           | The layout and the style of the 2D drawing.                                            |
 | `test/`                   | Vitest tests of the model. They run in Node and need no DOM.                           |
+| `site/`                   | The website: a scroll story that builds one house with the engine of the app.          |
+| `site/src/house.ts`       | The house of the website, made with the model functions. `test/site-house.test.ts`.    |
+| `site/src/stage3d.ts`     | The 3D stage: parts of the house that grow with the scroll (a clipping plane).         |
+| `site/src/plan2d.ts`      | The 2D pictures: a sketch like a scan, and the plan from the SVG export.               |
+| `site/src/main.ts`        | The chapters, the scroll progress, the rail, and the live numbers of the cards.        |
+| `docs/images/`            | The pictures of the README.                                                            |
 
 `src/recognition/contract.ts` is the contract between the training and the app: the names,
 the shapes, the classes, and the scale of the input. A change of it needs a new model.
@@ -104,10 +110,16 @@ and the code can move to a worker or to WASM later.
 ```sh
 npm ci
 npm run dev           # serves the app on http://localhost:5173
+npm run dev:site      # serves the website (vite.site.config.ts)
 npm test
-npm run build         # type check and production build in dist/
+npm run build         # type check, the website in dist/, and the app in dist/app/
 npm run format:check
 ```
+
+GitHub Pages serves `dist/`: the website at the root and the app at `/app/`. The workflow
+`.github/workflows/pages.yml` checks, tests, builds, and deploys on `main`. The website imports
+the engine of the app (`src/model`, `src/export`, `src/view3d`), so a change of the engine can
+change the website. `test/site-house.test.ts` checks that its house stays valid.
 
 ## Conventions
 

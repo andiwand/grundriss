@@ -124,7 +124,10 @@ describe("planOutline", () => {
     for (let i = 0; i < 6; i++) addWall(plan, p[i].id, p[(i + 1) % 6].id);
     addWall(plan, p[1].id, p[4].id);
     const outline = planOutline(plan)!;
-    expect(outline).toHaveLength(6);
+    // The inner wall meets the outer walls at (4, 0) and (4, 3). These corners are on straight
+    // sides, so the outline leaves them out: a roof gets one side for each straight run.
+    expect(outline).toHaveLength(4);
+    expect(outline.some((q) => q.x === 4)).toBe(false);
     const xs = outline.map((q) => q.x);
     expect(Math.min(...xs)).toBe(0);
     expect(Math.max(...xs)).toBe(8);

@@ -569,16 +569,19 @@ function addWall(
         a.y + dy * ((s0 + s1) / 2),
       );
     } else {
-      // The roof cuts the piece: a prism of its side view, from the bottom up to the roof.
-      if (tops.every((p) => p.top <= y0 + 1e-4)) return;
-      const outline = [
-        new THREE.Vector2(s1, y0),
-        ...[...tops]
-          .reverse()
-          .map((p) => new THREE.Vector2(p.s, Math.max(y0, Math.min(y1, p.top)))),
-        new THREE.Vector2(s0, y0),
-      ];
-      geometry = new THREE.ExtrudeGeometry(new THREE.Shape(outline), {
+      // The roof cuts the piece: a prism of its side view, from the bottom up to the roof. Only
+      // the parts where the roof is above the bottom of the piece stay. A part of zero height
+      // would still show its flat faces above the roof, for example over a window under a slope.
+      const shapes = roofRuns(tops, y0).map(
+        (run) =>
+          new THREE.Shape([
+            new THREE.Vector2(run[run.length - 1].s, y0),
+            ...[...run].reverse().map((p) => new THREE.Vector2(p.s, Math.min(y1, p.top))),
+            new THREE.Vector2(run[0].s, y0),
+          ]),
+      );
+      if (shapes.length === 0) return;
+      geometry = new THREE.ExtrudeGeometry(shapes, {
         depth: thickness,
         bevelEnabled: false,
       });
@@ -595,6 +598,37 @@ function addWall(
   };
   for (const piece of pieces) place(piece, wall.thickness, materials.wall, true);
   for (const piece of glass) place(piece, GLASS_THICKNESS, materials.glass, false);
+}
+
+/**
+ * The runs of a wall profile where the top is above `bottom`. A run starts and ends where the
+ * top crosses `bottom`, so each run is a part of the wall with a height above zero.
+ */
+function roofRuns(
+  tops: { s: number; top: number }[],
+  bottom: number,
+): { s: number; top: number }[][] {
+  const MIN = 1e-3;
+  const runs: { s: number; top: number }[][] = [];
+  let run: { s: number; top: number }[] = [];
+  const crossing = (p: { s: number; top: number }, q: { s: number; top: number }) => ({
+    s: p.s + ((q.s - p.s) * (bottom - p.top)) / (q.top - p.top),
+    top: bottom,
+  });
+  tops.forEach((p, i) => {
+    const above = p.top > bottom + MIN;
+    const previous = tops[i - 1];
+    if (previous && above !== previous.top > bottom + MIN) {
+      run.push(crossing(previous, p));
+      if (!above) {
+        runs.push(run);
+        run = [];
+      }
+    }
+    if (above) run.push(p);
+  });
+  if (run.length > 0) runs.push(run);
+  return runs.filter((r) => r.length >= 2 && r[r.length - 1].s - r[0].s > MIN);
 }
 
 /**

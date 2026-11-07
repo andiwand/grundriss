@@ -7,11 +7,12 @@
   "license": "MPL-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "build": "tsc --noEmit && vite build -c vite.site.config.ts && vite build --outDir dist/app --emptyOutDir false",
+    "preview": "vite preview --outDir dist",
     "test": "vitest run",
-    "format": "prettier --write src test *.ts *.json *.md index.html",
-    "format:check": "prettier --check src test *.ts *.json *.md index.html"
+    "format": "prettier --write src test site *.ts *.json *.md index.html",
+    "format:check": "prettier --check src test site *.ts *.json *.md index.html",
+    "dev:site": "vite -c vite.site.config.ts"
   },
   "dependencies": {
     "@techstark/opencv-js": "^5.0.0-release.1",

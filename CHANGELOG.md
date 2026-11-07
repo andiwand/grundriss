@@ -4,6 +4,15 @@ The changes that a user notices.
 
 ## Unreleased
 
+- A website for Grundriss: a scroll story that builds one house with the engine of the app, from
+  the scan to the solar panels. GitHub Pages serves the website at the root and the app at
+  `/app/`. The README has the logo, a list of the features, and pictures.
+- A roof on the outline of the walls gets one side for each straight run of the outline. Before,
+  each inner wall that met an outer wall made a corner, so a face was in pieces and PV fit only
+  on one piece.
+- In 3D, a wall piece over a door or a window under the roof slope no longer shows above the
+  roof.
+
 - Roofs: a building can have several roofs, each on its own outline. "Add roof" takes the
   outline of the walls of the active story, with the presets gable, hip, shed, and flat. Each
   side of the outline is an eave or a gable, with its own pitch and overhang, so a roof can be a

@@ -235,5 +235,17 @@ export function planOutline(plan: Plan): Point[] | null {
     }
     i = Math.max(0, i - 2);
   }
-  return ids.length >= 3 ? polygon.reverse() : null;
+  // An inner wall that meets the outer wall puts a corner on a straight side. A roof needs one
+  // side for each straight run, so the function removes these corners.
+  for (let i = 0; polygon.length >= 3 && i < polygon.length;) {
+    const n = polygon.length;
+    const a = polygon[(i + n - 1) % n];
+    const b = polygon[i];
+    const c = polygon[(i + 1) % n];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    const dot = (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y);
+    if (Math.abs(cross) < 1e-9 * Math.max(1, Math.abs(dot)) && dot > 0) polygon.splice(i, 1);
+    else i++;
+  }
+  return polygon.length >= 3 ? polygon.reverse() : null;
 }

@@ -1,0 +1,936 @@
+/* The website of Grundriss. The stage is fixed behind the page. The sky, the paper, and the 3D
+   house change with the chapter (body[data-chapter]) and the scroll progress (--p, 0 to 1). */
+
+@property --sky-top {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #1b2a5c;
+}
+@property --sky-mid {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6f86d6;
+}
+@property --sky-bottom {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f6c9a0;
+}
+
+:root {
+  --brand: #2f6bff;
+  --brand-2: #7c5cff;
+  --gold: #ffb547;
+  --ink: #141a2b;
+  --muted: #5d6578;
+  --card: rgba(255, 255, 255, 0.76);
+  --line: rgba(20, 26, 43, 0.1);
+  --radius: 22px;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --p: 0;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: #0e1430;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition:
+    --sky-top 1.2s ease,
+    --sky-mid 1.2s ease,
+    --sky-bottom 1.2s ease;
+}
+
+a {
+  color: inherit;
+}
+
+/* ----- The sky of each chapter ----- */
+
+body[data-chapter="hero"] {
+  --sky-top: #1d2b63;
+  --sky-mid: #7a8fe0;
+  --sky-bottom: #f7c79c;
+}
+body[data-chapter="scan"] {
+  --sky-top: #d9cdb8;
+  --sky-mid: #ece3d3;
+  --sky-bottom: #f4eee4;
+}
+body[data-chapter="plan"] {
+  --sky-top: #cdd8f0;
+  --sky-mid: #e7edf9;
+  --sky-bottom: #f6f8fd;
+}
+body[data-chapter="walls"],
+body[data-chapter="stories"] {
+  --sky-top: #8db5ff;
+  --sky-mid: #dbe8ff;
+  --sky-bottom: #f6f0e7;
+}
+body[data-chapter="roof"],
+body[data-chapter="furnish"] {
+  --sky-top: #5d97ff;
+  --sky-mid: #c7dcff;
+  --sky-bottom: #f3ece1;
+}
+body[data-chapter="services"] {
+  --sky-top: #0c1230;
+  --sky-mid: #1b2552;
+  --sky-bottom: #2b2f5e;
+}
+body[data-chapter="energy"] {
+  --sky-top: #34478f;
+  --sky-mid: #e59a6e;
+  --sky-bottom: #ffd8a6;
+}
+body[data-chapter="export"] {
+  --sky-top: #0b2d74;
+  --sky-mid: #134bb0;
+  --sky-bottom: #1d5fd0;
+}
+body[data-chapter="finale"] {
+  --sky-top: #0d1230;
+  --sky-mid: #2c2f6b;
+  --sky-bottom: #b56f6a;
+}
+
+/* ----- The stage ----- */
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 70% at 70% 105%, rgba(255, 255, 255, 0.35), transparent 60%),
+    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 55%, var(--sky-bottom) 100%);
+}
+
+/* A faint grain over the sky, so that the gradients do not band. */
+#sky::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#three {
+  position: absolute;
+  inset: 0;
+  transition:
+    opacity 0.8s ease,
+    transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#three canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* On a wide screen, the picture sits right of the cards. */
+@media (min-width: 900px) {
+  body:not([data-chapter="hero"]):not([data-chapter="finale"]) #three {
+    transform: translateX(14vw);
+  }
+}
+
+body[data-chapter="hero"] #three {
+  transform: translateY(16vh);
+}
+
+body[data-chapter="finale"] #three {
+  transform: translateY(20vh) scale(0.9);
+  opacity: 0.55;
+}
+
+body[data-chapter="scan"] #three,
+body[data-chapter="plan"] #three,
+body[data-chapter="services"] #three,
+body[data-chapter="export"] #three {
+  opacity: 0;
+}
+
+/* ----- The paper: the sketch and the plan ----- */
+
+#paper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(62vw, 980px);
+  aspect-ratio: 1.42;
+  padding: 2.4%;
+  border-radius: 6px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0 0.3 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    #fbf8f1;
+  box-shadow:
+    0 40px 80px -30px rgba(40, 30, 10, 0.45),
+    0 12px 30px -12px rgba(40, 30, 10, 0.3),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  opacity: 0;
+  transform: translate(-50%, -40%) rotate(-4deg) scale(0.92);
+  transition:
+    opacity 0.8s ease,
+    transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 0.8s ease;
+}
+
+@media (min-width: 900px) {
+  #paper {
+    left: 62%;
+  }
+}
+
+body[data-chapter="scan"] #paper {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(-2.5deg);
+}
+body[data-chapter="plan"] #paper,
+body[data-chapter="services"] #paper {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg);
+  background-color: #ffffff;
+}
+
+#paper svg {
+  position: absolute;
+  inset: 2.4%;
+  width: 95.2%;
+  height: 95.2%;
+  transition: opacity 0.7s ease;
+}
+
+#paper .sketch {
+  opacity: 0;
+}
+#paper .plan {
+  opacity: 0;
+}
+body[data-chapter="scan"] #paper .sketch,
+body[data-chapter="plan"] #paper .plan,
+body[data-chapter="services"] #paper .plan {
+  opacity: 1;
+}
+
+.sketch .pencil {
+  fill: none;
+  stroke: #3d3a35;
+  stroke-width: 0.035;
+  stroke-linejoin: round;
+  opacity: 0.78;
+}
+.sketch .pencil .glass {
+  stroke-width: 0.08;
+  stroke: #6d6a63;
+}
+.sketch text {
+  fill: #4a4640;
+  stroke: none;
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 0.42px;
+  text-anchor: middle;
+}
+
+/* The found walls draw one after the other: each line starts at its share --i of the progress. */
+.sketch .found line {
+  stroke: var(--brand);
+  stroke-width: 0.11;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - clamp(0, (var(--p) * 1.6 - var(--i)) * 5, 1));
+  filter: drop-shadow(0 0 0.12px rgba(47, 107, 255, 0.9));
+}
+.sketch .found circle {
+  fill: #fff;
+  stroke: var(--brand);
+  stroke-width: 0.04;
+  opacity: clamp(0, (var(--p) * 1.6 - var(--i)) * 5, 1);
+}
+
+/* The plan builds its layers: the walls, then the rooms, then the names. */
+.plan #rooms,
+.plan #room-labels,
+.plan #stairs,
+.plan #chimneys {
+  transition: opacity 0.5s ease;
+}
+body[data-chapter="plan"] .plan #rooms {
+  opacity: clamp(0, (var(--p) - 0.1) * 4, 1);
+}
+body[data-chapter="plan"] .plan #room-labels {
+  opacity: clamp(0, (var(--p) - 0.3) * 4, 1);
+}
+body[data-chapter="plan"] .plan #stairs,
+body[data-chapter="plan"] .plan #chimneys {
+  opacity: clamp(0, (var(--p) - 0.45) * 4, 1);
+}
+body[data-chapter="plan"] .plan #furniture,
+body[data-chapter="plan"] .plan #services {
+  opacity: 0;
+}
+
+/* The services glow over a quiet plan, and the current flows along the lines. */
+body[data-chapter="services"] .plan #rooms,
+body[data-chapter="services"] .plan #room-labels,
+body[data-chapter="services"] .plan #furniture,
+body[data-chapter="services"] .plan #stairs {
+  opacity: 0.28;
+}
+body[data-chapter="services"] .plan #services {
+  opacity: clamp(0.2, var(--p) * 2.5, 1);
+  filter: drop-shadow(0 0 0.06px currentColor) saturate(1.4);
+}
+body[data-chapter="services"] .plan #services polyline,
+body[data-chapter="services"] .plan #services path {
+  stroke-dasharray: 0.25 0.12;
+  animation: flow 1.6s linear infinite;
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -0.74;
+  }
+}
+
+/* ----- The blueprint of the export ----- */
+
+#blueprint {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 8px 8px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 8px 8px;
+}
+body[data-chapter="export"] #blueprint {
+  opacity: 1;
+}
+#blueprint svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(58vw, 900px);
+  height: auto;
+  /* White lines on the blue: the inverted plan, added to the blue. */
+  filter: invert(1) grayscale(1) contrast(1.6);
+  mix-blend-mode: screen;
+  transform: translate(-50%, -54%) scale(calc(0.94 + var(--p) * 0.06));
+}
+@media (min-width: 900px) {
+  #blueprint svg {
+    left: 62%;
+  }
+}
+#blueprint .chips {
+  position: absolute;
+  left: 50%;
+  bottom: 9vh;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: min(90vw, 760px);
+  transform: translateX(-50%);
+}
+@media (min-width: 900px) {
+  #blueprint .chips {
+    left: 62%;
+  }
+}
+#blueprint .chips span {
+  padding: 9px 16px;
+  border-radius: 999px;
+  color: #dfe9ff;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#blueprint .chips strong {
+  color: #fff;
+  margin-right: 4px;
+}
+body[data-chapter="export"] #blueprint .chips span {
+  opacity: 1;
+  transform: none;
+}
+#blueprint .chips span:nth-child(2) {
+  transition-delay: 0.08s;
+}
+#blueprint .chips span:nth-child(3) {
+  transition-delay: 0.16s;
+}
+#blueprint .chips span:nth-child(4) {
+  transition-delay: 0.24s;
+}
+#blueprint .chips span:nth-child(5) {
+  transition-delay: 0.32s;
+}
+
+/* ----- The top bar ----- */
+
+.topbar {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: min(1180px, calc(100% - 28px));
+  padding: 8px 8px 8px 14px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(16px) saturate(1.4);
+  color: #fff;
+  transition:
+    background 0.6s ease,
+    color 0.6s ease,
+    border-color 0.6s ease;
+}
+body:is(
+    [data-chapter="scan"],
+    [data-chapter="plan"],
+    [data-chapter="walls"],
+    [data-chapter="stories"],
+    [data-chapter="roof"],
+    [data-chapter="furnish"]
+  )
+  .topbar {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(20, 26, 43, 0.08);
+  color: var(--ink);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.brand img {
+  border-radius: 8px;
+}
+.topbar-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 15px;
+}
+.topbar-links > a:not(.button) {
+  text-decoration: none;
+  opacity: 0.85;
+}
+.topbar-links > a:not(.button):hover {
+  opacity: 1;
+}
+
+/* ----- Buttons ----- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: none;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 24px -12px rgba(10, 20, 60, 0.5);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px -12px rgba(10, 20, 60, 0.55);
+}
+.button.primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #3d7bff 0%, var(--brand) 45%, var(--brand-2) 100%);
+  box-shadow:
+    0 10px 30px -10px rgba(47, 107, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.button.primary:hover {
+  box-shadow:
+    0 16px 40px -10px rgba(47, 107, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.button.small {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.button.large {
+  padding: 17px 30px;
+  font-size: 18px;
+}
+
+/* ----- The hero ----- */
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+.hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16vh 24px 0;
+  text-align: center;
+  color: #fff;
+}
+.hero-inner {
+  max-width: 760px;
+}
+.logo-glow {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 18px;
+}
+.logo-glow::before {
+  content: "";
+  position: absolute;
+  inset: -30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(120, 160, 255, 0.85), transparent 65%);
+  filter: blur(18px);
+  animation: breathe 5s ease-in-out infinite;
+}
+.logo-glow img {
+  position: relative;
+  border-radius: 22px;
+  box-shadow:
+    0 18px 40px -12px rgba(10, 20, 80, 0.7),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+@keyframes breathe {
+  50% {
+    transform: scale(1.12);
+    opacity: 0.7;
+  }
+}
+.hero h1 {
+  margin: 0;
+  font-size: clamp(56px, 10vw, 112px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  background: linear-gradient(180deg, #ffffff 30%, #cfdcff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 10px 30px rgba(10, 20, 80, 0.35));
+}
+.tagline {
+  margin: 18px 0 0;
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 600;
+  color: #ffe2b8;
+  letter-spacing: -0.01em;
+}
+.lead {
+  margin: 16px auto 0;
+  max-width: 620px;
+  font-size: 17px;
+  line-height: 1.6;
+  opacity: 0.88;
+}
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+.pills span {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(6px);
+}
+.scroll-hint {
+  position: absolute;
+  bottom: 3vh;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  animation: bob 2.4s ease-in-out infinite;
+}
+@keyframes bob {
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* ----- The chapters ----- */
+
+.chapter {
+  position: relative;
+  min-height: 210vh;
+  padding: 0 0 0 max(24px, 5vw);
+}
+
+.card {
+  position: sticky;
+  top: 15vh;
+  width: min(430px, calc(100vw - 48px));
+  padding: 26px 28px 24px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    0 30px 60px -30px rgba(10, 20, 60, 0.45),
+    0 2px 6px rgba(10, 20, 60, 0.06);
+  opacity: 0.35;
+  transform: translateY(12px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+body[data-chapter="scan"] [data-chapter="scan"] .card,
+body[data-chapter="plan"] [data-chapter="plan"] .card,
+body[data-chapter="walls"] [data-chapter="walls"] .card,
+body[data-chapter="stories"] [data-chapter="stories"] .card,
+body[data-chapter="roof"] [data-chapter="roof"] .card,
+body[data-chapter="furnish"] [data-chapter="furnish"] .card,
+body[data-chapter="services"] [data-chapter="services"] .card,
+body[data-chapter="energy"] [data-chapter="energy"] .card,
+body[data-chapter="export"] [data-chapter="export"] .card {
+  opacity: 1;
+  transform: none;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.number {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: #fff;
+  background: linear-gradient(135deg, #5b8cff, var(--brand-2));
+  box-shadow: 0 4px 12px -4px rgba(47, 107, 255, 0.8);
+}
+.card h2 {
+  margin: 12px 0 10px;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+.card p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.readout {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.readout dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.readout dl > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.readout dt {
+  font-size: 14px;
+  color: var(--muted);
+}
+.readout dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.readout dl > div:first-child dd {
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The dark chapters: the card turns dark too. */
+body[data-chapter="services"] [data-chapter="services"] .card,
+body[data-chapter="export"] [data-chapter="export"] .card {
+  --card: rgba(16, 22, 50, 0.72);
+  --muted: #b9c2dc;
+  --line: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+[data-chapter="services"] .kicker,
+[data-chapter="export"] .kicker {
+  color: #9db8ff;
+}
+[data-chapter="services"] .readout dl > div:first-child dd,
+[data-chapter="export"] .readout dl > div:first-child dd {
+  background: linear-gradient(135deg, #9db8ff, #ffd28a);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* ----- The rail ----- */
+
+#rail {
+  position: fixed;
+  right: 18px;
+  top: 50%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+body:not([data-chapter="hero"]):not([data-chapter="finale"]) #rail {
+  opacity: 1;
+}
+#rail button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    background 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+#rail button:hover {
+  transform: scale(1.08);
+}
+#rail button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #5b8cff, var(--brand-2));
+  box-shadow:
+    0 0 0 4px rgba(91, 140, 255, 0.25),
+    0 6px 18px -4px rgba(47, 107, 255, 0.9);
+}
+#rail .icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* ----- The finale ----- */
+
+.finale {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18vh 24px 28px;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(8, 10, 28, 0.55) 60%,
+    rgba(8, 10, 28, 0.85)
+  );
+}
+.finale-inner {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.finale h2 {
+  margin: 0;
+  font-size: clamp(40px, 6vw, 72px);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff 30%, #ffd9b0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 56px;
+  text-align: left;
+}
+.facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(12px);
+}
+.facts strong {
+  font-size: 16px;
+}
+.facts span {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #c5cbe0;
+}
+.credits {
+  margin-top: 40px;
+  font-size: 13px;
+  color: #aab2cc;
+}
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1080px;
+  width: 100%;
+  margin: 48px auto 0;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+  color: #9aa3bf;
+}
+footer a {
+  text-decoration: none;
+}
+
+/* ----- Small screens: the card goes to the bottom, the picture stays above it. ----- */
+
+@media (max-width: 899px) {
+  .chapter {
+    padding: 0 16px;
+  }
+  /* The card stays in the lower half of the screen, under the picture. */
+  .card {
+    top: 50svh;
+    margin-top: 50svh;
+    width: 100%;
+    max-height: 48svh;
+    overflow: auto;
+    padding: 18px 20px;
+  }
+  .card h2 {
+    margin: 8px 0 6px;
+    font-size: 24px;
+  }
+  .card p {
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  #paper {
+    width: 92vw;
+    top: 27%;
+  }
+  #blueprint svg {
+    width: 92vw;
+    top: 34%;
+  }
+  #blueprint .chips {
+    display: none;
+  }
+  #rail {
+    display: none;
+  }
+  .topbar-links > a:not(.button) {
+    display: none;
+  }
+  body:not([data-chapter="hero"]):not([data-chapter="finale"]) #three {
+    transform: translateY(-24vh);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
