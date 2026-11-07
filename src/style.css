@@ -340,6 +340,21 @@ button.ghost:hover:not(:disabled) {
   height: 16px;
 }
 
+/* The topics of the app. In a narrow window, the tabs show only their icons. */
+.topics button {
+  gap: 6px;
+}
+
+@media (max-width: 1280px) {
+  .topics button span {
+    display: none;
+  }
+
+  .topics button {
+    padding: 0 8px;
+  }
+}
+
 /* ----- The work area ----- */
 
 #area {
@@ -1638,6 +1653,24 @@ button.ghost:hover:not(:disabled) {
 
 .fixture.heating .fill {
   fill: #c92a2a;
+}
+
+.fixture.water .shape,
+.fixture.water .stroke {
+  stroke: #1971c2;
+}
+
+.fixture.water .fill {
+  fill: #1971c2;
+}
+
+.fixture.comms .shape,
+.fixture.comms .stroke {
+  stroke: #7048e8;
+}
+
+.fixture.comms .fill {
+  fill: #7048e8;
 }
 
 .fixture.selected .shape,

@@ -194,7 +194,15 @@ export class Editor2D {
   private runPoints: Point[] = [];
   private runFrom: Id | null = null;
   /** The layers of the building services that the editor shows. */
-  layers = { electric: true, heating: true, pv: true, insulation: false, background: true };
+  layers = {
+    water: true,
+    heating: true,
+    electric: true,
+    comms: true,
+    pv: true,
+    insulation: false,
+    background: true,
+  };
   /** The images of the 3D models seen from above, by model id. */
   private topViews = new Map<Id, string>();
 

@@ -33,7 +33,7 @@ account and no server, and your plans stay on your computer as files.
 | **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                         |
 | **Roofs**     | Gable, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
 | **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                        |
-| **Services**  | Sockets, switches, lights, radiators, and heat sources, with cables and pipes and their lengths.                                                                  |
+| **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                     |
 | **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, and solar panels with their yield.                                 |
 | **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                               |
 
@@ -45,7 +45,17 @@ account and no server, and your plans stay on your computer as files.
 
 ## Use
 
-1. Click **Background** and choose a scan or a photo of a plan.
+The top bar has five topics. Each topic shows its own tools, panel, and layers:
+
+- **Source**: open a plan, load a scan or a photo as the background, trace it, and set the map.
+- **Structure**: walls, doors, windows, stairs, chimneys, stories, and roofs.
+- **Utilities**: water, heating, electricity with PV, and communication.
+- **Interior**: furniture and rooms.
+- **Energy**: the location and the climate, the insulation, the heating per year, and its cost.
+
+Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic.
+
+1. In **Source**, click **Background** and choose a scan or a photo of a plan.
 2. Optional: straighten and clean the image, and let the app suggest the walls. See
    [Assisted tracing](#assisted-tracing).
 3. Click two points with a known distance between them, for example the ends of a wall. Type
@@ -67,10 +77,13 @@ account and no server, and your plans stay on your computer as files.
 10. Click in a room to give it a name and its own clear height.
 11. Click **Furniture** (I) and choose a piece. Click on the plan to place it. Near a wall, its
     back goes against the wall. R turns it, and the panel sets its size.
-12. Click **Services** (E) and choose a device or a line. A device for a wall goes against the
-    wall. A line connects to devices; a double click ends it. The **Layers** menu shows or hides
-    electricity, heating, PV, the insulation, the background image, and a map.
-13. Without a selection, the panel shows the story, the north direction, and the roof. Drag the
+12. In **Utilities**, click **Water**, **Heating**, **Electricity** (E), or **Communication**, and
+    choose a device or a line. A device for a wall goes against the wall. A line connects to
+    devices of its system; a double click ends it. The **Layers** menu shows or hides each
+    system, PV, the insulation, the background image, and a map. Each topic keeps its own
+    layers.
+13. Without a selection, the panel shows the content of the topic. In **Structure**, it shows
+    the story, the north direction, and the roof. Drag the
     compass at the top right to turn north.
 14. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
     model.
@@ -156,18 +169,18 @@ roof on the outline of the walls of the active story. Click a roof to change it:
 
 ### Energy and photovoltaic
 
-Without a selection, the panel shows the energy of the building:
+Without a selection, the **Energy** topic shows the energy of the building:
 
 - **Energy**: the heat loss of the building in kW and in W/m². The groups below set the layers of
   the outer walls, the roof, and the floor on the ground, the U-values of windows and doors, and
   the temperatures. A click on a room shows its heat loss and its heating. A click on a wall
   shows its U-value, and the wall can get its own layers.
-- **Photovoltaic**: **Add a PV field** fills the best face of the roof with panels. The field
+- **Photovoltaic**: in **Utilities**, the Electricity group has the PV fields. **Add a PV field** fills the best face of the roof with panels. The field
   gives the number of panels, the peak power, and the yield per year.
 
 ### Location and climate
 
-The **Location** group sets the place of the building: search a town, or type the latitude and
+The **Location** group (in **Source** and in **Energy**) sets the place of the building: search a town, or type the latitude and
 the longitude. **Load climate** then downloads the hourly weather of the last 10 complete years
 from [Open-Meteo](https://open-meteo.com) and stores a typical year in the plan (about 40 kB). So
 the plan works offline after that. The app sends the place to open-meteo.com only when you click
@@ -175,7 +188,7 @@ the plan works offline after that. The app sends the place to open-meteo.com onl
 
 The **Layers** menu can show a map under the 2D plan: OpenStreetMap, or the aerial photo of
 [basemap.at](https://basemap.at) in Austria. The map lies at the location and turns with the
-north direction. To fit the map to the plan, click **Move the map** in the Location group. Drag to move the map,
+north direction. To fit the map to the plan, click **Move the map** in the Location group of **Source**. Drag to move the map,
 and Shift+drag to turn it around the place (this changes North). Esc or **Done** ends it. The
 **Plan point x** and **y** of the location are the point of the plan at its latitude and
 longitude, so you can also type them. The browser loads
@@ -190,8 +203,9 @@ From the stored year, the app calculates:
 - the design temperature: the coldest mean of 48 hours in the 10 years. The Energy panel can use
   it for the temperature outside.
 - the heating per year: a monthly balance of the heat loss of the rooms, the sun through the
-  windows (by their direction), and the internal gains (3.75 W/m²), in the spirit of EN ISO 13790. The **Heating per year** group of the Energy panel sets the heating (heat pump, boiler,
-  district heating, or direct electric), its efficiency, and the price. It shows the heat demand,
+  windows (by their direction), and the internal gains (3.75 W/m²), in the spirit of EN ISO 13790. The Heating group of **Utilities** sets the heating (heat pump, boiler,
+  district heating, or direct electric) and its efficiency. The **Heating per year** group of
+  the Energy panel sets the price. It shows the heat demand,
   an efficiency class, the final energy, the cost, the CO₂, the heat demand of each month, and
   for a heat pump the part that the PV can cover. Hot water is not included.
 

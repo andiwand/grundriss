@@ -11,15 +11,17 @@ import {
   wallOutline,
 } from "../model/drawing";
 import { furnitureSymbol } from "../model/furniture";
-import { fixtureSymbol, runKind } from "../model/services";
+import { fixtureSymbol, runKind, SERVICE_SYSTEMS } from "../model/services";
 import { grow, riseOf, withFurniture, type StoryExtras } from "./context";
 import { findRooms, roomLabel } from "../model/rooms";
 
-import type { Plan, Point } from "../model/types";
+import type { Plan, Point, ServiceSystem } from "../model/types";
 
 const MARGIN = 0.5;
 /** The colors of the devices of each system. The lines use the colors of their kinds. */
-export const SERVICE_COLORS = { electric: "#d9480f", heating: "#c92a2a" } as const;
+export const SERVICE_COLORS = Object.fromEntries(
+  SERVICE_SYSTEMS.map((s) => [s.system, s.color]),
+) as Record<ServiceSystem, string>;
 
 const COLORS = {
   wall: "#262c38",

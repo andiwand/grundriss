@@ -56,8 +56,8 @@ describe("quantities", () => {
     );
     const result = buildingQuantities(building);
     expect(result.fixtures).toEqual([
-      { type: "socket", name: "Socket", count: 2 },
       { type: "radiator", name: "Radiator", count: 1 },
+      { type: "socket", name: "Socket", count: 2 },
       { type: "custom", name: "custom", count: 1 },
     ]);
     expect(result.runs).toEqual([{ kind: "flow", name: "Flow pipe", length: 6 }]);

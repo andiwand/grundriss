@@ -149,12 +149,20 @@ export interface ViewOptions {
 
 /** The layers of the building services that the view shows. */
 export interface ServiceLayers {
-  electric: boolean;
+  water: boolean;
   heating: boolean;
+  electric: boolean;
+  comms: boolean;
   pv: boolean;
 }
 
-const ALL_LAYERS: ServiceLayers = { electric: true, heating: true, pv: true };
+const ALL_LAYERS: ServiceLayers = {
+  water: true,
+  heating: true,
+  electric: true,
+  comms: true,
+  pv: true,
+};
 
 export class View3D {
   private renderer: THREE.WebGLRenderer;
@@ -1364,8 +1372,7 @@ function upNormal(polygon: Vec3[]): Vec3 {
 
 /** The devices and the lines of a story, for the systems that the layers show. */
 function addServices(group: THREE.Group, story: Story, layers: ServiceLayers): void {
-  const shown = (system: Fixture["system"]) =>
-    system === "electric" ? layers.electric : layers.heating;
+  const shown = (system: Fixture["system"]) => layers[system];
   for (const fixture of story.fixtures) {
     if (shown(fixture.system)) group.add(fixtureObject(story, fixture));
   }
@@ -1412,16 +1419,50 @@ function fixtureObject(story: Story, fixture: Fixture): THREE.Group {
     case "socket":
     case "socket-double":
     case "data":
+    case "phone":
+    case "tv":
+    case "sat":
     case "switch":
     case "switch-2way":
     case "junction": {
       // A flat plate on the wall, with a small colored mark for the kind of device.
       const width = fixture.type === "socket-double" ? 0.16 : 0.08;
       box(width, 0.08, 0.012, materials.plate);
-      const accent = fixture.type === "data" ? materials.device : materials.accent;
+      const accent = fixture.system === "comms" ? materials.device : materials.accent;
       box(width * 0.4, 0.02, 0.004, accent, 0.014);
       break;
     }
+    case "water-outlet":
+    case "outdoor-tap":
+    case "drain":
+      // A short pipe end that comes out of the wall.
+      box(0.04, 0.04, 0.06, fixture.type === "drain" ? materials.device : materials.plate);
+      break;
+    case "floor-drain":
+      box(fixture.width, 0.01, fixture.width, materials.device, 0, 0.005);
+      break;
+    case "water-meter":
+      box(fixture.width, 0.12, 0.1, materials.device);
+      break;
+    case "hot-water-tank": {
+      // A standing cylinder on the floor: the elevation is the height of its center.
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(fixture.width / 2, fixture.width / 2, 1.6, 32),
+        materials.plate,
+      );
+      mesh.position.set(0, 0.8 - fixture.elevation, fixture.width / 2);
+      group.add(mesh);
+      break;
+    }
+    case "inverter":
+    case "router":
+    case "multiswitch":
+      box(fixture.width, fixture.type === "inverter" ? 0.55 : 0.2, 0.12, materials.device);
+      break;
+    case "battery":
+    case "patch-panel":
+      box(fixture.width, fixture.type === "battery" ? 1.2 : 0.6, 0.2, materials.device);
+      break;
     case "light-ceiling":
     case "smoke":
       // A disc that hangs from the ceiling: the elevation is the height of the ceiling.
@@ -1476,7 +1517,7 @@ function runMaterial(color: string): THREE.Material {
 function runObject(story: Story, run: Run): THREE.Group | null {
   if (run.points.length < 2) return null;
   const kind = runKind(run.kind);
-  const radius = run.system === "heating" ? 0.015 : 0.008;
+  const radius = kind.radius;
   const material = runMaterial(kind.color);
   const group = new THREE.Group();
   group.name = kind.name;

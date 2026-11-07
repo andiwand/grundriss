@@ -4,6 +4,19 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Topics: the top bar has five topics: Source, Structure, Utilities, Interior, and Energy. Each
+  topic shows its own tools in the palette, its own panel when nothing is selected, and its own
+  layers. Select, Pan, and Measure are in all topics. A shortcut of a tool opens its topic. A
+  change in the Layers menu stays with the topic.
+- Utilities: four systems, each with its own menu in the palette: water, heating, electricity,
+  and communication. New devices: water outlet, waste connection, floor drain, outdoor tap, water
+  meter, hot water tank, PV inverter, battery storage, phone, TV, and SAT sockets, router,
+  network cabinet, and SAT multiswitch. New lines: cold water, hot water, circulation, and waste
+  water pipes, PV cable, and phone, TV, and SAT cables. The network socket and the network cable
+  move to communication, also in old files. The DXF export has the layers WATER and COMMS.
+- Utilities: the heat source and its efficiency are in the Heating group, and the PV fields are
+  in the Electricity group. The Energy topic keeps the price, the heating per year, and the PV
+  yield.
 - 3D: each wall is one body with real holes for its doors and windows. Walls meet in a miter at
   a corner, flush in a straight line, and at the face of the other wall at a T. The lines show
   only at real edges, not at the joints of the old boxes. A pitched roof has a thickness of 20 cm, and the roof of a dormer 12 cm with an overhang of 15 cm over its walls. The window of a dormer is see-through: its wall

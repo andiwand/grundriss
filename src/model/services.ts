@@ -21,142 +21,58 @@ export interface FixtureType {
   onWall: boolean;
 }
 
+/** The systems in the order of the user interface, with their names and plan colors. */
+export const SERVICE_SYSTEMS: { system: ServiceSystem; name: string; color: string }[] = [
+  { system: "water", name: "Water", color: "#1971c2" },
+  { system: "heating", name: "Heating", color: "#c92a2a" },
+  { system: "electric", name: "Electricity", color: "#d9480f" },
+  { system: "comms", name: "Communication", color: "#7048e8" },
+];
+
+/** The color of the device symbols of a system in the plan and the exports. */
+export const systemColor = (system: ServiceSystem): string =>
+  SERVICE_SYSTEMS.find((s) => s.system === system)?.color ?? "#d9480f";
+
+const device = (
+  system: ServiceSystem,
+  type: string,
+  name: string,
+  elevation: number | "ceiling",
+  width: number,
+  onWall = true,
+  power: number | null = null,
+): FixtureType => ({ type, system, name, elevation, width, power, onWall });
+
 export const FIXTURE_TYPES: FixtureType[] = [
-  {
-    type: "socket",
-    system: "electric",
-    name: "Socket",
-    elevation: 0.3,
-    width: 0.08,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "socket-double",
-    system: "electric",
-    name: "Double socket",
-    elevation: 0.3,
-    width: 0.16,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "switch",
-    system: "electric",
-    name: "Switch",
-    elevation: 1.05,
-    width: 0.08,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "switch-2way",
-    system: "electric",
-    name: "Two-way switch",
-    elevation: 1.05,
-    width: 0.08,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "light-ceiling",
-    system: "electric",
-    name: "Ceiling light",
-    elevation: "ceiling",
-    width: 0.3,
-    power: null,
-    onWall: false,
-  },
-  {
-    type: "light-wall",
-    system: "electric",
-    name: "Wall light",
-    elevation: 2.0,
-    width: 0.2,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "data",
-    system: "electric",
-    name: "Network socket",
-    elevation: 0.3,
-    width: 0.08,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "junction",
-    system: "electric",
-    name: "Junction box",
-    elevation: 2.2,
-    width: 0.08,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "smoke",
-    system: "electric",
-    name: "Smoke detector",
-    elevation: "ceiling",
-    width: 0.12,
-    power: null,
-    onWall: false,
-  },
-  {
-    type: "board",
-    system: "electric",
-    name: "Distribution board",
-    elevation: 1.4,
-    width: 0.6,
-    power: null,
-    onWall: true,
-  },
-  {
-    type: "radiator",
-    system: "heating",
-    name: "Radiator",
-    elevation: 0.45,
-    width: 1.0,
-    power: 1000,
-    onWall: true,
-  },
-  {
-    type: "towel-radiator",
-    system: "heating",
-    name: "Towel radiator",
-    elevation: 0.9,
-    width: 0.5,
-    power: 500,
-    onWall: true,
-  },
-  {
-    type: "boiler",
-    system: "heating",
-    name: "Boiler",
-    elevation: 1.2,
-    width: 0.45,
-    power: 15000,
-    onWall: true,
-  },
-  {
-    type: "heat-pump",
-    system: "heating",
-    name: "Heat pump",
-    elevation: 0.5,
-    width: 1.0,
-    power: 9000,
-    onWall: true,
-  },
-  {
-    type: "manifold",
-    system: "heating",
-    name: "Floor heating manifold",
-    elevation: 0.6,
-    width: 0.6,
-    power: null,
-    onWall: true,
-  },
+  device("water", "water-outlet", "Water outlet", 0.55, 0.08),
+  device("water", "drain", "Waste connection", 0.45, 0.1),
+  device("water", "floor-drain", "Floor drain", 0, 0.15, false),
+  device("water", "outdoor-tap", "Outdoor tap", 0.6, 0.08),
+  device("water", "water-meter", "Water meter", 1.0, 0.3),
+  device("water", "hot-water-tank", "Hot water tank", 0.9, 0.6),
+  device("heating", "radiator", "Radiator", 0.45, 1.0, true, 1000),
+  device("heating", "towel-radiator", "Towel radiator", 0.9, 0.5, true, 500),
+  device("heating", "manifold", "Floor heating manifold", 0.6, 0.6),
+  device("heating", "boiler", "Boiler", 1.2, 0.45, true, 15000),
+  device("heating", "heat-pump", "Heat pump", 0.5, 1.0, true, 9000),
+  device("electric", "socket", "Socket", 0.3, 0.08),
+  device("electric", "socket-double", "Double socket", 0.3, 0.16),
+  device("electric", "switch", "Switch", 1.05, 0.08),
+  device("electric", "switch-2way", "Two-way switch", 1.05, 0.08),
+  device("electric", "light-ceiling", "Ceiling light", "ceiling", 0.3, false),
+  device("electric", "light-wall", "Wall light", 2.0, 0.2),
+  device("electric", "junction", "Junction box", 2.2, 0.08),
+  device("electric", "smoke", "Smoke detector", "ceiling", 0.12, false),
+  device("electric", "board", "Distribution board", 1.4, 0.6),
+  device("electric", "inverter", "PV inverter", 1.4, 0.45),
+  device("electric", "battery", "Battery storage", 0.6, 0.6),
+  device("comms", "data", "Network socket", 0.3, 0.08),
+  device("comms", "phone", "Phone socket", 0.3, 0.08),
+  device("comms", "tv", "TV socket", 0.3, 0.08),
+  device("comms", "sat", "SAT socket", 0.3, 0.08),
+  device("comms", "router", "Router", 1.6, 0.3),
+  device("comms", "patch-panel", "Network cabinet", 1.4, 0.6),
+  device("comms", "multiswitch", "SAT multiswitch", 1.6, 0.3),
 ];
 
 export interface RunKind {
@@ -168,56 +84,57 @@ export interface RunKind {
   /** The color of the line in the views and the exports, as a CSS hex color. */
   color: string;
   dashed: boolean;
+  /** The radius of the tube in the 3D view, in meters. */
+  radius: number;
 }
 
+const line = (
+  system: ServiceSystem,
+  kind: string,
+  name: string,
+  elevation: number,
+  color: string,
+  dashed: boolean,
+  radius: number,
+): RunKind => ({ kind, system, name, elevation, color, dashed, radius });
+
 export const RUN_KINDS: RunKind[] = [
-  {
-    kind: "cable",
-    system: "electric",
-    name: "Power cable",
-    elevation: 0.3,
-    color: "#e8590c",
-    dashed: false,
-  },
-  {
-    kind: "light-cable",
-    system: "electric",
-    name: "Light cable",
-    elevation: 2.3,
-    color: "#f59f00",
-    dashed: false,
-  },
-  {
-    kind: "data-cable",
-    system: "electric",
-    name: "Data cable",
-    elevation: 0.3,
-    color: "#1098ad",
-    dashed: true,
-  },
-  {
-    kind: "flow",
-    system: "heating",
-    name: "Flow pipe",
-    elevation: 0.1,
-    color: "#e03131",
-    dashed: false,
-  },
-  {
-    kind: "return",
-    system: "heating",
-    name: "Return pipe",
-    elevation: 0.1,
-    color: "#1c7ed6",
-    dashed: true,
-  },
+  line("water", "cold-water", "Cold water pipe", 0.4, "#2f9e44", false, 0.012),
+  line("water", "hot-water", "Hot water pipe", 0.45, "#e64980", false, 0.012),
+  line("water", "circulation", "Circulation pipe", 0.5, "#e64980", true, 0.01),
+  line("water", "waste-water", "Waste water pipe", 0.05, "#8d6e63", false, 0.025),
+  line("heating", "flow", "Flow pipe", 0.1, "#e03131", false, 0.015),
+  line("heating", "return", "Return pipe", 0.1, "#1c7ed6", true, 0.015),
+  line("electric", "cable", "Power cable", 0.3, "#e8590c", false, 0.008),
+  line("electric", "light-cable", "Light cable", 2.3, "#f59f00", false, 0.008),
+  line("electric", "pv-cable", "PV cable", 2.3, "#66a80f", true, 0.008),
+  line("comms", "data-cable", "Network cable", 0.3, "#7048e8", true, 0.006),
+  line("comms", "phone-cable", "Phone cable", 0.3, "#ae3ec9", true, 0.006),
+  line("comms", "tv-cable", "TV cable", 0.3, "#1098ad", true, 0.006),
+  line("comms", "sat-cable", "SAT cable", 0.3, "#364fc7", true, 0.006),
 ];
 
+// An unknown type is a socket, and an unknown kind is a power cable, as in the first versions.
 export const fixtureType = (type: string): FixtureType =>
-  FIXTURE_TYPES.find((t) => t.type === type) ?? FIXTURE_TYPES[0];
+  FIXTURE_TYPES.find((t) => t.type === type) ?? FIXTURE_TYPES.find((t) => t.type === "socket")!;
 
 export const runKind = (kind: string): RunKind =>
-  RUN_KINDS.find((k) => k.kind === kind) ?? RUN_KINDS[0];
+  RUN_KINDS.find((k) => k.kind === kind) ?? RUN_KINDS.find((k) => k.kind === "cable")!;
+
+const SYSTEM_IDS = SERVICE_SYSTEMS.map((s) => s.system);
+
+/**
+ * The system of a device type or a line kind of a file. A known type or kind gives its own
+ * system, so that an old file with a network socket in "electric" moves it to "comms". An unknown
+ * one keeps a valid stored system, or else becomes "electric".
+ */
+export function serviceSystem(
+  stored: unknown,
+  known: { system: ServiceSystem } | undefined,
+): ServiceSystem {
+  if (known) return known.system;
+  return SYSTEM_IDS.includes(stored as ServiceSystem) ? (stored as ServiceSystem) : "electric";
+}
 
 export const findFixture = (plan: Plan, id: string): Fixture | undefined =>
   plan.fixtures.find((f) => f.id === id);
@@ -303,15 +220,91 @@ export function fixtureSymbol(f: Fixture): FixtureSymbol {
   const filled: Point[][] = [];
   const r = 0.12;
   const line = (...points: [number, number][]) => lines.push(points.map(([x, y]) => ({ x, y })));
+  const box = (w: number, from: number, to: number) =>
+    shapes.push([
+      { x: -w, y: from },
+      { x: w, y: from },
+      { x: w, y: to },
+      { x: -w, y: to },
+    ]);
   switch (f.type) {
     case "socket":
     case "data":
-      // A half circle that opens to the room, and a short line to the wall.
+    case "phone":
+    case "tv":
+    case "sat":
+      // A half circle that opens to the room, and a short line to the wall. The mark inside
+      // tells the kind of the outlet.
       lines.push(arc(0, r, r, Math.PI, 2 * Math.PI));
       line([-r, r], [r, r]);
       line([0, 0], [0, -0.05]);
       if (f.type === "data") filled.push(circle(0, r * 0.55, 0.03));
+      if (f.type === "phone") line([-0.05, r * 0.55], [0.05, r * 0.55]);
+      if (f.type === "tv") shapes.push(circle(0, r * 0.55, 0.035));
+      if (f.type === "sat") {
+        shapes.push(circle(0, r * 0.55, 0.035));
+        filled.push(circle(0, r * 0.55, 0.015));
+      }
       break;
+    case "water-outlet":
+    case "outdoor-tap":
+      // A circle in front of the wall, with the line of the tap to the wall.
+      line([0, 0], [0, 0.04]);
+      shapes.push(circle(0, 0.1, 0.06));
+      line([-0.06, 0.1], [0.06, 0.1]);
+      if (f.type === "outdoor-tap") filled.push(circle(0, 0.1, 0.025));
+      break;
+    case "drain":
+      shapes.push(circle(0, 0.08, 0.06));
+      filled.push(circle(0, 0.08, 0.03));
+      break;
+    case "floor-drain": {
+      const w = f.width / 2;
+      box(w, -w, w);
+      shapes.push(circle(0, 0, w * 0.55));
+      break;
+    }
+    case "water-meter":
+      shapes.push(circle(0, 0.11, 0.1));
+      line([-0.07, 0.18], [0.07, 0.04]);
+      break;
+    case "hot-water-tank": {
+      const rt = f.width / 2;
+      shapes.push(circle(0, rt, rt));
+      line([-rt, rt], [rt, rt]);
+      break;
+    }
+    case "inverter": {
+      const w = f.width / 2;
+      box(w, 0, 0.15);
+      line([-w, 0.15], [w, 0]);
+      break;
+    }
+    case "battery": {
+      const w = f.width / 2;
+      box(w, 0, 0.2);
+      line([-w * 0.4, 0.06], [-w * 0.4, 0.14]);
+      line([w * 0.4, 0.04], [w * 0.4, 0.16]);
+      break;
+    }
+    case "router":
+      box(f.width / 2, 0, 0.1);
+      line([-0.08, 0.1], [-0.12, 0.2]);
+      line([0.08, 0.1], [0.12, 0.2]);
+      break;
+    case "patch-panel": {
+      const w = f.width / 2;
+      box(w, 0, 0.15);
+      for (const x of [-w / 2, 0, w / 2]) line([x, 0], [x, 0.15]);
+      break;
+    }
+    case "multiswitch": {
+      const w = f.width / 2;
+      box(w, 0, 0.12);
+      line([-w, 0], [w, 0.12]);
+      line([-w, 0.12], [w, 0]);
+      break;
+    }
     case "socket-double":
       lines.push(arc(0, r, r, Math.PI, 2 * Math.PI));
       lines.push(arc(0, r + 0.05, r, Math.PI, 2 * Math.PI));

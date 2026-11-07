@@ -21,6 +21,9 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   to the story where they start. A stair goes up to the next story. A chimney goes up through
   the stories above.
 
+- The user interface has five topics (`Topic` in `src/main.ts`): source, structure, utilities,
+  interior, and energy. A topic selects the tools of the palette (`data-topic`), the panel
+  without a selection, and the layers. The topic is not in the plan file.
 - `PlanDocument` (`src/model/history.ts`) holds the building, the active story, and the undo
   history. `doc.plan` is the active story. `doc.edit` changes the active story, and
   `doc.editBuilding` changes the building. The choice of the active story is not in the history.
@@ -38,7 +41,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - Furniture belongs to a story. A piece is generic (a type of `src/model/furniture.ts`) or uses
   a `Model` of the building. A model has its GLB as a data URL, except the bundled Kenney
   models, which load from `public/models/kenney/`.
-- Building services belong to a story: devices (`Fixture`) and lines (`Run`). The insulation is
+- Building services belong to a story: devices (`Fixture`) and lines (`Run`). Each one has a system:
+  water, heating, electric, or comms. `parsePlan` takes the system from the known type or kind. The insulation is
   in `Building.envelope`, and a wall can override it with its own `layers`. PV fields
   (`Building.pv`) are on the faces of `roofSurfaces`. `energy.ts`, `pv.ts`, and
   `quantities.ts` calculate from the model and store nothing.
@@ -100,7 +104,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/tracing/`            | Assisted tracing with OpenCV.js, which loads only when necessary.                      |
 | `src/editor/editor2d.ts`  | The 2D editor: SVG drawing, tools, snapping, pan, and zoom.                            |
 | `src/view3d/view3d.ts`    | The 3D view with Three.js.                                                             |
-| `src/main.ts`             | The app: toolbar, panel, files, and keyboard shortcuts.                                |
+| `src/main.ts`             | The app: topics, toolbar, panel, files, and keyboard shortcuts.                        |
 | `src/icons.ts`            | The icons of the user interface.                                                       |
 | `src/style.css`           | The layout and the style of the 2D drawing.                                            |
 | `test/`                   | Vitest tests of the model. They run in Node and need no DOM.                           |

@@ -59,6 +59,7 @@ import type {
   OpeningKind,
   Point,
   RoomInfo,
+  ServiceSystem,
   StairKind,
 } from "./model/types";
 import { addRecognized, recognizedToWorld, type RecognizedOpening } from "./recognition/openings";
@@ -93,6 +94,7 @@ import { newId } from "./model/plan";
 import {
   FIXTURE_TYPES,
   RUN_KINDS,
+  SERVICE_SYSTEMS,
   findFixture,
   findRun,
   fixtureSymbol,
@@ -100,6 +102,7 @@ import {
   newFixture,
   runKind,
   runLength,
+  systemColor,
 } from "./model/services";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
@@ -139,12 +142,105 @@ const HINTS: Record<Tool, string> = {
   map: "Drag to move the map under the plan. Shift+drag turns the map around the place. Esc: done.",
 };
 
+// ----- Topics -----
+
+/**
+ * The topics of the user interface. A topic shows its own tools in the palette, its own content
+ * in the panel when nothing is selected, and its own layers.
+ */
+type Topic = "source" | "structure" | "utilities" | "interior" | "energy";
+type LayerName = keyof typeof editor.layers;
+
+const TOPICS: Topic[] = ["source", "structure", "utilities", "interior", "energy"];
+
+const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: false };
+
+/**
+ * The layers that each topic shows when the user opens it. The background is not in the list,
+ * because the user sets it for all topics. A change in the Layers menu stays with the topic.
+ */
+const topicLayers: Record<Topic, Partial<Record<LayerName, boolean>>> = {
+  source: { ...SERVICE_LAYERS, pv: false, insulation: false },
+  structure: { ...SERVICE_LAYERS, pv: false, insulation: false },
+  utilities: {
+    water: true,
+    heating: true,
+    electric: true,
+    comms: true,
+    pv: true,
+    insulation: false,
+  },
+  interior: { ...SERVICE_LAYERS, pv: false, insulation: false },
+  energy: { ...SERVICE_LAYERS, pv: true, insulation: true },
+};
+
+/** The topic of the tools that do not belong to all topics. */
+const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
+  calibrate: "source",
+  rectify: "source",
+  map: "source",
+  wall: "structure",
+  door: "structure",
+  window: "structure",
+  stair: "structure",
+  chimney: "structure",
+  fixture: "utilities",
+  run: "utilities",
+  furniture: "interior",
+};
+
+const SYSTEM_ICONS: Record<ServiceSystem, IconName> = {
+  water: "drop",
+  heating: "flame",
+  electric: "bolt",
+  comms: "antenna",
+};
+
+const TOPIC_KEY = "grundriss.topic";
+let topic: Topic = "structure";
+try {
+  const stored = localStorage.getItem(TOPIC_KEY) as Topic | null;
+  if (stored && TOPICS.includes(stored)) topic = stored;
+} catch {
+  // Without the storage, the app starts with the structure.
+}
+
+/** Opens the topic: its tools, its layers, and its panel. */
+function setTopic(next: Topic): void {
+  topic = next;
+  try {
+    localStorage.setItem(TOPIC_KEY, next);
+  } catch {
+    // The topic is only a convenience, so a blocked storage is no problem.
+  }
+  for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-tab]")) {
+    element.classList.toggle("active", element.dataset.topicTab === next);
+  }
+  for (const element of document.querySelectorAll<HTMLElement>("#tools [data-topic]")) {
+    element.hidden = element.dataset.topic !== next;
+  }
+  // The divider after the tools of all topics shows only if the topic has its own tools.
+  $("#tools .divider").hidden = !document.querySelector(`#tools [data-topic="${next}"]`);
+  for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
+    const value = topicLayers[next][input.dataset.layer as LayerName];
+    if (value !== undefined) input.checked = value;
+  }
+  closeMenus();
+  if (next !== "interior" && catalog.isOpen) catalog.close();
+  const owner = TOOL_TOPIC[editor.tool];
+  if (owner && owner !== next) setTool("select");
+  applyLayers();
+}
+
 function showStatus(text: string, error = false): void {
   status.textContent = text;
   status.classList.toggle("error", error);
 }
 
 function setTool(tool: Tool): void {
+  // A tool of another topic, for example from a shortcut, opens its topic first.
+  const owner = TOOL_TOPIC[tool];
+  if (owner && owner !== topic) setTopic(owner);
   editor.tool = tool;
   calibration = null;
   markTool(tool);
@@ -449,7 +545,7 @@ function button(
   text: string,
   action: () => void,
   options: { kind?: "primary" | "danger"; icon?: IconName; detail?: string } = {},
-): void {
+): HTMLButtonElement {
   let row = section.lastElementChild;
   if (!row?.classList.contains("actions")) {
     row = document.createElement("div");
@@ -475,6 +571,7 @@ function button(
   }
   element.addEventListener("click", action);
   row.append(element);
+  return element;
 }
 
 /** A row of the panel: a label on the left and a control in a box on the right. */
@@ -584,6 +681,7 @@ function renderPanel(): void {
   if (renderTracing()) return;
   // The card is only for a new plan. A tool other than "select" hides it, so that it does not
   // block the clicks of that tool.
+  $<HTMLButtonElement>('[data-tool="rectify"]').disabled = !plan.background;
   $("#empty-state").hidden =
     plan.walls.length > 0 || plan.background !== null || editor.tool !== "select";
 
@@ -772,7 +870,7 @@ function renderPanel(): void {
     const type = fixtureType(fixture.type);
     const set = (key: "elevation" | "width" | "rotation" | "power") => (value: number) =>
       doc.edit((plan) => (findFixture(plan, id)![key] = value));
-    heading(type.name, fixture.system === "electric" ? "plug" : "flame");
+    heading(type.name, SYSTEM_ICONS[fixture.system]);
     textField(
       "Label",
       fixture.label,
@@ -780,8 +878,10 @@ function renderPanel(): void {
       { placeholder: "For example K1", allowEmpty: true },
     );
     numberField("Height", fixture.elevation, set("elevation"), { min: -1 });
+    if (fixture.system === "heating" || fixture.system === "water") {
+      numberField("Width", fixture.width, set("width"), { min: 0.05 });
+    }
     if (fixture.system === "heating") {
-      numberField("Width", fixture.width, set("width"), { min: 0.1 });
       numberField("Power", fixture.power ?? 0, set("power"), { min: 0, step: 50, unit: "W" });
     }
     numberField("Rotation", fixture.rotation, set("rotation"), { min: -360, step: 1, unit: "°" });
@@ -795,7 +895,7 @@ function renderPanel(): void {
     const run = findRun(plan, selection.id);
     if (!run) return;
     const id = run.id;
-    heading(runKind(run.kind).name, run.system === "electric" ? "plug" : "flame");
+    heading(runKind(run.kind).name, SYSTEM_ICONS[run.system]);
     stats([
       [`${runLength(run).toFixed(2)} m`, "length on the plan"],
       [String(run.points.length), "points"],
@@ -1126,22 +1226,27 @@ function renderPanel(): void {
     return;
   }
 
-  renderStoryPanel();
-  heading("Plan", "view2d");
-  const rooms = findRooms(plan);
-  const area = rooms.reduce((sum, room) => sum + room.area, 0);
-  stats([
-    [String(plan.walls.length), "walls"],
-    [String(plan.openings.length), "openings"],
-    [String(rooms.length), "rooms"],
-    [`${area.toFixed(1)} m²`, "area"],
-  ]);
-  paragraph("The area is inside the center lines of the walls.", "note");
-  renderBuildingPanel();
-  renderLocationPanel();
-  renderEnergyPanel();
-  renderPvPanel();
-  renderQuantities();
+  switch (topic) {
+    case "source":
+      return renderSourcePanel();
+    case "structure":
+      return renderStructurePanel();
+    case "utilities":
+      return renderUtilitiesPanel();
+    case "interior":
+      return renderInteriorPanel();
+    case "energy":
+      return renderEnergyTopic();
+  }
+}
+
+/** Open a plan, a scan or a photo as the background, the assisted tracing, and the map. */
+function renderSourcePanel(): void {
+  const plan = doc.plan;
+  heading("Source", "open");
+  paragraph("Start from a saved plan, from a scan or a photo of a plan, or from a map.", "note");
+  button("Open a plan", () => void openFile(), { icon: "open" });
+  button("Open the example house", openExample, { icon: "roof" });
   heading("Background", "image");
   if (plan.background) {
     rangeField("Opacity", plan.background.opacity, (value) =>
@@ -1166,6 +1271,102 @@ function renderPanel(): void {
   } else {
     paragraph("Load a scan or a photo of a plan as the background, and draw the walls on it.");
     button("Load background", () => void loadBackground(), { icon: "image" });
+  }
+  renderLocationPanel("map");
+}
+
+/** The story, the walls and the rooms of the plan, the orientation, and the roofs. */
+function renderStructurePanel(): void {
+  const plan = doc.plan;
+  renderStoryPanel();
+  heading("Plan", "view2d");
+  const rooms = findRooms(plan);
+  const area = rooms.reduce((sum, room) => sum + room.area, 0);
+  stats([
+    [String(plan.walls.length), "walls"],
+    [String(plan.openings.length), "openings"],
+    [String(rooms.length), "rooms"],
+    [`${area.toFixed(1)} m²`, "area"],
+  ]);
+  paragraph("The area is inside the center lines of the walls.", "note");
+  renderBuildingPanel();
+}
+
+const SYSTEM_HINTS: Record<ServiceSystem, string> = {
+  water:
+    "The pipes of cold water, hot water, and waste water, with the outlets, the drains, and the hot water tank.",
+  heating: "The pipes of the heating, the radiators, the manifolds, and the heat source.",
+  electric: "The sockets, the switches, the lights, the cables, and the photovoltaic system.",
+  comms: "The network, phone, TV, and SAT sockets and cables.",
+};
+
+/** The systems of the building services: their quantities, the heating, and the PV. */
+function renderUtilitiesPanel(): void {
+  const { runs, fixtures } = buildingQuantities(doc.building);
+  for (const { system, name } of SERVICE_SYSTEMS) {
+    heading(name, SYSTEM_ICONS[system]);
+    const own = {
+      runs: runs.filter((q) => runKind(q.kind).system === system),
+      fixtures: fixtures.filter((q) => fixtureType(q.type).system === system),
+    };
+    if (own.runs.length === 0 && own.fixtures.length === 0) {
+      paragraph(SYSTEM_HINTS[system], "note");
+    } else {
+      group("Quantities of the building", false, () => {
+        for (const run of own.runs) paragraph(`${run.name}: ${run.length.toFixed(1)} m`);
+        for (const fixture of own.fixtures) paragraph(`${fixture.name}: ${fixture.count}`);
+        if (own.runs.length > 0) paragraph("The lengths include the drops to the devices.", "note");
+      });
+    }
+    const add = button(`Add ${name.toLowerCase()}`, () => openServicesMenu(system, add), {
+      icon: "plus",
+    });
+    add.dataset.menu = "";
+    if (system === "heating") renderHeatingSystem();
+    if (system === "electric") renderPvPanel();
+  }
+}
+
+/** The furniture and the rooms of the active story. */
+function renderInteriorPanel(): void {
+  const plan = doc.plan;
+  heading("Furniture", "sofa");
+  const total = doc.building.stories.reduce((sum, story) => sum + story.furniture.length, 0);
+  stats([
+    [String(plan.furniture.length), `pieces on ${plan.name}`],
+    [String(total), "pieces in the building"],
+  ]);
+  button("Open the furniture catalog", () => catalog.open(), { kind: "primary", icon: "sofa" });
+  paragraph(
+    "Click a piece on the plan to move it, to turn it, or to change its size. R turns a selected piece.",
+    "note",
+  );
+  const rooms = findRooms(plan);
+  if (rooms.length === 0) return;
+  heading("Rooms", "view2d");
+  for (const room of rooms) {
+    button(room.info?.name || "Room", () => editor.select({ kind: "room", id: room.key }), {
+      icon: "view2d",
+      detail: `${room.area.toFixed(2)} m²`,
+    });
+  }
+  paragraph("Click a room to change its name, its height, and the color of its walls.", "note");
+}
+
+/** The location and the climate, the envelope, the heating per year, and the PV yield. */
+function renderEnergyTopic(): void {
+  renderLocationPanel("climate");
+  renderEnergyPanel();
+  const building = doc.building;
+  if (building.pv.length > 0) {
+    const total = pvSummary(building);
+    heading("Photovoltaic", "sparkle");
+    stats([
+      [`${total.peak.toFixed(1)} kWp`, `${total.count} panels`],
+      [`${Math.round(total.yield)} kWh`, "per year"],
+    ]);
+    pvSourceNote();
+    button("Change the PV fields", () => setTopic("utilities"), { icon: "bolt" });
   }
 }
 
@@ -1697,7 +1898,11 @@ async function loadClimate(): Promise<void> {
 }
 
 /** The location: the place search, the coordinates, and the climate. */
-function renderLocationPanel(): void {
+/**
+ * The place of the building. The source topic shows the map under the plan, and the energy topic
+ * shows the climate of the place.
+ */
+function renderLocationPanel(mode: "map" | "climate"): void {
   const building = doc.building;
   const location = building.location;
   heading("Location", "pin");
@@ -1743,7 +1948,7 @@ function renderLocationPanel(): void {
     coordinateField("Longitude", location?.longitude ?? null, 180, (value) =>
       editLocation((l) => (l.longitude = value)),
     );
-    if (location) {
+    if (location && mode === "map") {
       const moving = editor.tool === "map";
       button(
         moving ? "Done" : "Move the map",
@@ -1767,6 +1972,15 @@ function renderLocationPanel(): void {
   });
   const details = section.lastElementChild as HTMLDetailsElement;
   details.addEventListener("toggle", () => (locationOpen = details.open));
+  if (mode === "map") {
+    paragraph(
+      "Search sends the text to open-meteo.com. The app sends nothing before you click. The map under the plan is in the Layers menu.",
+      "note",
+    );
+    if (locationMessage)
+      paragraph(locationMessage.text, locationMessage.error ? "warning" : "note");
+    return;
+  }
   if (locationBusy) {
     paragraph(locationBusy, "busy");
     if (climateRequest) button("Stop", () => climateRequest?.abort(), { icon: "close" });
@@ -2024,12 +2238,9 @@ const MONTH_NAMES = [
 const kwh = (value: number) =>
   `${Math.round(value).toLocaleString("en").replace(/,/g, "\u2009")} kWh`;
 
-/** The energy for heating per year: the heating system, the results, and the months. */
-function renderHeatingEnergy(): void {
-  const building = doc.building;
-  const heating = building.envelope.heating;
-  const info = HEATING_KINDS[heating.kind];
-  heading("Heating per year", "flame");
+/** The heat source of the building and its efficiency, in the topic of the utilities. */
+function renderHeatingSystem(): void {
+  const heating = doc.building.envelope.heating;
   const setHeating = (edit: (h: typeof heating) => void) =>
     doc.editBuilding((b) => edit(b.envelope.heating));
   selectField(
@@ -2045,6 +2256,21 @@ function renderHeatingEnergy(): void {
     (value) => value > 0 && setHeating((h) => (h.efficiency = value)),
     { min: 0.1, step: pump ? 0.1 : 0.01, unit: "" },
   );
+}
+
+/** The energy for heating per year: the price, the results, and the months. */
+function renderHeatingEnergy(): void {
+  const building = doc.building;
+  const heating = building.envelope.heating;
+  const info = HEATING_KINDS[heating.kind];
+  heading("Heating per year", "flame");
+  const setHeating = (edit: (h: typeof heating) => void) =>
+    doc.editBuilding((b) => edit(b.envelope.heating));
+  const pump = heating.kind === "heat-pump";
+  button(info.name, () => setTopic("utilities"), {
+    icon: "flame",
+    detail: `${pump ? "Performance factor" : "Efficiency"} ${heating.efficiency} · change it in Utilities`,
+  });
   numberField(`Price of ${info.energy}`, heating.price, (v) => setHeating((h) => (h.price = v)), {
     step: 0.01,
     unit: "€/kWh",
@@ -2244,18 +2470,6 @@ function renderPvPanel(): void {
   }
 }
 
-/** The lengths of the lines and the counts of the devices of the building. */
-function renderQuantities(): void {
-  const { runs, fixtures } = buildingQuantities(doc.building);
-  if (runs.length === 0 && fixtures.length === 0) return;
-  heading("Services", "plug");
-  group("Quantities of the building", false, () => {
-    for (const run of runs) paragraph(`${run.name}: ${run.length.toFixed(1)} m`);
-    for (const fixture of fixtures) paragraph(`${fixture.name}: ${fixture.count}`);
-    paragraph("The lengths include the drops to the devices.", "note");
-  });
-}
-
 // ----- Stories -----
 
 let showAbove = false;
@@ -2352,11 +2566,11 @@ function setupCompass(): void {
 // ----- The 3D view -----
 
 function update3d(): void {
-  const { electric, heating, pv } = editor.layers;
+  const { water, heating, electric, comms, pv } = editor.layers;
   view3d.update(doc.building, {
     activeStoryId: doc.activeStoryId,
     showAbove,
-    layers: { electric, heating, pv },
+    layers: { water, heating, electric, comms, pv },
   });
 }
 
@@ -2370,47 +2584,65 @@ function fit3d(): void {
 // ----- Building services -----
 
 /** The menu of the device types and the kinds of lines, grouped by system. */
-function buildServicesMenu(): void {
+let servicesMenuSystem: ServiceSystem | null = null;
+
+/**
+ * Opens the menu of the device types and the kinds of lines of one system under the button, or
+ * closes it if it is open for the same system.
+ */
+function openServicesMenu(system: ServiceSystem, anchor: HTMLElement): void {
   const menu = $("#services-menu");
+  if (!menu.hidden && servicesMenuSystem === system) return closeMenus();
+  servicesMenuSystem = system;
   menu.replaceChildren();
-  for (const [system, title] of [
-    ["electric", "Electric"],
-    ["heating", "Heating"],
-  ] as const) {
+  const title = (text: string) => {
     const heading = document.createElement("h4");
-    heading.textContent = title;
+    heading.textContent = text;
     menu.append(heading);
-    for (const type of FIXTURE_TYPES.filter((t) => t.system === system)) {
-      const item = document.createElement("button");
-      item.append(fixturePicture(type.type), type.name);
-      item.addEventListener("click", () => {
-        closeMenus();
-        const ceiling = defaultWallHeight(doc.plan) - 0.05;
-        editor.startFixture(newFixture(type.type, { x: 0, y: 0 }, ceiling));
-        markTool("fixture");
-        showStatus(HINTS.fixture);
-        renderPanel();
-      });
-      menu.append(item);
-    }
-    for (const kind of RUN_KINDS.filter((k) => k.system === system)) {
-      const item = document.createElement("button");
-      const swatch = document.createElement("span");
-      swatch.className = "swatch";
-      swatch.style.background = kind.dashed
-        ? `repeating-linear-gradient(90deg, ${kind.color} 0 6px, transparent 6px 10px)`
-        : kind.color;
-      item.append(swatch, kind.name);
-      item.addEventListener("click", () => {
-        closeMenus();
-        editor.startRun(kind.kind);
-        markTool("run");
-        showStatus(HINTS.run);
-        renderPanel();
-      });
-      menu.append(item);
-    }
+  };
+  title("Devices");
+  for (const type of FIXTURE_TYPES.filter((t) => t.system === system)) {
+    const item = document.createElement("button");
+    item.append(fixturePicture(type.type), type.name);
+    item.addEventListener("click", () => {
+      closeMenus();
+      setTopic("utilities");
+      const ceiling = defaultWallHeight(doc.plan) - 0.05;
+      editor.startFixture(newFixture(type.type, { x: 0, y: 0 }, ceiling));
+      markTool("fixture");
+      showStatus(HINTS.fixture);
+      renderPanel();
+    });
+    menu.append(item);
   }
+  title(system === "water" || system === "heating" ? "Pipes" : "Cables");
+  for (const kind of RUN_KINDS.filter((k) => k.system === system)) {
+    const item = document.createElement("button");
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.style.background = kind.dashed
+      ? `repeating-linear-gradient(90deg, ${kind.color} 0 6px, transparent 6px 10px)`
+      : kind.color;
+    item.append(swatch, kind.name);
+    item.addEventListener("click", () => {
+      closeMenus();
+      setTopic("utilities");
+      editor.startRun(kind.kind);
+      markTool("run");
+      showStatus(HINTS.run);
+      renderPanel();
+    });
+    menu.append(item);
+  }
+  closeMenus();
+  menu.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  // The menu goes under the button, or over it if there is no room below.
+  const below = rect.bottom + 6 + menu.offsetHeight < window.innerHeight;
+  menu.style.top = below
+    ? `${rect.bottom + 6}px`
+    : `${Math.max(8, rect.top - menu.offsetHeight - 6)}px`;
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
 }
 
 /** A small SVG of the plan symbol of a device type. */
@@ -2427,7 +2659,7 @@ function fixturePicture(type: string): SVGSVGElement {
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("class", "symbol");
   svg.setAttribute("viewBox", `${cx - size * 0.6} ${cy - size * 0.6} ${size * 1.2} ${size * 1.2}`);
-  const color = fixture.system === "electric" ? "#d9480f" : "#c92a2a";
+  const color = systemColor(fixture.system);
   const add = (list: { x: number; y: number }[][], tag: string, fill: string) => {
     for (const points of list) {
       const element = document.createElementNS(ns, tag);
@@ -2500,8 +2732,10 @@ function updateMapCredit(): void {
 /** The layers that the 2D editor and the 3D view show. */
 function applyLayers(): void {
   for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
-    const layer = input.dataset.layer as keyof typeof editor.layers;
+    const layer = input.dataset.layer as LayerName;
     editor.layers[layer] = input.checked;
+    // The open topic keeps the choice of the user for the next time.
+    if (layer in topicLayers[topic]) topicLayers[topic][layer] = input.checked;
   }
   editor.setOverlay("insulation", editor.layers.insulation ? drawInsulation : null);
   editor.render();
@@ -2785,8 +3019,14 @@ $("#save-as").addEventListener("click", () => void saveFile(true));
 $("#undo").addEventListener("click", () => doc.undo());
 $("#redo").addEventListener("click", () => doc.redo());
 $("#background").addEventListener("click", () => void loadBackground());
-buildServicesMenu();
-$("#services").addEventListener("click", () => toggleMenu($("#services"), $("#services-menu")));
+for (const element of document.querySelectorAll<HTMLButtonElement>("[data-system]")) {
+  element.addEventListener("click", () =>
+    openServicesMenu(element.dataset.system as ServiceSystem, element),
+  );
+}
+for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-tab]")) {
+  element.addEventListener("click", () => setTopic(element.dataset.topicTab as Topic));
+}
 $("#layers-button").addEventListener("click", () =>
   toggleMenu($("#layers-button"), $("#layers-menu")),
 );
@@ -2811,14 +3051,19 @@ $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export]")) {
   element.addEventListener("click", () => void exportPlan(element.dataset.export as ExportFormat));
 }
-$("#empty-background").addEventListener("click", () => void loadBackground());
+$("#empty-background").addEventListener("click", () => {
+  setTopic("source");
+  void loadBackground();
+});
 $("#empty-wall").addEventListener("click", () => setTool("wall"));
 $("#empty-open").addEventListener("click", () => void openFile());
-$("#empty-example").addEventListener("click", () => {
+$("#empty-example").addEventListener("click", openExample);
+
+function openExample(): void {
   if (!confirmDiscard()) return;
   load(makeHouse(), "example.grundriss");
   showStatus("Opened the example house. Save it to keep your changes.");
-});
+}
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")) {
   element.addEventListener("click", () => {
     editor.fit();
@@ -2872,8 +3117,10 @@ window.addEventListener("keydown", (e) => {
   if (key === "enter" && editor.tool === "run") {
     editor.finishRun();
   } else if (key === "e") {
-    toggleMenu($("#services"), $("#services-menu"));
+    setTopic("utilities");
+    openServicesMenu("electric", $<HTMLButtonElement>('[data-system="electric"]'));
   } else if (key === "i") {
+    if (!catalog.isOpen) setTopic("interior");
     catalog.toggle();
   } else if (key === "r") {
     editor.rotate(e.shiftKey ? 15 : 90);
@@ -2904,6 +3151,7 @@ window.addEventListener("beforeunload", (e) => {
   if (doc.dirty) e.preventDefault();
 });
 
+setTopic(topic);
 setTool("select");
 setView("split");
 load();

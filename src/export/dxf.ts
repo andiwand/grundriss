@@ -12,7 +12,7 @@ import {
   wallOutline,
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
-import type { Building, Plan, Point } from "../model/types";
+import type { Building, Plan, Point, ServiceSystem } from "../model/types";
 import { furnitureSymbol } from "../model/furniture";
 import { fixtureSymbol } from "../model/services";
 import { riseOf, storyExtras, type StoryExtras } from "./context";
@@ -29,6 +29,8 @@ export const DXF_LAYERS = {
   FURNITURE: 6,
   ELECTRIC: 30,
   HEATING: 1,
+  WATER: 150,
+  COMMS: 200,
 } as const;
 
 type Layer = keyof typeof DXF_LAYERS;
@@ -186,8 +188,8 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
       if (outline.length > 0) polygon(L.WALLS, outline);
     }
     // The building services: each system on its own layer. A line is an open polyline.
-    const serviceLayer = (system: "electric" | "heating") =>
-      system === "electric" ? L.ELECTRIC : L.HEATING;
+    const serviceLayer = (system: ServiceSystem) =>
+      ({ electric: L.ELECTRIC, heating: L.HEATING, water: L.WATER, comms: L.COMMS })[system];
     for (const run of plan.runs) {
       if (run.points.length >= 2) polygon(serviceLayer(run.system), run.points, false);
     }

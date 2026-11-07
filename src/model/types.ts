@@ -164,11 +164,15 @@ export interface RoomInfo {
 
 // ----- Building services -----
 
-export type ServiceSystem = "electric" | "heating";
+/**
+ * The systems of the building services: the water pipes, the heating, the electricity, and the
+ * communication cables (network, phone, TV, and satellite).
+ */
+export type ServiceSystem = "water" | "heating" | "electric" | "comms";
 
 /**
- * A device of a building service on a story: a socket, a switch, a light, a radiator, or a heat
- * source. The types are in `src/model/services.ts`. The point (x, y) is its center on the plan.
+ * A device of a building service on a story: for example a socket, a light, a radiator, a heat
+ * source, a water outlet, or a network socket. The types are in `src/model/services.ts`. The point (x, y) is its center on the plan.
  * A device on a wall has its back to the wall, like furniture: the local -y side.
  */
 export interface Fixture {
@@ -189,8 +193,8 @@ export interface Fixture {
 }
 
 /**
- * A line of a building service on a story: a cable, or a pipe of a heating. The points are on
- * the plan. `kind` is a kind of `src/model/services.ts`, for example "cable" or "flow".
+ * A line of a building service on a story: a cable, or a pipe of the water or the heating. The
+ * points are on the plan. `kind` is a kind of `src/model/services.ts`, for example "cable" or "flow".
  */
 export interface Run {
   id: Id;

@@ -21,6 +21,32 @@
         <span class="dirty-dot" title="Unsaved changes"></span>
       </div>
       <div class="spacer"></div>
+      <nav class="segmented topics" id="topics" aria-label="Topic">
+        <button data-topic-tab="source" data-icon="image" title="Open a plan, a scan, or a map">
+          <span>Source</span>
+        </button>
+        <button data-topic-tab="structure" data-icon="roof" title="Walls, floors, and roofs">
+          <span>Structure</span>
+        </button>
+        <button
+          data-topic-tab="utilities"
+          data-icon="wrench"
+          title="Water, heating, electricity, and communication"
+        >
+          <span>Utilities</span>
+        </button>
+        <button data-topic-tab="interior" data-icon="sofa" title="Furniture and rooms">
+          <span>Interior</span>
+        </button>
+        <button
+          data-topic-tab="energy"
+          data-icon="gauge"
+          title="Insulation, heating energy, and heating costs"
+        >
+          <span>Energy</span>
+        </button>
+      </nav>
+      <div class="spacer"></div>
       <div class="group">
         <button class="icon-button" id="new" data-icon="new" title="New plan"></button>
         <button
@@ -64,38 +90,112 @@
           <button data-tool="pan" data-icon="hand" title="Move the view (P, or hold Space)">
             Pan<kbd>P</kbd>
           </button>
-          <button data-tool="wall" data-icon="wall" title="Draw walls (W)">Wall<kbd>W</kbd></button>
-          <button data-tool="door" data-icon="door" title="Put a door in a wall (D)">
-            Door<kbd>D</kbd>
-          </button>
-          <button data-tool="window" data-icon="window" title="Put a window in a wall (N)">
-            Window<kbd>N</kbd>
-          </button>
           <button data-tool="dimension" data-icon="dimension" title="Draw a dimension line (M)">
             Measure<kbd>M</kbd>
           </button>
-          <button data-tool="stair" data-icon="stair" title="Draw a stair up to the next story (S)">
-            Stair<kbd>S</kbd>
-          </button>
-          <button data-tool="chimney" data-icon="chimney" title="Put a chimney (H)">
-            Chimney<kbd>H</kbd>
-          </button>
-          <button id="furniture" data-icon="sofa" title="Open the furniture catalog (I)">
-            Furniture<kbd>I</kbd>
-          </button>
-          <button id="services" data-icon="plug" data-menu title="Electric and heating (E)">
-            Services<kbd>E</kbd>
-          </button>
           <span class="divider"></span>
-          <button id="background" data-icon="image" title="Load a scan or a photo of a plan">
+          <button
+            data-topic="source"
+            id="background"
+            data-icon="image"
+            title="Load a scan or a photo of a plan"
+          >
             Background
           </button>
           <button
+            data-topic="source"
             data-tool="calibrate"
             data-icon="ruler"
             title="Set the scale of the background (C)"
           >
             Scale<kbd>C</kbd>
+          </button>
+          <button
+            data-topic="source"
+            data-tool="rectify"
+            data-icon="crop"
+            title="Straighten a photo of a plan"
+          >
+            Straighten
+          </button>
+          <button data-topic="structure" data-tool="wall" data-icon="wall" title="Draw walls (W)">
+            Wall<kbd>W</kbd>
+          </button>
+          <button
+            data-topic="structure"
+            data-tool="door"
+            data-icon="door"
+            title="Put a door in a wall (D)"
+          >
+            Door<kbd>D</kbd>
+          </button>
+          <button
+            data-topic="structure"
+            data-tool="window"
+            data-icon="window"
+            title="Put a window in a wall (N)"
+          >
+            Window<kbd>N</kbd>
+          </button>
+          <button
+            data-topic="structure"
+            data-tool="stair"
+            data-icon="stair"
+            title="Draw a stair up to the next story (S)"
+          >
+            Stair<kbd>S</kbd>
+          </button>
+          <button
+            data-topic="structure"
+            data-tool="chimney"
+            data-icon="chimney"
+            title="Put a chimney (H)"
+          >
+            Chimney<kbd>H</kbd>
+          </button>
+          <button
+            data-topic="utilities"
+            data-system="water"
+            data-icon="drop"
+            data-menu
+            title="Water pipes and outlets"
+          >
+            Water
+          </button>
+          <button
+            data-topic="utilities"
+            data-system="heating"
+            data-icon="flame"
+            data-menu
+            title="Heating pipes, radiators, and heat sources"
+          >
+            Heating
+          </button>
+          <button
+            data-topic="utilities"
+            data-system="electric"
+            data-icon="bolt"
+            data-menu
+            title="Sockets, lights, cables, and PV (E)"
+          >
+            Electricity<kbd>E</kbd>
+          </button>
+          <button
+            data-topic="utilities"
+            data-system="comms"
+            data-icon="antenna"
+            data-menu
+            title="Network, phone, TV, and SAT"
+          >
+            Communication
+          </button>
+          <button
+            data-topic="interior"
+            id="furniture"
+            data-icon="sofa"
+            title="Open the furniture catalog (I)"
+          >
+            Furniture<kbd>I</kbd>
           </button>
         </div>
         <div class="stories" id="stories" aria-label="Stories"></div>
@@ -149,8 +249,15 @@
     <footer id="status"></footer>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>
-      <label class="check"><input type="checkbox" data-layer="electric" checked /> Electric</label>
+      <div class="menu-label">This topic</div>
+      <label class="check"><input type="checkbox" data-layer="water" checked /> Water</label>
       <label class="check"><input type="checkbox" data-layer="heating" checked /> Heating</label>
+      <label class="check"
+        ><input type="checkbox" data-layer="electric" checked /> Electricity</label
+      >
+      <label class="check"
+        ><input type="checkbox" data-layer="comms" checked /> Communication</label
+      >
       <label class="check"><input type="checkbox" data-layer="pv" checked /> Photovoltaic</label>
       <label class="check"
         ><input type="checkbox" data-layer="insulation" /> Insulation and heat loss</label

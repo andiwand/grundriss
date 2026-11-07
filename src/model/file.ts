@@ -45,6 +45,7 @@ import { defaultHeating, HEATING_KINDS } from "./heating";
 import { DEFAULT_COLORS, isColor } from "./colors";
 import { defaultEnvelope } from "./insulation";
 import { storyBox } from "./roof";
+import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
 
 export const FILE_FORMAT = "grundriss";
 export const FILE_VERSION = 2;
@@ -522,7 +523,10 @@ function parsePlanData(data: Data, prefix: string): Plan {
     const where = `${prefix}device ${i}`;
     return {
       id: string(d, "id", where),
-      system: d.system === "heating" ? "heating" : "electric",
+      system: serviceSystem(
+        d.system,
+        FIXTURE_TYPES.find((t) => t.type === d.type),
+      ),
       type: string(d, "type", where),
       x: number(d, "x", where),
       y: number(d, "y", where),
@@ -541,7 +545,10 @@ function parsePlanData(data: Data, prefix: string): Plan {
       typeof d[key] === "string" && fixtureIds.has(d[key] as string) ? (d[key] as string) : null;
     return {
       id: string(d, "id", where),
-      system: d.system === "heating" ? "heating" : "electric",
+      system: serviceSystem(
+        d.system,
+        RUN_KINDS.find((k) => k.kind === d.kind),
+      ),
       kind: string(d, "kind", where),
       points: d.points.map((p, j) => pointOf(p, `${where}, point ${j}`)),
       elevation: number(d, "elevation", where),
