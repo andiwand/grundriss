@@ -556,6 +556,11 @@ main {
   font-weight: 800;
   letter-spacing: -0.045em;
   line-height: 0.95;
+  /* The gradient fills only the box of the element. The padding makes the
+     box taller, so the gradient also paints the descenders. The negative
+     margin keeps the layout the same. */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
   background: linear-gradient(180deg, #ffffff 30%, #cfdcff 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -829,6 +834,11 @@ body:not([data-chapter="hero"]):not([data-chapter="finale"]) #rail {
   font-size: clamp(40px, 6vw, 72px);
   letter-spacing: -0.04em;
   line-height: 1;
+  /* The gradient fills only the box of the element. The padding makes the
+     box taller, so the gradient also paints the descenders. The negative
+     margin keeps the layout the same. */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
   background: linear-gradient(180deg, #fff 30%, #ffd9b0);
   -webkit-background-clip: text;
   background-clip: text;
