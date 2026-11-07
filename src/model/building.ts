@@ -2,6 +2,7 @@
 // The functions here are pure, so the 2D editor, the 3D view, and the exports share them.
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
+import { DEFAULT_COLORS } from "./colors";
 import { defaultEnvelope } from "./insulation";
 import { emptyPlan, newId } from "./plan";
 import { roofGeometries } from "./roof";
@@ -24,6 +25,7 @@ export function emptyBuilding(): Building {
     stories: [newStory("Ground floor", 0, STORY_DEFAULTS.height)],
     roofs: [],
     north: 0,
+    facade: DEFAULT_COLORS.facade,
     models: [],
     envelope: defaultEnvelope(),
     pv: [],

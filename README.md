@@ -131,6 +131,14 @@ real scans, so check the result. The suggestions of step 3 find walls with a sol
 not find walls drawn as two thin lines. A door gap stays open, so put a door in it and close the
 wall. Undo removes each step.
 
+### Colors
+
+The 3D view shows each side of a wall in its own color. Click a room to set its **Wall color**:
+the walls of the room show it on their room side. Without a selection, **Facade** sets the color
+of the outside of the outer walls. A roof has a **Color** and an **Underside**. Click a wall to
+give one side its own color, for example an accent wall; the × gives back the color of the room
+or the facade.
+
 ### Roofs
 
 Without a selection, the panel lists the roofs. **Gable**, **Hip**, **Shed**, and **Flat** add a

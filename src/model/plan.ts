@@ -150,6 +150,7 @@ export function addWall(
     thickness: properties.thickness,
     height: properties.height,
     layers: null,
+    colors: { right: null, left: null },
   };
   plan.walls.push(wall);
   return wall;

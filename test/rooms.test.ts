@@ -103,6 +103,7 @@ describe("room data", () => {
       height: null,
       floorHeating: false,
       temperature: null,
+      wallColor: null,
     });
     const named = findRooms(plan).filter((r) => r.info);
     expect(named).toHaveLength(1);

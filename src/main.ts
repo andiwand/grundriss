@@ -69,6 +69,7 @@ import { buildModelAsync, View3D } from "./view3d/view3d";
 import { findFurniture, genericType } from "./model/furniture";
 import { buildingHeatLoss, isOuterWall, roomHeatLoss, uValue, wallLayers } from "./model/energy";
 import { defaultHeating, HEATING_KINDS, heatingEnergy, INTERNAL_GAINS } from "./model/heating";
+import { DEFAULT_COLORS, roomOnSide, wallSideColor } from "./model/colors";
 import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
 import { faceInfo, pvLayout, pvSummary, specificYield } from "./model/pv";
@@ -494,6 +495,35 @@ function field(text: string, control: HTMLElement, unit?: string): void {
   section.append(label);
 }
 
+/**
+ * A field for a color "#rrggbb". The plan changes when the user closes the color picker. With
+ * `reset`, a button after the color gives back the default color.
+ */
+function colorField(
+  text: string,
+  value: string,
+  change: (value: string) => void,
+  reset?: { title: string; action: () => void },
+): void {
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = value;
+  input.addEventListener("change", () => change(input.value));
+  field(text, input);
+  if (reset) {
+    const box = section.lastElementChild!.querySelector(".input")!;
+    const clear = document.createElement("button");
+    clear.className = "icon-button reset";
+    clear.title = reset.title;
+    clear.innerHTML = icon("close");
+    clear.addEventListener("click", (event) => {
+      event.preventDefault();
+      reset.action();
+    });
+    box.append(clear);
+  }
+}
+
 function numberField(
   text: string,
   value: number,
@@ -678,6 +708,15 @@ function renderPanel(): void {
         icon: "layers",
       });
     }
+
+    colorField(
+      "Wall color",
+      room.info?.wallColor ?? DEFAULT_COLORS.room,
+      (value) => change((info) => (info.wallColor = value)),
+      room.info?.wallColor
+        ? { title: "Default color", action: () => change((info) => (info.wallColor = null)) }
+        : undefined,
+    );
 
     const loss = roomHeatLoss(doc.building, story, room);
     heading("Heating", "flame");
@@ -960,6 +999,24 @@ function renderPanel(): void {
     numberField("Height", wall.height, (value) =>
       doc.edit((plan) => (findWall(plan, wall.id)!.height = value)),
     );
+    // The color of each side: its own color, or the color of the room or the facade there.
+    const rooms = findRooms(plan);
+    for (const side of [1, -1] as const) {
+      const key = side === 1 ? "right" : "left";
+      const room = roomOnSide(plan, wall, side, rooms);
+      const own = wall.colors[key];
+      colorField(
+        room ? `Side to ${room.info?.name || "the room"}` : "Outside",
+        wallSideColor(doc.building, plan, wall, side, rooms),
+        (value) => doc.edit((plan) => (findWall(plan, wall.id)!.colors[key] = value)),
+        own
+          ? {
+              title: room ? "Color of the room" : "Color of the facade",
+              action: () => doc.edit((plan) => (findWall(plan, wall.id)!.colors[key] = null)),
+            }
+          : undefined,
+      );
+    }
     const outer = isOuterWall(plan, wall);
     const layers = wallLayers(doc.building, wall);
     heading("Insulation", "layers");
@@ -1227,6 +1284,7 @@ function renderBuildingPanel(): void {
     (value) => doc.editBuilding((b) => (b.north = ((value % 360) + 360) % 360)),
     { min: -360, step: 1, unit: "°" },
   );
+  colorField("Facade", building.facade, (value) => doc.editBuilding((b) => (b.facade = value)));
   heading("Roofs", "roof");
   for (const roof of building.roofs) {
     const story = findStory(building, roof.storyId);
@@ -1291,6 +1349,8 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
     [String(roof.outline.length), "sides"],
   ]);
   textField("Name", roof.name, (v) => change((r) => (r.name = v)));
+  colorField("Color", roof.color, (v) => change((r) => (r.color = v)));
+  colorField("Underside", roof.underside, (v) => change((r) => (r.underside = v)));
   selectField(
     "On story",
     roof.storyId,

@@ -16,12 +16,14 @@ import {
   stairShape,
 } from "../model/building";
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
-import { distance } from "../model/geometry";
-import { wallEnds, wallExtents } from "../model/plan";
+import { wallSideColor } from "../model/colors";
+import { distance, perpendicular } from "../model/geometry";
+import { wallEnds } from "../model/plan";
 import { pvPanels } from "../model/pv";
 import { roofCeiling, roofGeometries, type Vec3 } from "../model/roof";
 import { WINDOW_LIFT } from "../model/roofshape";
-import { findRooms } from "../model/rooms";
+import { findRooms, type Room } from "../model/rooms";
+import { wallFaces } from "../model/walljoin";
 import { runKind } from "../model/services";
 import type {
   Building,
@@ -35,9 +37,6 @@ import type {
   Wall,
 } from "../model/types";
 import { loadedModel, loadModel } from "./models";
-
-/** A part of a wall: from s0 to s1 along the wall, and from y0 to y1 in height. */
-type Piece = [s0: number, s1: number, y0: number, y1: number];
 
 const GLASS_THICKNESS = 0.02;
 
@@ -554,12 +553,13 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
   // that the outer walls have no gap at the edge of the slab.
   const above = storyAbove(building, story);
   const floorAbove = above ? above.elevation - story.elevation : 0;
+  const rooms = findRooms(story);
   for (const wall of story.walls) {
     const height =
       wall.height >= floorAbove - SLAB - 1e-6 ? Math.max(wall.height, floorAbove) : wall.height;
-    addWall(group, story, wall, base, height, ceiling);
+    addWall(group, building, story, wall, base, height, ceiling, rooms);
   }
-  for (const room of findRooms(story)) {
+  for (const room of rooms) {
     const shape = new THREE.Shape(room.polygon.map((p) => new THREE.Vector2(p.x, p.y)));
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), materials.floor);
     floor.rotation.x = Math.PI / 2;
@@ -597,144 +597,323 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
 
 /** The distance between the points where a wall under a roof takes the height of the roof. */
 const ROOF_STEP = 0.05;
-/** A wall under a roof stops this much below it, so that the two surfaces do not flicker. */
-const ROOF_GAP = 0.02;
+/**
+ * A wall under a pitched roof stops this much below the top of the roof: inside the slab of the
+ * roof (ROOF_THICKNESS), so that the top of the wall and its lines do not show through the roof.
+ */
+const ROOF_INSET = 0.1;
+
+/** The materials of the colors of walls and roofs, by the color. */
+const colorMaterials = new Map<string, THREE.MeshStandardMaterial>();
 
 /**
- * Builds a wall as boxes around its openings, so no CSG is necessary. Each opening leaves a
- * hole: a part below the sill and a part above the head stay.
+ * A shared material of the color, for the faces of walls and roofs. Both sides show. A roof
+ * material draws in front of other surfaces and lines in its plane: the top edge of a wall under
+ * the eaves lies exactly in the surface of the roof, and it must not show through.
+ */
+function colorMaterial(color: string, roof = false): THREE.MeshStandardMaterial {
+  const key = `${roof ? "roof" : "wall"}:${color}`;
+  let material = colorMaterials.get(key);
+  if (!material) {
+    material = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.9,
+      side: THREE.DoubleSide,
+      polygonOffset: roof,
+      polygonOffsetFactor: roof ? -1 : 0,
+      polygonOffsetUnits: roof ? -4 : 0,
+    });
+    colorMaterials.set(key, material);
+  }
+  return material;
+}
+
+/**
+ * Collects the triangles and the edge lines of one body. The triangles go into groups by
+ * material, so that one mesh has all faces of a wall.
+ */
+class BodyBuilder {
+  private readonly positions: number[][];
+  private readonly lines: number[] = [];
+
+  constructor(private readonly materials: THREE.Material[]) {
+    this.positions = materials.map(() => []);
+  }
+
+  /** Adds a convex polygon of world points (x, y up, z) with the material `index`. */
+  polygon(index: number, points: THREE.Vector3[]): void {
+    for (let i = 1; i < points.length - 1; i++) {
+      for (const p of [points[0], points[i], points[i + 1]])
+        this.positions[index].push(p.x, p.y, p.z);
+    }
+  }
+
+  /** Adds an edge line through the points. */
+  line(points: THREE.Vector3[]): void {
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i - 1];
+      const q = points[i];
+      this.lines.push(p.x, p.y, p.z, q.x, q.y, q.z);
+    }
+  }
+
+  /** The mesh with its edge lines, or null if it has no triangles. */
+  build(): THREE.Mesh | null {
+    const all: number[] = [];
+    const geometry = new THREE.BufferGeometry();
+    this.positions.forEach((list, index) => {
+      if (list.length === 0) return;
+      geometry.addGroup(all.length / 3, list.length / 3, index);
+      for (const value of list) all.push(value);
+    });
+    if (all.length === 0) return null;
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(all, 3));
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, this.materials);
+    if (this.lines.length > 0) {
+      const edges = new THREE.BufferGeometry();
+      edges.setAttribute("position", new THREE.Float32BufferAttribute(this.lines, 3));
+      mesh.add(new THREE.LineSegments(edges, materials.edge));
+    }
+    return mesh;
+  }
+}
+
+/** The material indices of a wall body: the right face, the left face, and the rest. */
+const RIGHT = 0;
+const LEFT = 1;
+const REST = 2;
+
+/**
+ * Builds a wall as one body: its two faces with the colors of their sides, its top, the reveals
+ * of its openings, and its free ends. The faces end at the joins with other walls (see
+ * `wallFaces`): flush where a wall goes on straight, in a miter at a corner, and at the face of
+ * the other wall at a T. Edge lines show only at real edges, not at the joints of the faces.
  *
  * `ceiling` gives the height of a roof over a point of the plan. A wall under a roof, for example
  * a wall of an attic, stops at the roof: its top follows the lower of its two faces.
  */
 function addWall(
   group: THREE.Group,
+  building: Building,
   story: Story,
   wall: Wall,
   base: number,
   height: number,
   ceiling: (p: Point) => number | null,
+  rooms: Room[],
 ): void {
   const [a, b] = wallEnds(story, wall);
   const length = distance(a, b);
   if (length < 1e-6) return;
-  const dx = (b.x - a.x) / length;
-  const dy = (b.y - a.y) / length;
-  const { start, end } = wallExtents(story, wall);
-
-  // The highest top of the wall at the distance s from a: the wall height, or the roof.
+  const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+  const n = perpendicular(d);
   const half = wall.thickness / 2;
+  const faces = wallFaces(story, wall);
+  const start = Math.min(faces.right[0], faces.left[0]);
+  const end = Math.max(faces.right[1], faces.left[1]);
+  /** The world point at s along the wall, at o across it (+ is the right side), at height y. */
+  const at = (s: number, o: number, y: number) =>
+    new THREE.Vector3(a.x + d.x * s + n.x * o, base + y, a.y + d.y * s + n.y * o);
+
+  // The highest top of the wall at s: the wall height, or the roof over one of the faces.
   const limit = (s: number): number => {
     let top = height;
-    for (const side of [-half, half]) {
-      const z = ceiling({ x: a.x + dx * s - dy * side, y: a.y + dy * s + dx * side });
-      if (z !== null) top = Math.min(top, z - base - ROOF_GAP);
+    for (const o of [-half, half]) {
+      const z = ceiling({ x: a.x + d.x * s + n.x * o, y: a.y + d.y * s + n.y * o });
+      if (z !== null) top = Math.min(top, z - base - ROOF_INSET);
     }
     return top;
   };
-  const steps = Math.max(1, Math.ceil((end - start) / ROOF_STEP));
-  const profile = Array.from({ length: steps + 1 }, (_, i) => {
-    const s = start + ((end - start) * i) / steps;
-    return { s, top: limit(s) };
-  });
-  const underRoof = profile.some((p) => p.top < height - 1e-6);
+  const coarse = Array.from({ length: 9 }, (_, i) => limit(start + ((end - start) * i) / 8));
+  const underRoof = coarse.some((top) => top < height - 1e-6) || limit(start) < height;
 
-  const pieces: Piece[] = [];
-  const glass: Piece[] = [];
-  let cursor = start;
   const openings = story.openings
     .filter((o) => o.wallId === wall.id)
-    .sort((p, q) => p.offset - q.offset);
-  for (const opening of openings) {
-    const o0 = Math.max(cursor, opening.offset - opening.width / 2);
-    const o1 = Math.min(end, opening.offset + opening.width / 2);
-    if (o1 <= o0) continue;
-    const sill = Math.min(opening.sill, height);
-    const head = Math.min(opening.sill + opening.height, height);
-    pieces.push([cursor, o0, 0, height]);
-    pieces.push([o0, o1, 0, sill]);
-    pieces.push([o0, o1, head, height]);
-    if (opening.kind === "window") glass.push([o0, o1, sill, head]);
-    cursor = o1;
+    .map((o) => ({
+      kind: o.kind,
+      s0: Math.max(start, o.offset - o.width / 2),
+      s1: Math.min(end, o.offset + o.width / 2),
+      sill: Math.max(0, Math.min(o.sill, height)),
+      head: Math.min(o.sill + o.height, height),
+    }))
+    .filter((o) => o.s1 - o.s0 > 1e-4 && o.head - o.sill > 1e-4)
+    .sort((p, q) => p.s0 - q.s0);
+
+  // The positions along the wall where the shape changes: the ends, the edges of the openings,
+  // and, under a roof, a step of ROOF_STEP so that the top follows the roof.
+  const cuts = new Set<number>([start, end, ...faces.right, ...faces.left]);
+  for (const o of openings) cuts.add(o.s0).add(o.s1);
+  if (underRoof) {
+    const steps = Math.max(1, Math.ceil((end - start) / ROOF_STEP));
+    for (let i = 1; i < steps; i++) cuts.add(start + ((end - start) * i) / steps);
   }
-  pieces.push([cursor, end, 0, height]);
+  const grid = [...cuts]
+    .sort((p, q) => p - q)
+    .filter((s, i, all) => i === 0 || s - all[i - 1] > 1e-6);
+  const tops = new Map(grid.map((s) => [s, Math.max(0, limit(s))]));
+  const top = (s: number) => tops.get(s) ?? Math.max(0, limit(s));
+  /** The opening over the interval from s0 to s1, if one covers it. */
+  const openingOver = (s0: number, s1: number) =>
+    openings.find((o) => o.s0 <= s0 + 1e-6 && o.s1 >= s1 - 1e-6);
 
-  const angle = -Math.atan2(dy, dx);
-  const place = (piece: Piece, thickness: number, material: THREE.Material, edges: boolean) => {
-    const [s0, s1, y0, y1] = piece;
-    if (s1 - s0 < 1e-4 || y1 - y0 < 1e-4) return;
-    let geometry: THREE.BufferGeometry;
-    const mesh = new THREE.Mesh();
-    const inside = underRoof ? profile.filter((p) => p.s > s0 && p.s < s1) : [];
-    const tops = [{ s: s0, top: limit(s0) }, ...inside, { s: s1, top: limit(s1) }];
-    if (tops.every((p) => p.top >= y1 - 1e-6)) {
-      geometry = new THREE.BoxGeometry(s1 - s0, y1 - y0, thickness);
-      mesh.position.set(
-        a.x + dx * ((s0 + s1) / 2),
-        base + (y0 + y1) / 2,
-        a.y + dy * ((s0 + s1) / 2),
-      );
-    } else {
-      // The roof cuts the piece: a prism of its side view, from the bottom up to the roof. Only
-      // the parts where the roof is above the bottom of the piece stay. A part of zero height
-      // would still show its flat faces above the roof, for example over a window under a slope.
-      const shapes = roofRuns(tops, y0).map(
-        (run) =>
-          new THREE.Shape([
-            new THREE.Vector2(run[run.length - 1].s, y0),
-            ...[...run].reverse().map((p) => new THREE.Vector2(p.s, Math.min(y1, p.top))),
-            new THREE.Vector2(run[0].s, y0),
-          ]),
-      );
-      if (shapes.length === 0) return;
-      geometry = new THREE.ExtrudeGeometry(shapes, {
-        depth: thickness,
-        bevelEnabled: false,
-      });
-      geometry.translate(0, 0, -thickness / 2);
-      mesh.position.set(a.x, base, a.y);
-    }
-    mesh.geometry = geometry;
-    mesh.material = material;
-    // A rotation by -angle about y turns the x axis of the box along the wall in (x, z).
-    mesh.rotation.y = angle;
-    group.add(mesh);
-    if (edges)
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), materials.edge));
-  };
-  for (const piece of pieces) place(piece, wall.thickness, materials.wall, true);
-  for (const piece of glass) place(piece, GLASS_THICKNESS, materials.glass, false);
-}
+  const side = (s: 1 | -1) => wallSideColor(building, story, wall, s, rooms);
+  const body = new BodyBuilder([colorMaterial(side(1)), colorMaterial(side(-1)), materials.wall]);
 
-/**
- * The runs of a wall profile where the top is above `bottom`. A run starts and ends where the
- * top crosses `bottom`, so each run is a part of the wall with a height above zero.
- */
-function roofRuns(
-  tops: { s: number; top: number }[],
-  bottom: number,
-): { s: number; top: number }[][] {
-  const MIN = 1e-3;
-  const runs: { s: number; top: number }[][] = [];
-  let run: { s: number; top: number }[] = [];
-  const crossing = (p: { s: number; top: number }, q: { s: number; top: number }) => ({
-    s: p.s + ((q.s - p.s) * (bottom - p.top)) / (q.top - p.top),
-    top: bottom,
-  });
-  tops.forEach((p, i) => {
-    const above = p.top > bottom + MIN;
-    const previous = tops[i - 1];
-    if (previous && above !== previous.top > bottom + MIN) {
-      run.push(crossing(previous, p));
-      if (!above) {
-        runs.push(run);
-        run = [];
+  // The two faces: columns between the cuts, with the openings left out.
+  for (const sideSign of [1, -1] as const) {
+    const [f0, f1] = sideSign === 1 ? faces.right : faces.left;
+    const o = sideSign * half;
+    const index = sideSign === 1 ? RIGHT : LEFT;
+    for (let i = 1; i < grid.length; i++) {
+      const s0 = grid[i - 1];
+      const s1 = grid[i];
+      if (s0 < f0 - 1e-6 || s1 > f1 + 1e-6) continue;
+      const t0 = top(s0);
+      const t1 = top(s1);
+      if (t0 <= 1e-4 && t1 <= 1e-4) continue;
+      const hole = openingOver(s0, s1);
+      const spans: [number, number | null][] = hole
+        ? [
+            [0, hole.sill],
+            [hole.head, null],
+          ]
+        : [[0, null]];
+      for (const [y0, y1] of spans) {
+        // y1 null means up to the top of the wall, which can slope under a roof.
+        const u0 = y1 ?? t0;
+        const u1 = y1 ?? t1;
+        if (Math.max(u0, u1) <= y0 + 1e-4) continue;
+        const points =
+          u0 > y0 && u1 > y0
+            ? [
+                at(s0, o, y0),
+                at(s1, o, y0),
+                at(s1, o, Math.min(u1, t1)),
+                at(s0, o, Math.min(u0, t0)),
+              ]
+            : u0 > y0
+              ? [at(s0, o, y0), at(s0 + ((s1 - s0) * (u0 - y0)) / (u0 - u1), o, y0), at(s0, o, u0)]
+              : [at(s1, o, y0), at(s1, o, u1), at(s1 - ((s1 - s0) * (u1 - y0)) / (u1 - u0), o, y0)];
+        body.polygon(index, points);
       }
     }
-    if (above) run.push(p);
-  });
-  if (run.length > 0) runs.push(run);
-  return runs.filter((r) => r.length >= 2 && r[r.length - 1].s - r[0].s > MIN);
+    // The edge lines of the face: the top, and the ends that are corners or free ends.
+    const topLine: THREE.Vector3[] = [];
+    const flush = () => {
+      if (topLine.length > 1) body.line(topLine);
+      topLine.length = 0;
+    };
+    for (const s of grid) {
+      if (s < f0 - 1e-6 || s > f1 + 1e-6) continue;
+      const covered = openings.some(
+        (h) => h.s0 < s - 1e-6 && h.s1 > s + 1e-6 && h.head >= top(s) - 1e-4,
+      );
+      if (covered || top(s) <= 1e-4) flush();
+      else topLine.push(at(s, o, top(s)));
+    }
+    flush();
+    for (const [e, join] of [
+      [f0, faces.joins[0]],
+      [f1, faces.joins[1]],
+    ] as const) {
+      if (join !== "straight" && top(e) > 1e-4) body.line([at(e, o, 0), at(e, o, top(e))]);
+    }
+    for (const h of openings) {
+      const head = Math.min(h.head, top(h.s0), top(h.s1));
+      const box = [at(h.s0, o, h.sill), at(h.s0, o, head), at(h.s1, o, head), at(h.s1, o, h.sill)];
+      body.line(h.sill > 1e-4 ? [...box, box[0]] : box);
+    }
+  }
+
+  // The top: strips across the wall between the cuts, cut to the miters of the faces.
+  const footprint = (s0: number, s1: number) => {
+    // The polygon of the wall between s0 and s1 in (s, o): the faces can end at other places.
+    const clip = (f: [number, number]) => [Math.max(s0, f[0]), Math.min(s1, f[1])] as const;
+    const [r0, r1] = clip(faces.right);
+    const [l0, l1] = clip(faces.left);
+    if (r1 - r0 < 1e-6 && l1 - l0 < 1e-6) return null;
+    return [
+      { s: r0, o: half },
+      { s: r1, o: half },
+      { s: l1, o: -half },
+      { s: l0, o: -half },
+    ];
+  };
+  for (let i = 1; i < grid.length; i++) {
+    const s0 = grid[i - 1];
+    const s1 = grid[i];
+    const hole = openingOver(s0, s1);
+    if (hole && hole.head >= Math.min(top(s0), top(s1)) - 1e-4) continue;
+    const shape = footprint(s0, s1);
+    if (!shape) continue;
+    const y = (s: number) => top(Math.abs(s - s0) < Math.abs(s - s1) ? s0 : s1);
+    const points = shape.map((p) => at(p.s, p.o, y(p.s)));
+    if (points.every((p) => p.y <= base + 1e-4)) continue;
+    body.polygon(REST, points);
+  }
+
+  // The reveals of the openings: the sill, the head, and the two jambs, across the wall.
+  for (const h of openings) {
+    const head = Math.min(h.head, top(h.s0), top(h.s1));
+    if (h.sill > 1e-4) {
+      body.polygon(REST, [
+        at(h.s0, half, h.sill),
+        at(h.s1, half, h.sill),
+        at(h.s1, -half, h.sill),
+        at(h.s0, -half, h.sill),
+      ]);
+    }
+    if (head < Math.min(top(h.s0), top(h.s1)) - 1e-4) {
+      body.polygon(REST, [
+        at(h.s0, half, head),
+        at(h.s1, half, head),
+        at(h.s1, -half, head),
+        at(h.s0, -half, head),
+      ]);
+    }
+    for (const s of [h.s0, h.s1]) {
+      body.polygon(REST, [
+        at(s, half, h.sill),
+        at(s, half, head),
+        at(s, -half, head),
+        at(s, -half, h.sill),
+      ]);
+    }
+  }
+
+  // A free end shows its end face and the line across its top.
+  for (const [e, join] of [
+    [start, faces.joins[0]],
+    [end, faces.joins[1]],
+  ] as const) {
+    if (join !== "free" || top(e) <= 1e-4) continue;
+    body.polygon(REST, [
+      at(e, half, 0),
+      at(e, half, top(e)),
+      at(e, -half, top(e)),
+      at(e, -half, 0),
+    ]);
+    body.line([at(e, half, top(e)), at(e, -half, top(e))]);
+  }
+
+  const mesh = body.build();
+  if (mesh) group.add(mesh);
+
+  // The glass of the windows, in the middle of the wall.
+  for (const h of openings) {
+    if (h.kind !== "window") continue;
+    const head = Math.min(h.head, top(h.s0), top(h.s1));
+    if (head - h.sill < 1e-4) continue;
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(h.s1 - h.s0, head - h.sill, GLASS_THICKNESS),
+      materials.glass,
+    );
+    const middle = (h.s0 + h.s1) / 2;
+    glass.position.set(a.x + d.x * middle, base + (h.sill + head) / 2, a.y + d.y * middle);
+    glass.rotation.y = -Math.atan2(d.y, d.x);
+    group.add(glass);
+  }
 }
 
 /**
@@ -776,7 +955,11 @@ function newell(polygon: Vec3[]): Vec3 {
 }
 
 /** A mesh of flat polygons, convex or not. */
-function polygonMesh(polygons: Vec3[][], material: THREE.Material): THREE.Mesh | null {
+function polygonMesh(
+  polygons: Vec3[][],
+  material: THREE.Material,
+  edges = true,
+): THREE.Mesh | null {
   const positions: number[] = [];
   for (const polygon of polygons) {
     for (const triangle of triangles(polygon)) {
@@ -788,7 +971,9 @@ function polygonMesh(polygons: Vec3[][], material: THREE.Material): THREE.Mesh |
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 1), materials.edge));
+  if (edges) {
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 1), materials.edge));
+  }
   return mesh;
 }
 
@@ -824,21 +1009,31 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
     if (!shown.has(roof.id)) continue;
     const object = new THREE.Group();
     object.name = roof.name;
-    const add = (polygons: Vec3[][], material: THREE.Material) => {
-      const mesh = polygonMesh(polygons, material);
+    const add = (polygons: Vec3[][], material: THREE.Material, edges = true) => {
+      const mesh = polygonMesh(polygons, material, edges);
       if (mesh) object.add(mesh);
     };
-    add(
-      geometry.faces.map((f) => f.polygon),
-      materials.roof,
-    );
+    if (roof.flat) {
+      add(
+        geometry.faces.map((f) => f.polygon),
+        colorMaterial(roof.color),
+      );
+    } else {
+      const slab = roofSlab(geometry.faces, geometry.edges, roof, ROOF_THICKNESS);
+      if (slab) object.add(slab);
+    }
     // A gable of a pitched roof is in the plane of the outer face of the walls under it, for
     // example of an attic. It moves out a bit, so that the two surfaces do not flicker.
-    add(roof.flat ? geometry.gables : geometry.gables.map(moveOut), materials.gable);
-    add(
-      geometry.dormers.flatMap((d) => d.faces),
-      materials.roof,
-    );
+    // A gable has no lines: its top is in the plane of the roof, so its line would show on it.
+    add(roof.flat ? geometry.gables : geometry.gables.map(moveOut), materials.gable, roof.flat);
+    // The roof of each dormer is a thinner slab of the same colors.
+    for (const dormer of geometry.dormers) {
+      const faces = dormer.faces
+        .filter((polygon) => polygon.length >= 3)
+        .map((polygon) => ({ polygon, normal: upNormal(polygon) }));
+      const slab = roofSlab(faces, null, roof, DORMER_ROOF_THICKNESS);
+      if (slab) object.add(slab);
+    }
     add(
       geometry.dormers.flatMap((d) => d.walls),
       materials.gable,
@@ -864,6 +1059,75 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
     );
     group.add(object);
   }
+}
+
+/** The thickness of a pitched roof in the 3D view, at a right angle to its faces, in meters. */
+const ROOF_THICKNESS = 0.2;
+/** The thickness of the roof of a dormer: a dormer has a lighter roof. */
+const DORMER_ROOF_THICKNESS = 0.12;
+
+/**
+ * A roof as a slab: the faces on top in the color of the roof, the same faces moved down by
+ * `thickness` as the underside, and the edges of the slab (the fascia) at the outer sides of the
+ * faces in the color of the underside. `normal` is the unit normal of a face, up and out. The
+ * lines are `edges` (the ridges, hips, valleys, verges, and eaves), or the borders of the faces if
+ * `edges` is null, not the triangles of the faces.
+ */
+function roofSlab(
+  faces: { polygon: Vec3[]; normal: Vec3 }[],
+  edges: [Vec3, Vec3][] | null,
+  roof: Roof,
+  thickness: number,
+): THREE.Mesh | null {
+  const TOP = 0;
+  const BOTTOM = 1;
+  const body = new BodyBuilder([colorMaterial(roof.color, true), colorMaterial(roof.underside)]);
+  const world = (p: Vec3) => new THREE.Vector3(p.x, p.z, p.y);
+  const down = (p: Vec3, n: Vec3) => ({
+    x: p.x - n.x * thickness,
+    y: p.y - n.y * thickness,
+    z: p.z - n.z * thickness,
+  });
+  // An edge that two faces share is inside the roof (a ridge, a hip, or a valley). The other
+  // edges are on the outside of the slab and get a fascia.
+  const key = (p: Vec3) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;
+  const count = new Map<string, number>();
+  const edgeKey = (p: Vec3, q: Vec3) => [key(p), key(q)].sort().join("|");
+  for (const face of faces) {
+    face.polygon.forEach((p, i) => {
+      const k = edgeKey(p, face.polygon[(i + 1) % face.polygon.length]);
+      count.set(k, (count.get(k) ?? 0) + 1);
+    });
+  }
+  for (const face of faces) {
+    const polygon = face.polygon;
+    if (polygon.length < 3) continue;
+    for (const triangle of triangles(polygon)) {
+      body.polygon(TOP, triangle.map(world));
+      body.polygon(
+        BOTTOM,
+        triangle.map((p) => world(down(p, face.normal))),
+      );
+    }
+    polygon.forEach((p, i) => {
+      const q = polygon[(i + 1) % polygon.length];
+      if (!edges) body.line([world(p), world(q)]);
+      if ((count.get(edgeKey(p, q)) ?? 0) > 1) return;
+      const fascia = [p, q, down(q, face.normal), down(p, face.normal)].map(world);
+      body.polygon(BOTTOM, fascia);
+      body.line([fascia[2], fascia[3]]);
+    });
+  }
+  for (const [p, q] of edges ?? []) body.line([world(p), world(q)]);
+  return body.build();
+}
+
+/** The unit normal of a roof face that points up, from its polygon. */
+function upNormal(polygon: Vec3[]): Vec3 {
+  const n = newell(polygon);
+  const length = Math.hypot(n.x, n.y, n.z) || 1;
+  const sign = n.z < 0 ? -1 : 1;
+  return { x: (sign * n.x) / length, y: (sign * n.y) / length, z: (sign * n.z) / length };
 }
 
 // ----- Building services -----

@@ -45,6 +45,21 @@ describe("the house of the website", () => {
     }
   });
 
+  it("has all furniture inside the outer walls", () => {
+    // The outer walls are 0.3 m thick on the lines x = 0, x = 12, y = 0, and y = 9.
+    const inside = 0.15 - 1e-6;
+    for (const story of house.stories) {
+      for (const piece of story.furniture) {
+        for (const corner of furnitureOutline(piece)) {
+          expect(corner.x, piece.name).toBeGreaterThanOrEqual(inside);
+          expect(corner.x, piece.name).toBeLessThanOrEqual(12 - inside);
+          expect(corner.y, piece.name).toBeGreaterThanOrEqual(inside);
+          expect(corner.y, piece.name).toBeLessThanOrEqual(9 - inside);
+        }
+      }
+    }
+  });
+
   it("gives parts of the house", () => {
     const shell = partOf(house, {});
     expect(shell.stories).toHaveLength(1);

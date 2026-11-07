@@ -170,7 +170,7 @@ function groundFloor(story: Story): void {
   furniture(story, "chair", p(2.3, 3.45), 180);
   furniture(story, "chair", p(1.6, 2.7), 270);
   // Bath and utility.
-  furniture(story, "bathtub", p(11.45, 1.4), 90);
+  furniture(story, "bathtub", p(11.0, 1.4), 90);
   furniture(story, "washbasin", p(10.6, 0.4), 0);
   furniture(story, "toilet", p(11.5, 4.3), 90);
   furniture(story, "shower", p(10.2, 4.35), 180);

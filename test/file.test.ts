@@ -271,6 +271,7 @@ describe("numbers out of range", () => {
       height: null,
       floorHeating: false,
       temperature: 12345,
+      wallColor: null,
     });
     // JSON.parse reads "1e999" as Infinity.
     const text = serializeBuilding(building).replaceAll("12345", "1e999");

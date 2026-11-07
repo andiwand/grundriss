@@ -4,6 +4,17 @@ The changes that a user notices.
 
 ## Unreleased
 
+- 3D: each wall is one body with real holes for its doors and windows. Walls meet in a miter at
+  a corner, flush in a straight line, and at the face of the other wall at a T. The lines show
+  only at real edges, not at the joints of the old boxes. A pitched roof has a thickness of 20 cm, and the roof of a dormer 12 cm,
+  with its ridges, hips, valleys, and edges as lines. The walls under a roof stop inside it, so
+  they do not come through.
+- Colors: each side of a wall has a color in the 3D view. A room has a wall color for its side
+  of its walls, the building has a facade color for the outside, and a roof has a color for its
+  top and its underside. A single wall can have its own color on one side, for example an accent
+  wall. The panel of a wall names the room on each side.
+- The bathtub of the example house stands inside the house.
+
 - 3D: when only one story shows, the roofs of that story show only if it is the top story. So
   the roof of a low wing does not hide the rooms of a lower story. "All stories" shows all roofs.
 - The start card has an "Open a plan" button.

@@ -25,6 +25,12 @@ export interface Wall {
    * layers of an outer wall of the building (`Envelope.wall`). Only outer walls lose heat.
    */
   layers: Layer[] | null;
+  /**
+   * An own color for each side of the wall in the 3D view, as "#rrggbb", or null for the color
+   * of the room on that side, or of the facade (see `src/model/colors.ts`). `right` is the side
+   * of `perpendicular(b - a)`, like the swing 1 of a door.
+   */
+  colors: { right: string | null; left: string | null };
 }
 
 export type OpeningKind = "door" | "window";
@@ -152,6 +158,8 @@ export interface RoomInfo {
   floorHeating: boolean;
   /** The inside temperature in °C. Null means the inside temperature of the building. */
   temperature: number | null;
+  /** The color of the walls of the room in the 3D view, as "#rrggbb", or null for the default. */
+  wallColor: string | null;
 }
 
 // ----- Building services -----
@@ -409,6 +417,9 @@ export interface Roof {
   flat: boolean;
   dormers: Dormer[];
   windows: RoofWindow[];
+  /** The colors of the top and of the underside of the roof, as "#rrggbb". */
+  color: string;
+  underside: string;
 }
 
 /**
@@ -460,6 +471,8 @@ export interface Building {
   roofs: Roof[];
   /** The direction of north in degrees, clockwise from the top of the plan (the -y axis). */
   north: number;
+  /** The color of the outside of the outer walls in the 3D view, as "#rrggbb". */
+  facade: string;
   /** The 3D models that the furniture of all stories uses. */
   models: Model[];
   envelope: Envelope;

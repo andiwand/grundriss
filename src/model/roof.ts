@@ -6,6 +6,7 @@
 // view maps (x, y, z) to the world (x, z, y).
 
 import { findStory, storyAbove, wallTop } from "./building";
+import { DEFAULT_COLORS } from "./colors";
 import { signedArea } from "./geometry";
 import { newId } from "./plan";
 import { planOutline, pointInPolygon } from "./rooms";
@@ -280,6 +281,8 @@ export function newRoof(building: Building, story: Story, preset: RoofKind): Roo
     flat: preset === "flat",
     dormers: [],
     windows: [],
+    color: DEFAULT_COLORS.roof,
+    underside: DEFAULT_COLORS.underside,
   };
 }
 

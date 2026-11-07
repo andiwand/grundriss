@@ -648,6 +648,18 @@ button.ghost:hover:not(:disabled) {
   font-variant-numeric: tabular-nums;
 }
 
+.input input[type="color"] {
+  padding: 3px 4px;
+  cursor: pointer;
+}
+
+.input .reset {
+  width: 26px;
+  height: 26px;
+  margin-right: 3px;
+  flex: none;
+}
+
 .input .unit {
   padding-right: 8px;
   color: var(--ink-3);

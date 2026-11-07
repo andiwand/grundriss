@@ -83,6 +83,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/energy.ts`     | U-values and the heat loss of the rooms (an estimate).                                 |
 | `src/model/pv.ts`         | The layout of PV panels on the roof, and the yield.                                    |
 | `src/model/climate.ts`    | The stored climate: the series, the sun position, the irradiance on faces, PV, HDD.    |
+| `src/model/colors.ts`     | The colors of the wall sides (own, room, or facade) and the defaults of the colors.    |
+| `src/model/walljoin.ts`   | The ends of the two faces of a wall at its joins: flush, miter, or T.                  |
 | `src/model/heating.ts`    | The heating per year: a monthly balance, the heating system, cost, CO₂, and a class.   |
 | `src/io/climate.ts`       | The place search and the climate download from Open-Meteo, and the typical year.       |
 | `src/io/tiles.ts`         | The map under the 2D plan: the tile sources and the Web Mercator math.                 |

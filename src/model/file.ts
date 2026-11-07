@@ -42,6 +42,7 @@ import type {
 
 import { decodeSeries, SERIES_NAMES } from "./climate";
 import { defaultHeating, HEATING_KINDS } from "./heating";
+import { DEFAULT_COLORS, isColor } from "./colors";
 import { defaultEnvelope } from "./insulation";
 import { storyBox } from "./roof";
 
@@ -108,6 +109,7 @@ export function parseBuilding(text: string): Building {
       stories: [story],
       roofs: [],
       north: 0,
+      facade: DEFAULT_COLORS.facade,
       models: [],
       envelope: defaultEnvelope(),
       pv: [],
@@ -198,7 +200,8 @@ export function parseBuilding(text: string): Building {
   });
   const location = parseLocation(data.location);
   const climate = parseClimate(data.climate);
-  return { stories, roofs, north, models, envelope, pv, location, climate };
+  const facade = isColor(data.facade) ? data.facade : DEFAULT_COLORS.facade;
+  return { stories, roofs, north, facade, models, envelope, pv, location, climate };
 }
 
 /** A number in the interval [low, high], or an error. */
@@ -311,6 +314,8 @@ function parseRoof(r: Data, where: string): Roof {
     flat: r.flat === true,
     dormers,
     windows,
+    color: isColor(r.color) ? r.color : DEFAULT_COLORS.roof,
+    underside: isColor(r.underside) ? r.underside : DEFAULT_COLORS.underside,
   };
 }
 
@@ -361,6 +366,8 @@ function oldRoof(r: Data, stories: Story[]): Roof | null {
     flat: kind === "flat",
     dormers: [],
     windows: [],
+    color: DEFAULT_COLORS.roof,
+    underside: DEFAULT_COLORS.underside,
   };
 }
 
@@ -421,6 +428,10 @@ function parsePlanData(data: Data, prefix: string): Plan {
       thickness: number(w, "thickness", where),
       layers: w.layers == null ? null : layers(w, "layers", where),
       height: number(w, "height", where),
+      colors: {
+        right: isObject(w.colors) && isColor(w.colors.right) ? w.colors.right : null,
+        left: isObject(w.colors) && isColor(w.colors.left) ? w.colors.left : null,
+      },
     };
     if (!vertexIds.has(wall.a) || !vertexIds.has(wall.b)) {
       throw new Error(`The file is damaged: ${where} refers to a vertex that does not exist.`);
@@ -484,6 +495,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
       floorHeating: d.floorHeating === true,
       temperature: finite(d.temperature, null),
       height: d.height == null ? null : number(d, "height", where),
+      wallColor: isColor(d.wallColor) ? d.wallColor : null,
     };
   });
   const furniture: Furniture[] = list(data, "furniture").map((d, i) => {

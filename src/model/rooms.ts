@@ -178,6 +178,7 @@ export function editRoomInfo(plan: Plan, room: Room, change: (info: RoomInfo) =>
       height: null,
       floorHeating: false,
       temperature: null,
+      wallColor: null,
     };
     plan.rooms.push(info);
   }
