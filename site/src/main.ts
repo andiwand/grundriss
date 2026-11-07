@@ -97,6 +97,7 @@ const m2 = (v: number) => `${v.toFixed(1)} m²`;
 const rows = (list: [string, string][]) =>
   `<dl>${list.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
 
+const STAIR_KINDS = { straight: "Straight", l: "L-shaped", u: "U-shaped" } as const;
 const groundRooms = findRooms(ground);
 const doors = ground.openings.filter((o) => o.kind === "door").length;
 const windows = ground.openings.length - doors;
@@ -151,7 +152,7 @@ const READOUTS: Record<string, (p: number) => string> = {
     rows([
       [ground.name, "±0.00 m"],
       [attic.name, `+${attic.elevation.toFixed(2)} m`],
-      ["Stair", `L-shaped · ${steps} steps`],
+      ["Stair", `${STAIR_KINDS[stair.kind]} · ${steps} steps`],
     ]),
   roof: (p) =>
     rows([
