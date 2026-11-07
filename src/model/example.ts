@@ -57,7 +57,7 @@ function opening(
   plan: Plan,
   kind: OpeningKind,
   at: Point,
-  size: { width?: number; height?: number; sill?: number } = {},
+  size: { width?: number; height?: number; sill?: number; swing?: 1 | -1 } = {},
 ): void {
   const wall = plan.walls.find((w) => {
     const [a, b] = wallEnds(plan, w);
@@ -117,10 +117,10 @@ function groundFloor(story: Story): void {
     2.5,
   );
   // Doors.
-  // The front door opens to the hall. The stair runs along the west wall of the hall, so the
-  // kitchen opens to the living room, and the living room door is at the east end of the hall.
-  opening(story, "door", p(5.9, 0), { width: 1.0, height: 2.2 });
-  opening(story, "door", p(0.9, 4));
+  // The front door opens to the hall. The door of the living room is at the east end of the
+  // hall, so that the stair in the living room starts beside it.
+  opening(story, "door", p(5.6, 0), { width: 1.1, height: 2.2 });
+  opening(story, "door", p(4, 2.6));
   opening(story, "door", p(6.45, 4), { width: 0.9 });
   opening(story, "door", p(7, 2.2));
   opening(story, "door", p(9.5, 3.8));
@@ -143,18 +143,15 @@ function groundFloor(story: Story): void {
   name(story, p(10.7, 2.5), "Bath");
   name(story, p(9.5, 7), "Bedroom");
 
-  // The stair starts beside the front door, goes up along the west wall of the hall, and turns
-  // east along its south wall. It arrives in the study of the attic, at the door of the bath.
-  const stair = addStair(story, p(4.535, 0.5), p(4.535, 3.0), 0.95);
-  stair.kind = "l";
-  stair.turn = -1;
-  stair.run2 = 1.0;
+  // A straight stair in the living room, along the wall to the hall: it starts beside the door
+  // of the living room and goes up to the west. It arrives in the attic near the ridge, where the
+  // attic has its full height.
+  addStair(story, p(5.6, 4.535), p(2.1, 4.535), 0.95);
 
   // Living and dining.
   furniture(story, "sofa", p(3.4, 7.2), 0);
   furniture(story, "coffee-table", p(3.4, 6.1));
   furniture(story, "armchair", p(1.2, 5.8), 90);
-  furniture(story, "sideboard", p(3.4, 4.35), 0);
   furniture(story, "shelf", p(0.35, 7.6), 90);
   furniture(story, "table", p(5.6, 7.3), 90, { width: 1.6, depth: 0.9 });
   for (const [x, y, r] of [
@@ -165,6 +162,8 @@ function groundFloor(story: Story): void {
   ]) {
     furniture(story, "chair", p(x, y), r);
   }
+  // Hall: a wardrobe for the coats.
+  furniture(story, "wardrobe", p(4.36, 1.2), 270);
   // Kitchen.
   furniture(story, "counter", p(0.5, 1.3), 90, { width: 2.2 });
   furniture(story, "kitchen-sink", p(1.8, 0.47), 0);
@@ -193,8 +192,8 @@ function groundFloor(story: Story): void {
   const s1 = fixture(story, "socket-double", p(0.2, 5.4), 90);
   const s2 = fixture(story, "socket", p(6.94, 8.5), 270);
   const s3 = fixture(story, "socket-double", p(1.4, 0.2), 0);
-  fixture(story, "switch", p(5.2, 0.2), 0);
-  fixture(story, "switch", p(5.85, 4.1), 0);
+  fixture(story, "switch", p(5.0, 0.2), 0);
+  fixture(story, "switch", p(6.88, 4.4), 270);
   fixture(story, "switch", p(7.12, 6.0), 90);
   for (const at of [p(3.4, 6.5), p(5.6, 7.3), p(2.2, 2), p(5.5, 2.3), p(9.6, 7), p(10.7, 2.5)]) {
     fixture(story, "light-ceiling", at, 0);
@@ -255,14 +254,15 @@ function attic(story: Story): void {
       [p(0, 9), p(0, 0), OUTER],
       [p(7, 0), p(7, 9), INNER],
       [p(7, 4.5), p(12, 4.5), INNER],
-      [p(0, 4.8), p(7, 4.8), INNER],
+      [p(0, 5.1), p(7, 5.1), INNER],
     ],
     2.6,
   );
   // Under the slope, the doors and the windows go where the room is high enough for them.
   opening(story, "door", p(7, 3.4));
   opening(story, "door", p(7, 5.6));
-  opening(story, "door", p(3, 4.8));
+  // The door between the study and the kids room is west of the stair. It opens to the study.
+  opening(story, "door", p(1.2, 5.1), { swing: -1 });
   opening(story, "window", p(0, 3.3), { width: 1.0, height: 1.2, sill: 0.9 });
   opening(story, "window", p(0, 5.9), { width: 1.0, height: 1.2, sill: 0.9 });
   opening(story, "window", p(12, 3.3), { width: 1.0, height: 1.2, sill: 0.9 });
@@ -273,14 +273,15 @@ function attic(story: Story): void {
   name(story, p(9.5, 7), "Bedroom");
   // The pieces stand against the walls. Under the slope, only low pieces fit near the eaves.
   // The tall pieces stand at the high walls near the ridge or at the gables.
-  // Study: a desk at the gable, a sofa at the wall under the ridge. The stair comes up at x 4 to 6.
+  // Study: a desk at the gable and a low sofa under the slope. The stair comes up at the wall to
+  // the kids room, from x 5.6 to x 2.1.
   furniture(story, "desk", p(0.5, 2.6), 270);
   furniture(story, "office-chair", p(1.25, 2.6), 90);
-  furniture(story, "sofa", p(2.1, 4.29), 180);
+  furniture(story, "sofa", p(3.6, 1.45), 0);
   // Kids: a bed with a nightstand at the gable, a desk at the wall to the bedroom, and a shelf.
   furniture(story, "bed-single", p(1.15, 6.0), 270);
-  furniture(story, "nightstand", p(0.35, 5.2), 270);
-  furniture(story, "shelf", p(5.2, 5.04), 0);
+  furniture(story, "nightstand", p(0.35, 6.7), 270);
+  furniture(story, "shelf", p(5.2, 5.335), 0);
   furniture(story, "desk", p(6.59, 7.3), 90);
   furniture(story, "office-chair", p(5.85, 7.3), 270);
   // Bedroom: the bed with two nightstands at the gable, the wardrobe under the ridge.
