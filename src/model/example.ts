@@ -177,9 +177,10 @@ function groundFloor(story: Story): void {
   furniture(story, "washer", p(7.5, 0.5), 0);
   furniture(story, "shelf", p(9.1, 1.5), 270, { width: 1.2 });
   // Bedroom.
-  furniture(story, "bed-double", p(9.6, 6.25), 0);
-  furniture(story, "nightstand", p(8.45, 5.45), 0);
-  furniture(story, "nightstand", p(10.75, 5.45), 0);
+  // The bed and the nightstands stand against the wall to the hall.
+  furniture(story, "bed-double", p(9.6, 6.06), 0);
+  furniture(story, "nightstand", p(8.45, 5.26), 0);
+  furniture(story, "nightstand", p(10.75, 5.26), 0);
   furniture(story, "wardrobe", p(11.55, 7.6), 90);
 
   // Electricity: sockets, switches, and lights.
@@ -266,14 +267,27 @@ function attic(story: Story): void {
   name(story, p(2, 7), "Kids");
   name(story, p(9.5, 2.2), "Bath");
   name(story, p(9.5, 7), "Bedroom");
-  furniture(story, "desk", p(2.2, 2.6), 270);
-  furniture(story, "office-chair", p(1.5, 2.6), 90);
-  furniture(story, "bed-single", p(2, 7.4), 90);
-  // The tall shelf stands at the high wall under the ridge, not under the slope.
-  furniture(story, "shelf", p(5.2, 5.05), 0);
-  furniture(story, "bed-double", p(9.6, 6.9), 90);
-  furniture(story, "bathtub", p(10.4, 2.2), 90);
-  furniture(story, "washbasin", p(8.2, 2.2), 90);
+  // The pieces stand against the walls. Under the slope, only low pieces fit near the eaves.
+  // The tall pieces stand at the high walls near the ridge or at the gables.
+  // Study: a desk at the gable, a sofa at the wall under the ridge. The stair comes up at x 4 to 6.
+  furniture(story, "desk", p(0.5, 2.6), 270);
+  furniture(story, "office-chair", p(1.25, 2.6), 90);
+  furniture(story, "sofa", p(2.1, 4.29), 180);
+  // Kids: a bed with a nightstand at the gable, a desk at the wall to the bedroom, and a shelf.
+  furniture(story, "bed-single", p(1.15, 6.0), 270);
+  furniture(story, "nightstand", p(0.35, 5.2), 270);
+  furniture(story, "shelf", p(5.2, 5.04), 0);
+  furniture(story, "desk", p(6.59, 7.3), 90);
+  furniture(story, "office-chair", p(5.85, 7.3), 270);
+  // Bedroom: the bed with two nightstands at the gable, the wardrobe under the ridge.
+  furniture(story, "bed-double", p(10.85, 6.4), 90);
+  furniture(story, "nightstand", p(11.65, 5.25), 90);
+  furniture(story, "nightstand", p(11.65, 7.55), 90);
+  furniture(story, "wardrobe", p(8.9, 4.86), 0);
+  // Bath: the bathtub at the gable, the washbasin and the toilet at the inner walls.
+  furniture(story, "bathtub", p(11.0, 2.6), 90);
+  furniture(story, "washbasin", p(7.285, 2.2), 270);
+  furniture(story, "toilet", p(9.0, 4.09), 180);
 }
 
 /** The whole house. */

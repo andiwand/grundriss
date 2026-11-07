@@ -14,7 +14,11 @@ The changes that a user notices.
   of its walls, the building has a facade color for the outside, and a roof has a color for its
   top and its underside. A single wall can have its own color on one side, for example an accent
   wall. The panel of a wall names the room on each side.
-- The bathtub of the example house stands inside the house.
+- 3D: a gable of a roof has a hole for each window of the wall behind it, so the windows of an
+  attic show from the outside.
+- The example house: the bathtub stands inside the house, the beds stand against the walls, and
+  the attic has more furniture (a sofa, a desk in the kids room, nightstands, a wardrobe, and a
+  toilet).
 
 - 3D: when only one story shows, the roofs of that story show only if it is the top story. So
   the roof of a low wing does not hide the rooms of a lower story. "All stories" shows all roofs.

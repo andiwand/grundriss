@@ -22,7 +22,7 @@ import { wallEnds } from "../model/plan";
 import { pvPanels } from "../model/pv";
 import { roofCeiling, roofGeometries, type Vec3 } from "../model/roof";
 import { WINDOW_LIFT } from "../model/roofshape";
-import { findRooms, type Room } from "../model/rooms";
+import { findRooms, pointInPolygon, type Room } from "../model/rooms";
 import { wallFaces } from "../model/walljoin";
 import { runKind } from "../model/services";
 import type {
@@ -955,6 +955,48 @@ function newell(polygon: Vec3[]): Vec3 {
 }
 
 /**
+ * The rectangles of the doors and the windows on both faces of all walls, in plan coordinates
+ * with the height above the ground as z. A gable in the plane of a face gets them as holes.
+ */
+function openingRects(building: Building): Vec3[][] {
+  const rects: Vec3[][] = [];
+  for (const story of building.stories) {
+    for (const opening of story.openings) {
+      const wall = story.walls.find((w) => w.id === opening.wallId);
+      if (!wall) continue;
+      const [a, b] = wallEnds(story, wall);
+      const length = distance(a, b);
+      if (length < 1e-6) continue;
+      const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+      const n = perpendicular(d);
+      const z0 = story.elevation + opening.sill;
+      const z1 = z0 + opening.height;
+      const s0 = opening.offset - opening.width / 2;
+      const s1 = opening.offset + opening.width / 2;
+      for (const o of [wall.thickness / 2, -wall.thickness / 2]) {
+        const at = (s: number, z: number) => ({
+          x: a.x + d.x * s + n.x * o,
+          y: a.y + d.y * s + n.y * o,
+          z,
+        });
+        rects.push([at(s0, z0), at(s1, z0), at(s1, z1), at(s0, z1)]);
+      }
+    }
+  }
+  return rects;
+}
+
+/** True if all points of `inner` are inside the flat polygon `outer`, in the plane of `outer`. */
+function insidePolygon(inner: Vec3[], outer: Vec3[]): boolean {
+  const n = newell(outer);
+  const [ax, ay, az] = [Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)];
+  const flat = (p: Vec3) =>
+    az >= ax && az >= ay ? { x: p.x, y: p.y } : ay >= ax ? { x: p.z, y: p.x } : { x: p.y, y: p.z };
+  const polygon = outer.map(flat);
+  return inner.every((p) => pointInPolygon(flat(p), polygon));
+}
+
+/**
  * True if all points of `polygon` (3 or more) are in the plane of `plane`, within 5 cm. The glass
  * of a dormer is a little in front of its wall.
  */
@@ -1072,7 +1114,18 @@ function addRoofs(group: THREE.Group, building: Building, roofs: Roof[]): void {
     // A gable of a pitched roof is in the plane of the outer face of the walls under it, for
     // example of an attic. It moves out a bit, so that the two surfaces do not flicker.
     // A gable has no lines: its top is in the plane of the roof, so its line would show on it.
-    add(roof.flat ? geometry.gables : geometry.gables.map(moveOut), materials.gable, roof.flat);
+    // It has a hole for each window or door of a wall in its plane, for example of an attic.
+    const openings = openingRects(building);
+    add(
+      (roof.flat ? geometry.gables : geometry.gables.map(moveOut)).flatMap((gable) =>
+        withHoles(
+          gable,
+          openings.filter((rect) => inPlane(rect, gable) && insidePolygon(rect, gable)),
+        ),
+      ),
+      materials.gable,
+      roof.flat,
+    );
     // The roof of each dormer is a thinner slab of the same colors.
     for (const dormer of geometry.dormers) {
       const faces = dormerRoofFaces(dormer.faces, dormer.walls);
