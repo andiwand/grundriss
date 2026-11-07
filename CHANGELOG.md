@@ -19,7 +19,8 @@ The changes that a user notices.
   finished house. Before, they were full stories until the roof came.
 - 3D: a gable of a roof has a hole for each window of the wall behind it, so the windows of an
   attic show from the outside.
-- The example house: the bathtub stands inside the house, the beds stand against the walls, and
+- The example house: the stair runs along the west wall of the hall and keeps the front door
+  free, the kitchen opens to the living room, the bathtub stands inside the house, the beds stand against the walls, and
   the attic has more furniture (a sofa, a desk in the kids room, nightstands, a wardrobe, and a
   toilet).
 

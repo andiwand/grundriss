@@ -117,9 +117,11 @@ function groundFloor(story: Story): void {
     2.5,
   );
   // Doors.
-  opening(story, "door", p(5.6, 0), { width: 1.1, height: 2.2 });
-  opening(story, "door", p(4, 2.6));
-  opening(story, "door", p(5.6, 4), { width: 1.0 });
+  // The front door opens to the hall. The stair runs along the west wall of the hall, so the
+  // kitchen opens to the living room, and the living room door is at the east end of the hall.
+  opening(story, "door", p(5.9, 0), { width: 1.0, height: 2.2 });
+  opening(story, "door", p(0.9, 4));
+  opening(story, "door", p(6.45, 4), { width: 0.9 });
   opening(story, "door", p(7, 2.2));
   opening(story, "door", p(9.5, 3.8));
   opening(story, "door", p(7, 6.4));
@@ -141,9 +143,11 @@ function groundFloor(story: Story): void {
   name(story, p(10.7, 2.5), "Bath");
   name(story, p(9.5, 7), "Bedroom");
 
-  const stair = addStair(story, p(4.55, 3.75), p(4.55, 1.25), 0.95);
+  // The stair starts beside the front door, goes up along the west wall of the hall, and turns
+  // east along its south wall. It arrives in the study of the attic, at the door of the bath.
+  const stair = addStair(story, p(4.535, 0.5), p(4.535, 3.0), 0.95);
   stair.kind = "l";
-  stair.turn = 1;
+  stair.turn = -1;
   stair.run2 = 1.0;
 
   // Living and dining.
@@ -189,8 +193,8 @@ function groundFloor(story: Story): void {
   const s1 = fixture(story, "socket-double", p(0.2, 5.4), 90);
   const s2 = fixture(story, "socket", p(6.94, 8.5), 270);
   const s3 = fixture(story, "socket-double", p(1.4, 0.2), 0);
-  fixture(story, "switch", p(5.0, 0.2), 0);
-  fixture(story, "switch", p(5.0, 4.1), 0);
+  fixture(story, "switch", p(5.2, 0.2), 0);
+  fixture(story, "switch", p(5.85, 4.1), 0);
   fixture(story, "switch", p(7.12, 6.0), 90);
   for (const at of [p(3.4, 6.5), p(5.6, 7.3), p(2.2, 2), p(5.5, 2.3), p(9.6, 7), p(10.7, 2.5)]) {
     fixture(story, "light-ceiling", at, 0);
