@@ -339,7 +339,7 @@ export function renderHome(): void {
   }
   note.classList.remove("warning");
   note.textContent = t(
-    "The projects stay in this browser on this device, and each change saves itself. Save to a file to share a plan, and back up all projects from time to time.",
+    "Draw a house or trace a scan, see it in 3D, and check its energy and a renovation. Your plans stay in this browser and save themselves after each change.",
   );
   // A newer call wins, so that a slow list does not replace a newer one.
   const request = ++homeRequest;
@@ -435,11 +435,6 @@ async function restoreProjects(): Promise<void> {
   }
 }
 
-/** The example house in the list of the projects. It is not in the browser storage. */
-let examplePreview: string | null = null;
-
-const EXAMPLE_ID = "example";
-
 /** A tile of the home page that starts an action: an icon, a title, and a line of detail. */
 function actionTile(iconName: IconName, title: string, detail: string, run: () => void) {
   const tile = document.createElement("button");
@@ -466,175 +461,163 @@ async function storageShare(): Promise<number | null> {
 }
 
 /**
- * Fills the home page: the tiles to start a plan, the plans in the browser, and the examples.
- * Without the storage (`projects` is null), the row of the plans in the browser does not show.
+ * Fills the home page in one column: the tiles to start (a new plan, a file, the example house),
+ * the plans in the browser, and the links to the backup and the trash. Without the storage
+ * (`projects` is null), only the tiles to start show.
  */
 function fillProjects(projects: ProjectInfo[] | null): void {
   const list = $("#project-list");
   list.replaceChildren();
-  const row = (title: string | null, className = "") => {
-    const wrap = document.createElement("section");
-    wrap.className = "project-section";
-    if (title) {
-      const heading = document.createElement("h3");
-      heading.textContent = title;
-      wrap.append(heading);
-    }
-    const grid = document.createElement("div");
-    grid.className = `project-grid ${className}`.trim();
-    wrap.append(grid);
-    list.append(wrap);
-    return grid;
-  };
-  const startRow = row(null, "start-row");
-  const mine = projects ? row(t("Plans in this browser")) : null;
-  if (mine) {
-    // The warning about the storage goes under the title of the plans, one line for each point.
-    void storageNote().then((lines) => {
-      if (lines.length === 0 || !mine.isConnected) return;
-      const warning = document.createElement("p");
-      warning.className = "project-warning";
-      lines.forEach((line, i) => {
-        if (i > 0) warning.append(document.createElement("br"));
-        warning.append(line);
-      });
-      mine.before(warning);
+  const start = document.createElement("div");
+  start.className = "project-grid start-row";
+  start.append(
+    actionTile("plus", t("New plan"), t("Draw the walls, or trace a scan or a photo."), newPlan),
+    actionTile("open", t("Open a file"), t("A .grundriss or a .json file."), () => void openFile()),
+    actionTile(
+      "roof",
+      t("Example house"),
+      t("A house with two stories, a roof, PV, and utilities. A change saves a copy."),
+      openExample,
+    ),
+  );
+  list.append(start);
+  if (!projects) return;
+
+  const mine = document.createElement("section");
+  mine.className = "project-section";
+  const heading = document.createElement("h3");
+  heading.textContent = t("Your plans");
+  mine.append(heading);
+  // The warning about the storage goes under the title of the plans, one line for each point.
+  void storageNote().then((lines) => {
+    if (lines.length === 0 || !mine.isConnected) return;
+    const warning = document.createElement("p");
+    warning.className = "project-warning";
+    lines.forEach((line, i) => {
+      if (i > 0) warning.append(document.createElement("br"));
+      warning.append(line);
     });
-  }
-  const examples = row(t("Examples"));
-  if (projects && projects.length === 0) {
+    heading.after(warning);
+  });
+  if (projects.length === 0) {
     const empty = document.createElement("p");
     empty.className = "project-empty";
     empty.textContent = t(
       "No plans yet. A plan that you start or open shows here, and each change saves it.",
     );
-    mine!.append(empty);
+    mine.append(empty);
+  } else {
+    const grid = document.createElement("div");
+    grid.className = "project-grid";
+    grid.append(...projects.map(projectCard));
+    mine.append(grid);
   }
-  examplePreview ??= projectPreview(makeHouse());
-  const example: ProjectInfo = {
-    id: EXAMPLE_ID,
-    name: t("Example house"),
-    created: 0,
-    updated: 0,
-    preview: examplePreview,
+  list.append(mine);
+
+  // The backup and the trash are less frequent, so they are links at the end.
+  const links = document.createElement("nav");
+  links.className = "home-links";
+  const link = (iconName: IconName, text: string, run: () => void) => {
+    const element = document.createElement("button");
+    element.className = "link";
+    element.innerHTML = icon(iconName);
+    element.append(text);
+    element.addEventListener("click", run);
+    links.append(element);
+    return element;
   };
-  // The first tiles start a plan: a new plan, or a plan from a file.
-  startRow.append(
-    actionTile("plus", t("New plan"), t("Draw the walls, or trace a scan or a photo."), newPlan),
-    actionTile("open", t("Open a file"), t("A .grundriss or a .json file."), () => void openFile()),
-  );
-  for (const project of [...(projects ?? []), example]) {
-    const isExample = project === example;
-    const card = document.createElement("article");
-    card.className = "project";
-    const open = document.createElement("button");
-    open.className = "project-open";
-    open.title = t("Open {name}", { name: project.name });
-    const picture = document.createElement("div");
-    picture.className = "project-picture";
-    if (project.preview) {
-      const image = document.createElement("img");
-      image.alt = "";
-      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(project.preview)}`;
-      picture.append(image);
-    } else {
-      picture.innerHTML = icon("view2d");
-    }
-    const text = document.createElement("span");
-    text.className = "project-text";
-    const name = document.createElement("strong");
-    name.textContent = project.name;
-    const time = document.createElement("small");
-    time.textContent = isExample
-      ? t("A house with two stories, a roof, PV, and utilities. A change saves a copy.")
-      : t("Changed {time}", { time: ago(project.updated) });
-    text.append(name, time);
-    open.append(picture, text);
-    open.addEventListener("click", () =>
-      isExample ? openExample() : void openProject(project.id),
-    );
-    if (isExample) {
-      card.classList.add("example");
-      card.append(open);
-      examples.append(card);
-      continue;
-    }
-    const tools = document.createElement("div");
-    tools.className = "project-tools";
-    const tool = (iconName: IconName, title: string, action: () => void, danger = false) =>
-      tools.append(
-        iconButton(iconName, title, action, { danger, label: `${title}: ${project.name}` }),
-      );
-    tool("rename", t("Rename"), () => renameInPlace(card, project));
-    tool("copy", t("Duplicate"), () => void duplicateProject(project.id));
-    tool(
-      "trash",
-      t("Delete"),
-      () => {
-        void deleteProject(project.id).then(() => {
-          // The open plan stays, and its next change saves it as a new project.
-          if (project.id === projectId) {
-            projectId = null;
-            storedBuilding = doc.building;
-            void lockProject(null);
-          }
-          showStatus(
-            t("Moved {name} to the trash. It stays there for {days} days.", {
-              name: project.name,
-              days: TRASH_DAYS,
-            }),
-          );
-          renderHome();
-        });
-      },
-      true,
-    );
-    card.append(open, tools);
-    mine!.append(card);
-  }
-  if (projects) {
-    // The backup of all projects, and the trash.
-    const backup = row(t("Backup"));
-    backup.append(
-      actionTile(
-        "save",
-        t("Back up all projects"),
-        t("One ZIP file with all plans."),
-        () => void backUpProjects(),
-      ),
-      actionTile(
-        "upload",
-        t("Restore a backup"),
-        t("Read the plans of a backup ZIP file."),
-        () => void restoreProjects(),
-      ),
-    );
-    void listDeleted().then((deleted) => {
-      if (deleted.length === 0) return;
-      const trash = row(t("Trash · {count}", { count: deleted.length }), "trash-row");
-      for (const project of deleted) {
-        const item = document.createElement("div");
-        item.className = "trash-item";
-        const name = document.createElement("span");
-        name.textContent = project.name;
-        const restore = document.createElement("button");
-        restore.textContent = t("Restore");
-        restore.addEventListener("click", () => void restoreProject(project.id).then(renderHome));
-        const remove = document.createElement("button");
-        remove.className = "danger";
-        remove.textContent = t("Delete for good");
-        remove.addEventListener("click", () => {
-          if (
-            !confirm(t('Delete "{name}" for good? This cannot be undone.', { name: project.name }))
-          )
-            return;
-          void purgeProject(project.id).then(renderHome);
-        });
-        item.append(name, restore, remove);
-        trash.append(item);
-      }
+  link("save", t("Back up all projects"), () => void backUpProjects());
+  link("upload", t("Restore a backup"), () => void restoreProjects());
+  list.append(links);
+  void listDeleted().then((deleted) => {
+    if (deleted.length === 0 || !links.isConnected) return;
+    const trash = document.createElement("section");
+    trash.className = "trash-row";
+    trash.hidden = true;
+    for (const project of deleted) trash.append(trashItem(project));
+    link("trash", t("Trash · {count}", { count: deleted.length }), () => {
+      trash.hidden = !trash.hidden;
     });
+    links.after(trash);
+  });
+}
+
+/** The tile of a project in the browser: its picture, its name, its time, and its tools. */
+function projectCard(project: ProjectInfo): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "project";
+  const open = document.createElement("button");
+  open.className = "project-open";
+  open.title = t("Open {name}", { name: project.name });
+  const picture = document.createElement("div");
+  picture.className = "project-picture";
+  if (project.preview) {
+    const image = document.createElement("img");
+    image.alt = "";
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(project.preview)}`;
+    picture.append(image);
+  } else {
+    picture.innerHTML = icon("view2d");
   }
+  const text = document.createElement("span");
+  text.className = "project-text";
+  const name = document.createElement("strong");
+  name.textContent = project.name;
+  const time = document.createElement("small");
+  time.textContent = t("Changed {time}", { time: ago(project.updated) });
+  text.append(name, time);
+  open.append(picture, text);
+  open.addEventListener("click", () => void openProject(project.id));
+  const tools = document.createElement("div");
+  tools.className = "project-tools";
+  const tool = (iconName: IconName, title: string, action: () => void, danger = false) =>
+    tools.append(
+      iconButton(iconName, title, action, { danger, label: `${title}: ${project.name}` }),
+    );
+  tool("rename", t("Rename"), () => renameInPlace(card, project));
+  tool("copy", t("Duplicate"), () => void duplicateProject(project.id));
+  tool("trash", t("Delete"), () => void trashProject(project), true);
+  card.append(open, tools);
+  return card;
+}
+
+/** Moves the project to the trash. The open plan stays, and its next change saves it again. */
+async function trashProject(project: ProjectInfo): Promise<void> {
+  await deleteProject(project.id);
+  if (project.id === projectId) {
+    projectId = null;
+    storedBuilding = doc.building;
+    void lockProject(null);
+  }
+  showStatus(
+    t("Moved {name} to the trash. It stays there for {days} days.", {
+      name: project.name,
+      days: TRASH_DAYS,
+    }),
+  );
+  renderHome();
+}
+
+/** A project in the trash, with the buttons to restore it and to delete it for good. */
+function trashItem(project: ProjectInfo): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "trash-item";
+  const name = document.createElement("span");
+  name.textContent = project.name;
+  const restore = document.createElement("button");
+  restore.textContent = t("Restore");
+  restore.addEventListener("click", () => void restoreProject(project.id).then(renderHome));
+  const remove = document.createElement("button");
+  remove.className = "danger";
+  remove.textContent = t("Delete for good");
+  remove.addEventListener("click", () => {
+    if (!confirm(t('Delete "{name}" for good? This cannot be undone.', { name: project.name }))) {
+      return;
+    }
+    void purgeProject(project.id).then(renderHome);
+  });
+  item.append(name, restore, remove);
+  return item;
 }
 
 /** Puts a text field in place of the name of the project. Enter or a blur keeps the new name. */

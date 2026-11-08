@@ -22,8 +22,6 @@ export const PROJECTS: Record<string, string> = {
   // The home page
   "This browser does not store projects, for example in a private window. Save the plan to a file to keep it.":
     "Dieser Browser speichert keine Projekte, zum Beispiel in einem privaten Fenster. Speichern Sie den Plan in eine Datei, um ihn zu behalten.",
-  "The projects stay in this browser on this device, and each change saves itself. Save to a file to share a plan, and back up all projects from time to time.":
-    "Die Projekte bleiben in diesem Browser auf diesem Gerät, und jede Änderung speichert sich selbst. Speichern Sie einen Plan in eine Datei, um ihn weiterzugeben, und sichern Sie alle Projekte von Zeit zu Zeit.",
   "The browser cannot read the projects: {error}":
     "Der Browser kann die Projekte nicht lesen: {error}",
   "The browser can delete these plans after a long time without a visit.":
@@ -41,8 +39,6 @@ export const PROJECTS: Record<string, string> = {
     "{count} von {total} Projekten wiederhergestellt. Die anderen sind im Browser neuer, gerade geöffnet oder beschädigt.",
 
   // The list of the projects
-  "Plans in this browser": "Pläne in diesem Browser",
-  Examples: "Beispiele",
   "No plans yet. A plan that you start or open shows here, and each change saves it.":
     "Noch keine Pläne. Ein Plan, den Sie beginnen oder öffnen, erscheint hier, und jede Änderung speichert ihn.",
   "New plan": "Neuer Plan",
@@ -59,11 +55,8 @@ export const PROJECTS: Record<string, string> = {
   Delete: "Löschen",
   "Moved {name} to the trash. It stays there for {days} days.":
     "{name} ist im Papierkorb. Es bleibt dort {days} Tage.",
-  Backup: "Sicherung",
   "Back up all projects": "Alle Projekte sichern",
-  "One ZIP file with all plans.": "Eine ZIP-Datei mit allen Plänen.",
   "Restore a backup": "Sicherung wiederherstellen",
-  "Read the plans of a backup ZIP file.": "Liest die Pläne aus einer ZIP-Datei einer Sicherung.",
   "Trash · {count}": "Papierkorb · {count}",
   Restore: "Wiederherstellen",
   "Delete for good": "Endgültig löschen",
@@ -73,4 +66,7 @@ export const PROJECTS: Record<string, string> = {
   "{name} (copy)": "{name} (Kopie)",
   "Another tab with an older version of Grundriss blocks the storage. Close it, and load this page again.":
     "Ein anderer Tab mit einer älteren Version von Grundriss blockiert den Speicher. Schließen Sie ihn, und laden Sie diese Seite neu.",
+  "Your plans": "Ihre Pläne",
+  "Draw a house or trace a scan, see it in 3D, and check its energy and a renovation. Your plans stay in this browser and save themselves after each change.":
+    "Zeichnen Sie Ihr Haus, oder pausen Sie einen Scan ab, sehen Sie es in 3D, und prüfen Sie Energie und Sanierung. Ihre Pläne bleiben in diesem Browser und speichern sich nach jeder Änderung.",
 };

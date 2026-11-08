@@ -7,7 +7,7 @@ import { clickPlan, isPhone, openApp, projectCount } from "./helpers";
 
 test("opens the example house in the Structure topic", async ({ page }) => {
   await openApp(page);
-  await page.locator("#project-list .project-open", { hasText: "Example house" }).click();
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await expect(page.locator("body")).not.toHaveClass(/no-plan/);
   await expect(page.locator('[data-topic-tab="structure"]')).toHaveClass(/active/);
   await expect(page.locator("#plan-2d .room-label").first()).toBeVisible();
@@ -43,7 +43,7 @@ test("draws a room, saves it in the browser, and opens it again after a reload",
 
 test("shows each topic with its panel", async ({ page }) => {
   await openApp(page);
-  await page.locator("#project-list .project-open", { hasText: "Example house" }).click();
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   for (const topic of ["utilities", "interior", "energy", "renovation"]) {
     await page.locator(`[data-topic-tab="${topic}"]`).click();
     await expect(page.locator("#panel h2").first()).toBeVisible();
@@ -54,7 +54,7 @@ test("shows each topic with its panel", async ({ page }) => {
 
 test("exports the report and the quantities", async ({ page }) => {
   await openApp(page);
-  await page.locator("#project-list .project-open", { hasText: "Example house" }).click();
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   for (const kind of ["pdf", "csv"]) {
     if (await isPhone(page)) await page.locator("#more-button").click();
     else await page.locator("#export").click();
@@ -105,7 +105,8 @@ test("moves a project to the trash and restores it", async ({ page }) => {
   );
   await page.reload();
   await page.locator('#project-list button[aria-label="Delete: Trash test"]').click();
-  await expect(page.locator("#project-list h3", { hasText: "Trash" })).toBeVisible();
+  // The trash opens from the link at the end of the page.
+  await page.locator(".home-links button", { hasText: "Trash" }).click();
   await page
     .locator(".trash-item", { hasText: "Trash test" })
     .getByRole("button", { name: "Restore" })
@@ -118,7 +119,7 @@ test("moves a project to the trash and restores it", async ({ page }) => {
 test("uses the layout for a phone with the topics at the bottom", async ({ page }) => {
   await openApp(page);
   test.skip(!(await isPhone(page)), "Only on the phone.");
-  await page.locator("#project-list .project-open", { hasText: "Example house" }).click();
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await expect(page.locator("#bottom-bar #topics")).toBeVisible();
   await expect(page.locator("#layers-button")).toBeHidden();
   // A tap on the handle opens the sheet of the panel.
@@ -136,7 +137,7 @@ test("uses the layout for a phone with the topics at the bottom", async ({ page 
 test("shows the interface in German", async ({ page }) => {
   await openApp(page, "de");
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
-  await page.locator("#project-list .project-open").last().click();
+  await page.locator(".start-row .project-start").last().click();
   await expect(page.locator('[data-topic-tab="overview"]')).toContainText("Übersicht");
 });
 

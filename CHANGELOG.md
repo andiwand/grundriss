@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Projects page: one column in the middle of the window, without a large box. Three tiles at the
+  top start a plan: a new plan, a file, or the example house. Your plans follow below, and the
+  backup, the restore, and the trash are links at the end.
 - Files: a plan file has version 3. It has values that older versions of the app do not know
   (water and communication, the half hip, unheated stories), so an older app says that it cannot
   read the file, and does not read it wrong. The app reads the versions 1, 2, and 3.

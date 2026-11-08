@@ -306,4 +306,5 @@ export const APP: Record<string, string> = {
 
   // ----- src/editor/editor2d.ts -----
   "{count} steps · {height} cm": "{count} Stufen · {height} cm",
+  "Plan, check, and renovate your house": "Planen, prüfen und sanieren Sie Ihr Haus",
 };
