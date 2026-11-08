@@ -1,0 +1,45 @@
+# A Grundriss server with https, for `docker compose up -d`.
+#
+# 1. Point the DNS name (here grundriss.example.org) to this machine, and open the ports 80 and
+#    443. Caddy gets the certificate from Let's Encrypt by itself.
+# 2. Change the name below, and start: docker compose up -d
+# 3. Read the root link once: docker compose logs grundriss
+#    Open it as https://grundriss.example.org/<token>/
+#
+# The data of Grundriss is in ./data, the certificates of Caddy in ./caddy. See "Plans on your
+# own server" in the README for all settings.
+
+services:
+  grundriss:
+    image: ghcr.io/andiwand/grundriss:latest
+    restart: unless-stopped
+    environment:
+      # The website at / and the app at /app/, from this server. Leave it out, and each address
+      # outside a link answers 404.
+      GRUNDRISS_PUBLIC_SITE: "true"
+      # Or send / and /app to the public website and app on GitHub Pages, with only the API here:
+      # GRUNDRISS_MODE: api
+      # GRUNDRISS_HOME_URL: https://andiwand.github.io/grundriss/
+      # GRUNDRISS_APP_URL: https://andiwand.github.io/grundriss/app/
+    volumes:
+      # The folder must belong to the user of the container (1000), or set `user:` to its owner.
+      - ./data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    command: caddy reverse-proxy --from grundriss.example.org --to grundriss:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy:/data
+
+# With nginx-proxy and its Let's Encrypt companion (https://github.com/nginx-proxy) in place of
+# Caddy, leave out the service caddy, and give the service grundriss these variables, in the
+# network of nginx-proxy:
+#
+#   VIRTUAL_HOST: grundriss.example.org
+#   VIRTUAL_PORT: "8080"
+#   LETSENCRYPT_HOST: grundriss.example.org
+#   LETSENCRYPT_EMAIL: you@example.org
