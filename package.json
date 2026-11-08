@@ -7,11 +7,13 @@
   "license": "MPL-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build -c vite.site.config.ts && vite build --outDir dist/app --emptyOutDir false",
+    "build": "tsc --noEmit && tsc -p server && vite build -c vite.site.config.ts && vite build --outDir dist/app --emptyOutDir false",
+    "build:server": "node scripts/build-server.mjs",
+    "server": "npm run build:server && GRUNDRISS_APP=dist/app GRUNDRISS_DATA=server/data node server/dist/main.mjs",
     "preview": "vite preview --outDir dist",
     "test": "vitest run",
-    "format": "prettier --write src test site *.ts e2e *.json *.md index.html",
-    "format:check": "prettier --check src test site *.ts e2e *.json *.md index.html",
+    "format": "prettier --write src test site server/src server/test *.ts e2e *.json *.md index.html",
+    "format:check": "prettier --check src test site server/src server/test *.ts e2e *.json *.md index.html",
     "dev:site": "vite -c vite.site.config.ts",
     "test:e2e": "playwright test"
   },
