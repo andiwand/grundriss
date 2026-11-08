@@ -60,7 +60,7 @@ import { storyBox } from "./roof";
 import { roomSide, WIDE_WINDOW } from "./openings";
 import { findRooms } from "./rooms";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
-import { switchVariant } from "./variants";
+import { switchVariant, syncBackgrounds } from "./variants";
 
 export const FILE_FORMAT = "grundriss";
 export const FILE_VERSION = 3;
@@ -71,9 +71,9 @@ export const FILE_VERSION = 3;
  * gives the open variant.
  */
 export function serializeBuilding(building: Building): string {
-  let plain = building;
+  const plain = copyTree(building);
+  syncBackgrounds(plain);
   if (building.variant !== null) {
-    plain = copyTree(building);
     switchVariant(plain, null);
   }
   const { base, ...rest } = plain;
@@ -114,6 +114,13 @@ function list(data: Data, key: string): Data[] {
   const value = data[key] ?? [];
   if (!Array.isArray(value) || !value.every(isObject)) {
     throw new Error(`The file is damaged: "${key}" is not a list of objects.`);
+  }
+  const ids = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry.id !== "string") continue;
+    if (ids.has(entry.id))
+      throw new Error(`The file is damaged: "${key}" has duplicate id "${entry.id}".`);
+    ids.add(entry.id);
   }
   return value;
 }
@@ -205,14 +212,14 @@ export function parseBuilding(text: string): Building {
       id: string(d, "id", where),
       // A field of a file before the roofs is on the only roof.
       roofId: typeof d.roofId === "string" ? d.roofId : (roofs[0]?.id ?? ""),
-      face: number(d, "face", where),
-      panelWidth: number(d, "panelWidth", where),
-      panelHeight: number(d, "panelHeight", where),
-      panelPower: number(d, "panelPower", where),
+      face: count(d, "face", where),
+      panelWidth: bounded(d, "panelWidth", where, 0.01, Infinity),
+      panelHeight: bounded(d, "panelHeight", where, 0.01, Infinity),
+      panelPower: bounded(d, "panelPower", where, 0, Infinity),
       portrait: d.portrait !== false,
-      margin: number(d, "margin", where),
-      gap: number(d, "gap", where),
-      limit: d.limit == null ? null : number(d, "limit", where),
+      margin: bounded(d, "margin", where, 0, Infinity),
+      gap: bounded(d, "gap", where, 0, Infinity),
+      limit: d.limit == null ? null : count(d, "limit", where),
       rack: parseRack(d.rack),
     };
   };
@@ -273,6 +280,14 @@ function bounded(data: Data, key: string, where: string, low: number, high: numb
   if (value < low || value > high) {
     throw new Error(`The file is damaged: ${where} has no valid "${key}".`);
   }
+  return value;
+}
+
+/** A nonnegative integer, for a count or an index. */
+function count(data: Data, key: string, where: string): number {
+  const value = bounded(data, key, where, 0, Number.MAX_SAFE_INTEGER);
+  if (!Number.isInteger(value))
+    throw new Error(`The file is damaged: ${where} has no valid "${key}".`);
   return value;
 }
 
@@ -508,7 +523,11 @@ function parseHotWater(data: unknown): HotWater {
 
 /** Reads the heating. A file without it, or with an unknown kind, gets the default heating. */
 function parseHeating(data: unknown): HeatingSystem {
-  if (!isObject(data) || typeof data.kind !== "string" || !(data.kind in HEATING_KINDS)) {
+  if (
+    !isObject(data) ||
+    typeof data.kind !== "string" ||
+    !Object.hasOwn(HEATING_KINDS, data.kind)
+  ) {
     return defaultEnvelope().heating;
   }
   const defaults = defaultHeating(data.kind as HeatingKind);

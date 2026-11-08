@@ -134,7 +134,11 @@ const cache: Decoded[] = [];
 const CACHE_SIZE = 4;
 
 function decoded(climate: Climate): Decoded {
-  const key = SERIES_NAMES.map((name) => climate[name]);
+  const key = [
+    String(climate.latitude),
+    String(climate.longitude),
+    ...SERIES_NAMES.map((name) => climate[name]),
+  ];
   const hit = cache.find((d) => d.key.every((text, i) => text === key[i]));
   if (hit) return hit;
   const series = {} as ClimateSeries;
@@ -499,7 +503,6 @@ export interface HourlyData {
   temperature: (number | null)[];
 }
 
-/** The first day of each month in the year, from 0. */
 /** The first day of each month in the year, and the day after the year at the end. */
 const MONTH_START = MONTH_DAYS.reduce<number[]>((s, d, i) => [...s, s[i] + d], [0]);
 

@@ -4,6 +4,7 @@ import { newRoof } from "../src/model/roof";
 import { parseBuilding, serializeBuilding } from "../src/model/file";
 import type { Climate, Plan } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
+import { makeHouse } from "../src/model/example";
 
 /** Reads a file of version 1 and gives the plan of its only story. */
 function parsePlan(text: string): Plan {
@@ -33,6 +34,36 @@ import {
 } from "../src/model/plan";
 
 describe("file format", () => {
+  it("rejects repeated ids in a collection", () => {
+    const building = makeHouse();
+    building.stories[0].vertices.push({ ...building.stories[0].vertices[0] });
+    expect(() => parseBuilding(serializeBuilding(building))).toThrow("duplicate");
+    const stories = emptyBuilding();
+    stories.stories.push({ ...stories.stories[0] });
+    expect(() => parseBuilding(serializeBuilding(stories))).toThrow("duplicate");
+  });
+
+  it("does not accept an inherited property as a heating kind", () => {
+    const data = JSON.parse(serializeBuilding(emptyBuilding()));
+    data.envelope.heating.kind = "constructor";
+    expect(parseBuilding(JSON.stringify(data)).envelope.heating.kind).toBe("heat-pump");
+  });
+
+  it("rejects PV dimensions that cannot form a finite panel grid", () => {
+    for (const change of [
+      { panelWidth: 0, panelHeight: 0, gap: 0 },
+      { gap: -1.72 },
+      { panelHeight: -1 },
+      { margin: -1 },
+      { face: 0.5 },
+      { limit: -1 },
+    ]) {
+      const building = makeHouse();
+      Object.assign(building.pv[0], change);
+      expect(() => parseBuilding(serializeBuilding(building))).toThrow("valid");
+    }
+  });
+
   it("reads what it writes", () => {
     const plan = emptyPlan();
     const a = addVertex(plan, { x: 0, y: 0 });

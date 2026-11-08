@@ -163,6 +163,8 @@ export function utilization(ratio: number, tau: number): number {
   const a = 1 + tau / 15;
   if (ratio <= 0) return 1;
   if (Math.abs(ratio - 1) < 1e-9) return a / (a + 1);
+  // Divide by ratio^a for large gains, so that the powers cannot overflow.
+  if (ratio > 1) return (1 - ratio ** -a) / (ratio - ratio ** -a);
   return (1 - ratio ** a) / (1 - ratio ** (a + 1));
 }
 

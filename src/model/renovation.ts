@@ -30,7 +30,7 @@ import { HEATING_KINDS, heatingEnergy } from "./heating";
 import { material } from "./insulation";
 import { pvSummary } from "./pv";
 import { findRooms } from "./rooms";
-import { layoutChanges } from "./layout";
+import { hasOpening, layoutChanges } from "./layout";
 import { envelopeAreas } from "./takeoff";
 import type { Building, Finance, HeatingKind, Layer, Variant } from "./types";
 import { planBuilding, sameData, withVariant } from "./variants";
@@ -187,7 +187,22 @@ export function estimateItems(building: Building, variant: Variant): CostItem[] 
   insulation("ceiling", "Insulation of the slabs to unheated stories", areas.ceiling);
   insulation("floor", "Insulation of the floor", areas.floor);
   if (after.windowU < before.windowU - 1e-9 && areas.window > 0) {
-    items.push({ name: "New windows", cost: areas.window * prices.window, kind: "envelope" });
+    // New openings already have a window cost. Only retained windows need a replacement.
+    const retained = envelopeAreas({
+      ...target,
+      stories: target.stories.map((story) => ({
+        ...story,
+        openings: story.openings.filter((o) =>
+          hasOpening(
+            story,
+            o,
+            plan.stories.find((s) => s.id === story.id),
+          ),
+        ),
+      })),
+    }).windows;
+    if (retained > 0)
+      items.push({ name: "New windows", cost: retained * prices.window, kind: "envelope" });
   }
   if (after.heating.kind !== before.heating.kind) {
     items.push({

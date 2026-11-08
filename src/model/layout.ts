@@ -93,7 +93,7 @@ function centerOf(story: Story, opening: Opening): Point | null {
 }
 
 /** True if the other story has an opening of the same kind and size at the same place. */
-function hasOpening(story: Story, opening: Opening, other: Story | undefined): boolean {
+export function hasOpening(story: Story, opening: Opening, other: Story | undefined): boolean {
   const at = centerOf(story, opening);
   if (!other || !at) return false;
   return other.openings.some((o) => {

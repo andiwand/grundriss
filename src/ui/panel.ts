@@ -136,8 +136,14 @@ export function numberField(
   if (options.max !== undefined) input.max = String(options.max);
   input.value = String(Math.round(value * 1000) / 1000);
   input.addEventListener("change", () => {
-    const parsed = Number(input.value);
-    if (Number.isFinite(parsed) && parsed >= (options.min ?? 0)) change(parsed);
+    const parsed = input.valueAsNumber;
+    if (
+      Number.isFinite(parsed) &&
+      parsed >= (options.min ?? 0) &&
+      parsed <= (options.max ?? Infinity)
+    )
+      change(parsed);
+    else input.value = String(Math.round(value * 1000) / 1000);
   });
   field(text, input, options.unit ?? "m");
   return input;

@@ -8,6 +8,7 @@ import { kenneyModel, loadKenneyCatalog, type KenneyItem } from "../furniture/ke
 import { downloadModel, listFurniture, type PolyHavenItem } from "../furniture/polyhaven";
 import { t } from "../i18n";
 import { icon } from "../icons";
+import { pickFile } from "../io/files";
 import {
   CATEGORY_NAMES,
   GENERIC_TYPES,
@@ -28,6 +29,7 @@ const TABS: [Tab, string][] = [
 
 interface CatalogHost {
   building(): Building;
+  captureTarget(): () => boolean;
   /** Adds a model to the building, if the building does not have it. */
   addModel(model: Model): void;
   /** Starts the furniture tool with the piece. */
@@ -259,6 +261,7 @@ export class Catalog {
 
   private async downloadPolyHaven(item: PolyHavenItem): Promise<void> {
     if (this.busy.has(item.id)) return;
+    const current = this.host.captureTarget();
     const existing = this.host
       .building()
       .models.find((m) => m.origin === "polyhaven" && m.ref === item.id);
@@ -274,6 +277,7 @@ export class Catalog {
     this.host.status(t("Downloading {name} from Poly Haven…", { name: item.name }));
     try {
       const model = await downloadModel(item);
+      if (!current()) return;
       this.host.addModel(model);
       this.host.status(t("Downloaded {name}. Click on the plan to place it.", { name: item.name }));
       this.host.place(
@@ -329,18 +333,13 @@ export class Catalog {
   }
 
   private async importFile(): Promise<void> {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".glb,.gltf,model/gltf-binary,model/gltf+json";
-    const file = await new Promise<File | null>((resolve) => {
-      input.addEventListener("change", () => resolve(input.files?.[0] ?? null));
-      input.addEventListener("cancel", () => resolve(null));
-      input.click();
-    });
+    const current = this.host.captureTarget();
+    const file = await pickFile(".glb,.gltf,model/gltf-binary,model/gltf+json");
     if (!file) return;
     this.host.status(t("Reading {name}…", { name: file.name }));
     try {
       const model = await importModelFile(file);
+      if (!current()) return;
       this.host.addModel(model);
       this.host.status(t("Imported {name}. Click on the plan to place it.", { name: file.name }));
       this.render();

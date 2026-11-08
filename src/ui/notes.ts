@@ -73,10 +73,12 @@ export function renderNotes(note: Note | undefined, change: NoteChange): void {
     add.className = "note-add";
     add.textContent = t("+ Photo");
     add.addEventListener("click", async () => {
+      const current = doc.captureTarget();
       const file = await pickFile("image/*");
       if (!file) return;
       try {
         const image = await readImage(file, PHOTO_LIMIT);
+        if (!current()) return;
         change((old) => ({
           text: old?.text ?? "",
           photos: [...(old?.photos ?? []), image.dataUrl],

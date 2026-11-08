@@ -26,6 +26,11 @@ function house(edit: (b: Building) => void = () => {}): Building {
 }
 
 describe("utilization of the gains", () => {
+  it("stays finite when gains are large and the building stores much heat", () => {
+    expect(utilization(1e6, 1000)).toBeCloseTo(1e-6, 12);
+    expect(utilization(2, 20000)).toBeCloseTo(0.5, 12);
+  });
+
   it("uses all small gains, and less of large gains", () => {
     expect(utilization(0, 20)).toBe(1);
     expect(utilization(0.2, 20)).toBeGreaterThan(0.95);

@@ -120,6 +120,32 @@ describe("measures", () => {
 });
 
 describe("variants with a floor plan", () => {
+  it("shares background edits and removal without creating a layout change", () => {
+    const building = house();
+    building.stories[0].background = {
+      image: "data:image/png;base64,AAAA",
+      width: 1,
+      height: 1,
+      x: 0,
+      y: 0,
+      scale: 1,
+      opacity: 0.5,
+    };
+    const variant = variantOf(building, "Background");
+    building.variants.push(variant);
+    switchVariant(building, variant.id);
+    building.stories[0].background!.x = 2;
+    switchVariant(building, null);
+    expect(building.stories[0].background!.x).toBe(2);
+    expect(variant.layout).toBeNull();
+    switchVariant(building, variant.id);
+    building.stories[0].background = null;
+    switchVariant(building, null);
+    switchVariant(building, variant.id);
+    expect(building.stories[0].background).toBeNull();
+    expect(variant.layout).toBeNull();
+  });
+
   /** An inner wall of the ground floor, and its length. */
   function innerWall(building: Building) {
     const story = building.stories[0];
@@ -147,8 +173,6 @@ describe("variants with a floor plan", () => {
     expect(building.stories[0].walls).toHaveLength(walls);
     expect(variant.layout!.stories[0].walls).toHaveLength(walls - 1);
     expect(withVariant(building, variant).stories[0].walls).toHaveLength(walls - 1);
-    // The copies of the variant have no background image.
-    expect(variant.layout!.stories.every((s) => s.background === null)).toBe(true);
   });
 
   it("keeps no floor plan for a variant that only changes the energy", () => {

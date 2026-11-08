@@ -2,7 +2,7 @@
 // for an opening, a place without overlap with the other openings, and the side of the room.
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
-import { findWall, wallEnds } from "./plan";
+import { findWall, wallEnds, wallLength } from "./plan";
 import { findRooms, pointInPolygon, type Room } from "./rooms";
 import type { Opening, Plan, Swing, Wall } from "./types";
 import { wallFaces } from "./walljoin";
@@ -19,14 +19,9 @@ export function freeRange(plan: Plan, wall: Wall): [number, number] {
   const faces = wallFaces(plan, wall);
   return [
     Math.max(0, faces.right[0], faces.left[0]),
-    Math.min(faces.right[1], faces.left[1], wallLengthOf(plan, wall)),
+    Math.min(faces.right[1], faces.left[1], wallLength(plan, wall)),
   ];
 }
-
-const wallLengthOf = (plan: Plan, wall: Wall) => {
-  const [a, b] = wallEnds(plan, wall);
-  return distance(a, b);
-};
 
 /** The other openings on the wall of the opening, as intervals along the wall. */
 function neighbors(plan: Plan, opening: Opening): [number, number][] {
@@ -44,7 +39,7 @@ function neighbors(plan: Plan, opening: Opening): [number, number][] {
 export function freeOffset(plan: Plan, opening: Opening, wanted: number): number {
   const wall = findWall(plan, opening.wallId);
   if (!wall) return wanted;
-  const length = wallLengthOf(plan, wall);
+  const length = wallLength(plan, wall);
   const half = opening.width / 2;
   const [lo, hi] = freeRange(plan, wall);
   // The gaps between the other openings, inside the free range.

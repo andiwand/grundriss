@@ -48,6 +48,7 @@ function database(): Promise<IDBDatabase> {
       return;
     }
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let abandoned = false;
     request.onupgradeneeded = (event) => {
       const db = request.result;
       const transaction = request.transaction!;
@@ -72,6 +73,12 @@ function database(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => {
       const db = request.result;
+      // A blocked request can succeed after its caller has already received an error.
+      if (abandoned) {
+        db.close();
+        return;
+      }
+      blocked = false;
       // Another tab with a newer version of the app wants to upgrade the database.
       db.onversionchange = () => {
         db.close();
@@ -82,6 +89,7 @@ function database(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error ?? new Error("The browser blocks the storage."));
     // A tab with an older version of the app keeps the database open, so the upgrade waits.
     request.onblocked = () => {
+      abandoned = true;
       blocked = true;
       reject(new Error("Another tab of Grundriss blocks the storage."));
     };

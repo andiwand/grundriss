@@ -33,6 +33,26 @@ export function copyTree<T>(value: T): T {
   return value;
 }
 
+/** Compares plain data without encoding large images or ignoring parts of long strings. */
+export function sameTree(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (
+    a === null ||
+    b === null ||
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    Array.isArray(a) !== Array.isArray(b)
+  )
+    return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && sameTree(left[key], right[key]))
+  );
+}
+
 export class PlanDocument {
   building: Building;
   private activeId: Id;
@@ -43,6 +63,8 @@ export class PlanDocument {
   /** True if `commit` compares the building with the one before, as at the end of a drag. */
   private compare = false;
   private saved: Building;
+  /** Changes when another document replaces this one. Async work belongs to one generation. */
+  generation = 0;
   private listeners = new Set<() => void>();
 
   constructor(building: Building = emptyBuilding()) {
@@ -70,6 +92,17 @@ export class PlanDocument {
 
   get activeStoryId(): Id {
     return this.plan.id;
+  }
+
+  /** A guard for async work that must still belong to the same document, story, and variant. */
+  captureTarget(): () => boolean {
+    const generation = this.generation;
+    const story = this.activeStoryId;
+    const variant = this.building.variant;
+    return () =>
+      this.generation === generation &&
+      this.activeStoryId === story &&
+      this.building.variant === variant;
   }
 
   /** Makes another story active. The views update. */
@@ -123,7 +156,7 @@ export class PlanDocument {
     if (this.before === null) return;
     if (this.changed) for (const story of this.building.stories) normalize(story);
     // A drag can end where it started. Then the building is the same, and it needs no entry.
-    if (this.changed && this.compare && sameBuilding(this.before, this.building)) {
+    if (this.changed && this.compare && sameTree(this.before, this.building)) {
       this.changed = false;
     }
     if (this.changed) {
@@ -157,8 +190,13 @@ export class PlanDocument {
     this.begin();
     // One edit always changes something, so the comparison of a drag is not necessary.
     this.compare = false;
-    this.updateBuilding(edit);
-    this.commit();
+    try {
+      this.updateBuilding(edit);
+      this.commit();
+    } catch (error) {
+      this.cancel();
+      throw error;
+    }
   }
 
   /**
@@ -173,11 +211,16 @@ export class PlanDocument {
   editBuildingIf(edit: (building: Building) => boolean): boolean {
     this.begin();
     this.compare = false;
-    const changed = edit(this.building);
-    if (changed) this.changed = true;
-    // A transaction without changes puts back the building from before the copy.
-    this.commit();
-    return changed;
+    try {
+      const changed = edit(this.building);
+      if (changed) this.changed = true;
+      // A transaction without changes puts back the building from before the copy.
+      this.commit();
+      return changed;
+    } catch (error) {
+      this.cancel();
+      throw error;
+    }
   }
 
   undo(): void {
@@ -200,6 +243,7 @@ export class PlanDocument {
 
   /** Puts a new building in the document, for example from a file. It clears the history. */
   replace(building: Building): void {
+    this.generation++;
     this.building = building;
     this.saved = building;
     this.before = null;
@@ -210,28 +254,13 @@ export class PlanDocument {
     this.emit();
   }
 
-  markSaved(): void {
-    this.saved = this.building;
+  /** Marks the snapshot that the file writer saved, which can precede the latest edit. */
+  markSaved(building = this.building): void {
+    this.saved = building;
     this.emit();
   }
 
   private emit(): void {
     for (const listener of this.listeners) listener();
   }
-}
-
-/** A long string, for example an image, counts by its length and its ends in a comparison. */
-const LONG_STRING = 256;
-
-/**
- * True if two buildings have the same content. A long string counts by its length and its ends,
- * because it can be large. Only the end of a drag uses this comparison, and a drag does not
- * change an image or a model, so the ends are enough.
- */
-function sameBuilding(a: Building, b: Building): boolean {
-  const short = (_key: string, value: unknown) =>
-    typeof value === "string" && value.length > LONG_STRING
-      ? `${value.length}:${value.slice(0, 64)}:${value.slice(-64)}`
-      : value;
-  return JSON.stringify(a, short) === JSON.stringify(b, short);
 }

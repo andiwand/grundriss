@@ -45,14 +45,52 @@ export function readBackup(bytes: Uint8Array): Project[] {
   }
   const raw = files["projects.json"];
   if (!raw) throw new Error("The file is not a backup of Grundriss.");
-  const manifest = JSON.parse(strFromU8(raw)) as Manifest;
-  if (manifest.format !== FORMAT || manifest.version > VERSION) {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(strFromU8(raw));
+  } catch {
+    throw new Error("The file is not a backup of Grundriss.");
+  }
+  if (
+    !isObject(manifest) ||
+    manifest.format !== FORMAT ||
+    manifest.version !== VERSION ||
+    !Array.isArray(manifest.projects)
+  ) {
     throw new Error("The file is not a backup of this version of Grundriss.");
   }
   const result: Project[] = [];
-  for (const { file, ...info } of manifest.projects) {
-    const data = files[file];
-    if (data) result.push({ ...info, data: strFromU8(data) });
+  const ids = new Set<string>();
+  for (const entry of manifest.projects) {
+    if (
+      !isObject(entry) ||
+      typeof entry.id !== "string" ||
+      !entry.id ||
+      ids.has(entry.id) ||
+      typeof entry.name !== "string" ||
+      typeof entry.preview !== "string" ||
+      !isTime(entry.created) ||
+      !isTime(entry.updated) ||
+      typeof entry.file !== "string" ||
+      !Object.hasOwn(files, entry.file)
+    ) {
+      throw new Error("The file is not a backup of Grundriss.");
+    }
+    ids.add(entry.id);
+    result.push({
+      id: entry.id,
+      name: entry.name,
+      created: entry.created,
+      updated: entry.updated,
+      preview: entry.preview,
+      data: strFromU8(files[entry.file]),
+    });
   }
   return result;
 }
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isTime = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;

@@ -108,6 +108,7 @@ export function isConvex(polygon: Point[]): boolean {
 
 /** The part of `subject` inside the convex polygon `clip`. The subject can be non-convex. */
 export function clipConvex(subject: Point[], clip: Point[]): Point[] {
+  if (clip.length < 3 || Math.abs(signedArea(clip)) < 1e-12) return [];
   const sign = signedArea(clip) >= 0 ? 1 : -1;
   let result = subject;
   for (let i = 0; i < clip.length && result.length >= 3; i++) {
@@ -148,9 +149,9 @@ export function triangulate(polygon: Point[]): Point[][] {
           p !== a &&
           p !== b &&
           p !== c &&
-          cross3(a, b, p) > 1e-12 &&
-          cross3(b, c, p) > 1e-12 &&
-          cross3(c, a, p) > 1e-12,
+          cross3(a, b, p) >= -1e-12 &&
+          cross3(b, c, p) >= -1e-12 &&
+          cross3(c, a, p) >= -1e-12,
       );
       if (!blocked) {
         triangles.push([a, b, c]);

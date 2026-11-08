@@ -16,7 +16,15 @@ import {
 const HEATING_COSTS = PRICES.AT.heating;
 const BATTERY_PRICE = PRICES.AT.battery;
 import type { Building, Climate, Variant } from "../src/model/types";
-import { addMeasure, MEASURES, measureVariant, variantOf } from "../src/model/variants";
+import {
+  addMeasure,
+  MEASURES,
+  measureVariant,
+  switchVariant,
+  variantOf,
+} from "../src/model/variants";
+import { addOpening } from "../src/model/plan";
+import { envelopeAreas } from "../src/model/takeoff";
 import vienna from "./fixtures/vienna-climate.json";
 
 function house(edit: (b: Building) => void = () => {}): Building {
@@ -30,6 +38,26 @@ const addBattery = (building: Building, variant: Variant) =>
   addMeasure(building, variant, measure("battery"));
 
 describe("renovation", () => {
+  it("charges new windows once when the variant also improves the glazing", () => {
+    const building = house();
+    const oldWindows = envelopeAreas(building).windows;
+    const variant = variantOf(building, "More windows");
+    building.variants.push(variant);
+    switchVariant(building, variant.id);
+    const story = building.stories[0];
+    const wall = story.walls.find((w) =>
+      story.openings.some((o) => o.wallId === w.id && o.kind === "window"),
+    )!;
+    addOpening(story, wall.id, "window", 2);
+    building.envelope.windowU /= 2;
+    const windows = estimateItems(building, variant).filter((i) =>
+      i.name.startsWith("New windows"),
+    );
+    expect(windows.reduce((sum, i) => sum + i.cost, 0)).toBeCloseTo(
+      (oldWindows + 1.2 * 1.2) * PRICES.AT.window,
+    );
+  });
+
   it("estimates nothing for a copy of the plan", () => {
     const building = house();
     expect(estimateItems(building, variantOf(building, "Copy"))).toEqual([]);

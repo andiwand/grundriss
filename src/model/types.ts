@@ -353,9 +353,9 @@ export interface Household {
 }
 
 /**
- * The floor plan of a variant: copies of the stories and the roofs. The copies have no background
- * image, because all variants use the background of the plan. `heated` of the copies is true; the
- * variant has the unheated stories in `unheated`.
+ * The floor plan of a variant: copies of the stories and the roofs. Backgrounds follow the story
+ * id across layouts, including stories absent from the plan. `heated` of the copies is true;
+ * the variant has the unheated stories in `unheated`.
  */
 export interface Layout {
   stories: Story[];

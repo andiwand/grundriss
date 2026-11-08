@@ -12,6 +12,7 @@ import { FILE_VERSION, serializeBuilding } from "../src/model/file";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
 import type { Building, Climate } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
+import { switchVariant, variantOf } from "../src/model/variants";
 
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -34,6 +35,33 @@ function building(): Building {
 }
 
 describe("package format", () => {
+  it("keeps backgrounds of stories absent from the open variant", () => {
+    const original = building();
+    const [ground, upper] = original.stories;
+    const variant = variantOf(original, "One story");
+    original.variants.push(variant);
+    switchVariant(original, variant.id);
+    original.stories = original.stories.filter((s) => s.id !== upper.id);
+    const bytes = writePackage(original);
+    const read = readPackage(bytes);
+    switchVariant(read, null);
+    expect(read.stories.find((s) => s.id === upper.id)?.background).toEqual(upper.background);
+    expect(read.stories.find((s) => s.id === ground.id)?.background).toEqual(ground.background);
+  });
+
+  it("keeps the background of a story added only in a variant", () => {
+    const original = building();
+    const variant = variantOf(original, "Extra story");
+    original.variants.push(variant);
+    switchVariant(original, variant.id);
+    const extra = addStoryOnTop(original);
+    extra.background = { ...original.stories[0].background! };
+    switchVariant(original, null);
+    const read = readPackage(writePackage(original));
+    switchVariant(read, variant.id);
+    expect(read.stories.find((s) => s.id === extra.id)?.background).toEqual(extra.background);
+  });
+
   it("reads what it writes, with a background on each story", () => {
     const original = building();
     const bytes = writePackage(original, {

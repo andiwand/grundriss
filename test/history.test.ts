@@ -1,8 +1,75 @@
 import { describe, expect, it } from "vitest";
 import { copyTree, HISTORY_LIMIT, PlanDocument } from "../src/model/history";
 import { addVertex, getVertex } from "../src/model/plan";
+import { addStoryOnTop } from "../src/model/building";
+import { switchVariant, variantOf } from "../src/model/variants";
 
 describe("PlanDocument", () => {
+  it("keeps async work with its document, story, and variant", () => {
+    const doc = new PlanDocument();
+    const first = doc.captureTarget();
+    doc.edit((plan) => addVertex(plan, { x: 1, y: 2 }));
+    expect(first()).toBe(true);
+    let upper = "";
+    doc.editBuilding((b) => {
+      upper = addStoryOnTop(b).id;
+    });
+    doc.setActiveStory(upper);
+    expect(first()).toBe(false);
+    const second = doc.captureTarget();
+    doc.editBuilding((b) => {
+      const variant = variantOf(b, "Test");
+      b.variants.push(variant);
+      switchVariant(b, variant.id);
+    });
+    expect(second()).toBe(false);
+    const third = doc.captureTarget();
+    doc.replace(doc.building);
+    expect(third()).toBe(false);
+  });
+
+  it("marks the written snapshot as saved while newer edits stay dirty", () => {
+    const doc = new PlanDocument();
+    doc.edit((plan) => addVertex(plan, { x: 1, y: 2 }));
+    const writing = doc.building;
+    doc.edit((plan) => addVertex(plan, { x: 3, y: 4 }));
+    doc.markSaved(writing);
+    expect(doc.dirty).toBe(true);
+    doc.undo();
+    expect(doc.dirty).toBe(false);
+  });
+
+  it("rolls back an edit that throws and keeps the history usable", () => {
+    const doc = new PlanDocument();
+    const before = doc.building;
+    expect(() =>
+      doc.edit((plan) => {
+        addVertex(plan, { x: 1, y: 2 });
+        throw new Error("failed edit");
+      }),
+    ).toThrow("failed edit");
+    expect(doc.building).toBe(before);
+    expect(doc.inTransaction).toBe(false);
+    expect(doc.dirty).toBe(false);
+    doc.edit((plan) => addVertex(plan, { x: 3, y: 4 }));
+    expect(doc.plan.vertices).toHaveLength(1);
+    doc.undo();
+    expect(doc.building).toBe(before);
+  });
+
+  it("rolls back a conditional edit that throws", () => {
+    const doc = new PlanDocument();
+    const before = doc.building;
+    expect(() =>
+      doc.editIf((plan) => {
+        addVertex(plan, { x: 1, y: 2 });
+        throw new Error("failed edit");
+      }),
+    ).toThrow("failed edit");
+    expect(doc.building).toBe(before);
+    expect(doc.inTransaction).toBe(false);
+  });
+
   it("undoes and redoes an edit", () => {
     const doc = new PlanDocument();
     doc.edit((plan) => addVertex(plan, { x: 1, y: 2 }));
@@ -91,6 +158,23 @@ describe("PlanDocument", () => {
 });
 
 describe("history: limit, copies, and the end of a drag", () => {
+  it("keeps changes in the middle of a long text", () => {
+    const doc = new PlanDocument();
+    const before = "x".repeat(600);
+    doc.edit((plan) => {
+      plan.name = before;
+    });
+    const after = before.slice(0, 300) + "y" + before.slice(301);
+    doc.begin();
+    doc.update((plan) => {
+      plan.name = after;
+    });
+    doc.commit();
+    expect(doc.plan.name).toBe(after);
+    doc.undo();
+    expect(doc.plan.name).toBe(before);
+  });
+
   it("keeps at most HISTORY_LIMIT entries", () => {
     const doc = new PlanDocument();
     for (let i = 0; i < HISTORY_LIMIT + 20; i++) doc.editBuilding((b) => (b.north = i));

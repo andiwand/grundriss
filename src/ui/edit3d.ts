@@ -127,6 +127,10 @@ export function setupEdit3d(): void {
 
     drag(ray, e) {
       if (!drag) return;
+      if (!doc.inTransaction) {
+        drag = null;
+        return;
+      }
       const hit = ray.intersectPlane(drag.plane, new THREE.Vector3());
       if (!hit || hit.distanceTo(ray.origin) > FAR) return;
       if (drag.kind === "floor") {

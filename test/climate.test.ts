@@ -5,6 +5,7 @@ import {
   climateFromData,
   climateSeries,
   climateSummary,
+  climateSun,
   decodeSeries,
   degreeDays,
   designTemperature,
@@ -37,6 +38,19 @@ import archive from "./fixtures/open-meteo-archive.json";
 const climate = vienna as Climate;
 
 describe("sun position", () => {
+  it("keeps separate sun paths for places with the same weather series", () => {
+    const first = climateSun(climate);
+    const nearby = {
+      ...climate,
+      latitude: climate.latitude + 0.1,
+      longitude: climate.longitude + 0.1,
+    };
+    const second = climateSun(nearby);
+    expect(second).not.toBe(first);
+    expect(second).toEqual(sunPath(nearby.latitude, nearby.longitude));
+    expect(climateSun({ ...nearby })).toBe(second);
+  });
+
   it("agrees with the reference of the NREL SPA report", () => {
     // Reda & Andreas (2004): 17 October 2003, 12:30:30 at −7 h, Golden, Colorado. The report
     // gives the zenith 50.11162° with refraction and the azimuth 194.34024°.

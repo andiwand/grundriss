@@ -76,7 +76,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   unheated (`Story.heated`); `energy.ts` then uses `Envelope.ceiling` for the slab to it.
   `Building.variants` are copies of the envelope, the heated stories, the household, the PV,
   and, if the user changes it, the floor plan (`Variant.layout`: copies of the stories and the
-  roofs, without backgrounds). `variants.ts` makes them and calculates on a copy of the
+  roofs). Backgrounds follow the story id across layouts, including stories absent from the
+  open layout. `variants.ts` makes variants and calculates on a copy of the
   building. One variant can be open (`Building.variant`): the building then shows it, all
   topics edit it, and `Building.base` keeps the plan. `switchVariant` saves the open state into
   its variant. Code that compares with the plan uses `planBuilding`, not `doc.building`. A file

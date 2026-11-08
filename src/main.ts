@@ -24,6 +24,7 @@ import {
 import { placeMenu } from "./ui/panel";
 import {
   confirmDiscard,
+  hasUnsavedChanges,
   load,
   newPlan,
   openExample,
@@ -138,8 +139,8 @@ const HOME_HINT = t("Click a plan to open it, or start a new plan.");
 const OVERVIEW_HINT = t("Click a part of the plan to open it in its topic.");
 
 /** Shows the home page. The open plan closes; it is already in the browser. */
-function showHome(): void {
-  if (app.planOpen && !confirmDiscard()) return;
+async function showHome(): Promise<void> {
+  if (app.planOpen && !(await confirmDiscard())) return;
   app.planOpen = false;
   closeMenus();
   if (catalog.isOpen) catalog.close();
@@ -275,9 +276,11 @@ editor.onCorners = (corners) => {
     x: (p.x - background.x) / background.scale,
     y: (p.y - background.y) / background.scale,
   })) as typeof corners;
-  void work(t("Straightening the image…"), async () => {
+  void work(t("Straightening the image…"), async (current, source) => {
     const { rectify } = await tracing();
-    replaceBackground(await rectify(await backgroundElement(), pixels));
+    const image = await rectify(await backgroundElement(source), pixels);
+    if (!current()) return;
+    replaceBackground(image);
     editor.clearCalibration();
     editor.fit();
     setTool("calibrate");
@@ -434,6 +437,7 @@ function applyLayers(): void {
 
 const catalog = new Catalog($("#catalog"), {
   building: () => doc.building,
+  captureTarget: () => doc.captureTarget(),
   addModel: (model) => {
     if (doc.building.models.some((m) => m.id === model.id)) return;
     doc.editBuilding((b) => b.models.push(structuredClone(model)));
@@ -474,7 +478,9 @@ function loadTopViews(): void {
 
 async function saveFile(saveAs: boolean): Promise<void> {
   try {
+    doc.commit();
     const building = doc.building;
+    const generation = doc.generation;
     const result = await savePlanFile(
       async (name) =>
         isPackageName(name)
@@ -485,10 +491,10 @@ async function saveFile(saveAs: boolean): Promise<void> {
       saveAs ? null : app.fileHandle,
       app.fileName,
     );
-    if (!result) return;
+    if (!result || doc.generation !== generation) return;
     app.fileName = result.name;
     app.fileHandle = result.handle;
-    doc.markSaved();
+    doc.markSaved(building);
     // The project in the browser takes the name of the file.
     if (projectId) void renameProject(projectId, projectName());
     showStatus(t("Saved {name}.", { name: app.fileName }));
@@ -594,10 +600,12 @@ document.addEventListener("pointerdown", (e) => {
 });
 
 async function loadBackground(): Promise<void> {
+  const current = doc.captureTarget();
   const file = await pickFile("image/*");
   if (!file) return;
   try {
     const image = await readImage(file);
+    if (!current()) return;
     // Start with a width of 10 m. "Set scale" corrects it.
     const scale = 10 / image.width;
     doc.edit((plan) => {
@@ -941,7 +949,7 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", (e) => {
   // With the storage, the plan is in the browser: the last change saves now.
   if (storageOk) void storeProject();
-  else if (doc.dirty) e.preventDefault();
+  if (hasUnsavedChanges()) e.preventDefault();
 });
 
 document.addEventListener("visibilitychange", () => {
@@ -984,7 +992,7 @@ const launchQueue = (
 
 launchQueue?.setConsumer(async ({ files }) => {
   const handle = files[0];
-  if (!handle || !confirmDiscard()) return;
+  if (!handle || !(await confirmDiscard())) return;
   try {
     const file = await handle.getFile();
     const bytes = new Uint8Array(await file.arrayBuffer());

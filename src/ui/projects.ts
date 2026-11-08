@@ -58,6 +58,8 @@ let projectCreated = 0;
 
 /** The building of the last save to the browser. A save happens only for a new building. */
 let storedBuilding: Building | null = null;
+const pendingSaves = new Map<Building, Promise<void>>();
+let locking: Promise<void> = Promise.resolve();
 
 let autosaveTimer = 0;
 
@@ -88,18 +90,27 @@ async function lockProject(id: string | null): Promise<void> {
   readOnly = false;
   const token = ++lockToken;
   if (!id || typeof navigator === "undefined" || !navigator.locks) return;
-  await new Promise<void>((resolve) => {
-    void navigator.locks.request(`grundriss-project-${id}`, { ifAvailable: true }, (lock) => {
-      resolve();
-      // The answer of an older request changes nothing, and it gives its lock back at once.
-      if (token !== lockToken) return;
-      if (!lock) {
-        readOnly = true;
-        return;
-      }
-      return new Promise<void>((release) => (releaseLock = release));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      void navigator.locks
+        .request(`grundriss-project-${id}`, { ifAvailable: true }, (lock) => {
+          resolve();
+          // The answer of an older request changes nothing, and it gives its lock back at once.
+          if (token !== lockToken) return;
+          if (!lock) {
+            readOnly = true;
+            return;
+          }
+          return new Promise<void>((release) => (releaseLock = release));
+        })
+        .catch(reject);
     });
-  });
+  } catch (error) {
+    if (token !== lockToken) return;
+    readOnly = true;
+    showStatus(errorText(error), true);
+    return;
+  }
   if (readOnly && id === projectId) {
     showStatus(
       t(
@@ -144,41 +155,62 @@ export function scheduleAutosave(): void {
 export async function storeProject(): Promise<void> {
   window.clearTimeout(autosaveTimer);
   const building = doc.building;
+  if (doc.inTransaction) return;
+  const pending = pendingSaves.get(building);
+  if (pending) return pending;
   if (!storageOk || readOnly || building === storedBuilding) return;
   if (!projectId) {
     projectId = newProjectId();
     projectCreated = Date.now();
     void keepProjects();
-    void lockProject(projectId);
+    locking = lockProject(projectId);
   }
   const id = projectId;
-  storedBuilding = building;
-  try {
-    await saveProject({
+  const generation = doc.generation;
+  // Capture the name and the contents before waiting for the lock or the storage.
+  const save = (async () => {
+    const project = {
       id,
       name: projectName(),
       created: projectCreated,
       updated: Date.now(),
       preview: projectPreview(building),
       data: serializeBuilding(building),
-    });
-    saveFailed = false;
-    void checkStorage();
-  } catch (error) {
-    // The next change tries again. The error shows only one time, not after each change.
-    if (storedBuilding === building) storedBuilding = null;
-    if (!saveFailed) {
-      showStatus(
-        t(
-          "The browser did not save the project: {error}. Save it to a file, and back up the projects on the Projects page.",
-          { error: errorText(error) },
-        ),
-        true,
-      );
+    };
+    await locking;
+    if (generation !== doc.generation || id !== projectId || readOnly) return;
+    await saveProject(project);
+    if (generation === doc.generation && id === projectId) {
+      storedBuilding = building;
+      saveFailed = false;
+      void checkStorage();
     }
-    saveFailed = true;
-  }
-  if (!app.planOpen) renderHome();
+  })()
+    .catch((error: unknown) => {
+      // The next change tries again. The error shows only one time, not after each change.
+      if (generation !== doc.generation || id !== projectId) return;
+      if (!saveFailed) {
+        showStatus(
+          t(
+            "The browser did not save the project: {error}. Save it to a file, and back up the projects on the Projects page.",
+            { error: errorText(error) },
+          ),
+          true,
+        );
+      }
+      saveFailed = true;
+    })
+    .finally(() => {
+      pendingSaves.delete(building);
+      if (!app.planOpen) renderHome();
+    });
+  pendingSaves.set(building, save);
+  return save;
+}
+
+/** True if closing the page can lose changes that are neither in a file nor in the browser. */
+export function hasUnsavedChanges(): boolean {
+  return doc.dirty && (!storageOk || readOnly || doc.building !== storedBuilding);
 }
 
 /** A small SVG of the ground floor, without the background image, for the list of projects. */
@@ -196,13 +228,11 @@ function projectPreview(building: Building): string {
  * True if the open plan can go away. With the storage, the plan is in the browser, so the app
  * saves it and asks nothing. Without the storage, the user confirms the loss of the changes.
  */
-export function confirmDiscard(): boolean {
-  // The browser has the plan, unless this tab does not save it or the last save failed.
-  if (storageOk && !readOnly && !saveFailed) {
-    void storeProject();
-    return true;
-  }
-  return !doc.dirty || confirm(t("The plan has unsaved changes. Discard them?"));
+export async function confirmDiscard(): Promise<boolean> {
+  const generation = doc.generation;
+  await storeProject();
+  if (generation !== doc.generation) return false;
+  return !hasUnsavedChanges() || confirm(t("The plan has unsaved changes. Discard them?"));
 }
 
 /**
@@ -228,7 +258,8 @@ export function load(
   projectId = project && project !== "from-file" ? project.id : null;
   projectCreated = project && project !== "from-file" ? project.created : 0;
   storedBuilding = project === "from-file" ? null : doc.building;
-  void lockProject(projectId);
+  saveFailed = false;
+  locking = lockProject(projectId);
   editor.select(null);
   if (!app.planOpen || app.topic === "overview") app.fitPending = true;
   else {
@@ -240,7 +271,7 @@ export function load(
 }
 
 export async function openFile(): Promise<void> {
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   try {
     const file = await openPlanFile();
     if (!file) return;
@@ -254,7 +285,7 @@ export async function openFile(): Promise<void> {
 
 async function openProject(id: string): Promise<void> {
   if (id === projectId) return shell.enterPlan("structure");
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   try {
     const project = await loadProject(id);
     if (!project) throw new Error("The project is not in the browser any more.");
@@ -284,14 +315,14 @@ function localize(building: Building): Building {
   return building;
 }
 
-export function newPlan(): void {
-  if (!confirmDiscard()) return;
+export async function newPlan(): Promise<void> {
+  if (!(await confirmDiscard())) return;
   load(localize(emptyBuilding()));
   shell.enterPlan("structure");
 }
 
-export function openExample(): void {
-  if (!confirmDiscard()) return;
+export async function openExample(): Promise<void> {
+  if (!(await confirmDiscard())) return;
   load(localize(makeHouse()), `${t("Example house")}.grundriss`);
   showStatus(t("Opened the example house. A change saves it as a project in the browser."));
   shell.enterPlan("structure");
@@ -587,7 +618,7 @@ async function trashProject(project: ProjectInfo): Promise<void> {
   if (project.id === projectId) {
     projectId = null;
     storedBuilding = doc.building;
-    void lockProject(null);
+    locking = lockProject(null);
   }
   showStatus(
     t("Moved {name} to the trash. It stays there for {days} days.", {

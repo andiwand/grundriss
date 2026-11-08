@@ -10,7 +10,7 @@
 // state into its variant and opens the next one, so no change gets lost.
 
 import { defaultHeating } from "./heating";
-import { copyTree } from "./history";
+import { copyTree, sameTree as sameData } from "./history";
 import { material } from "./insulation";
 import { newId } from "./plan";
 import { newPvField } from "./pv";
@@ -18,20 +18,28 @@ import type { Building, Layer, Layout, Variant, VariantState } from "./types";
 
 const copy = copyTree;
 
-/** True if two values of plain data have the same content. */
-export const sameData = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+export { sameData };
 
 /** The ids of the unheated stories of the building. */
 const unheatedOf = (building: Building) =>
   building.stories.filter((s) => !s.heated).map((s) => s.id);
 
-/** A copy of the floor plan of the building, without the background images. */
+/** A copy of the floor plan. Backgrounds stay with stories absent from another layout. */
 export function layoutOf(building: Building): Layout {
   return {
-    stories: building.stories.map((s) => ({ ...copy(s), background: null, heated: true })),
+    stories: building.stories.map((s) => ({ ...copy(s), heated: true })),
     roofs: copy(building.roofs),
   };
+}
+
+/** Shares changes of a background with the stored layouts that contain the same story. */
+export function syncBackgrounds(building: Building): void {
+  const backgrounds = new Map(building.stories.map((s) => [s.id, s.background]));
+  for (const layout of [building.base?.layout, ...building.variants.map((v) => v.layout)]) {
+    for (const story of layout?.stories ?? []) {
+      if (backgrounds.has(story.id)) story.background = copy(backgrounds.get(story.id)!);
+    }
+  }
 }
 
 /** The floor plan of the plan: the live stories, or the copy in `base` while a variant is open. */
@@ -121,7 +129,7 @@ function showState(building: Building, state: VariantState, layout: Layout): voi
   building.roofs = copy(layout.roofs);
   building.stories = copy(layout.stories).map((s) => ({
     ...s,
-    background: backgrounds.get(s.id) ?? null,
+    background: copy(backgrounds.has(s.id) ? backgrounds.get(s.id)! : s.background),
     heated: !unheated.has(s.id),
   }));
 }
@@ -134,6 +142,7 @@ function showState(building: Building, state: VariantState, layout: Layout): voi
 export function switchVariant(building: Building, id: string | null): void {
   if (building.variant === id) return;
   if (id !== null && !building.variants.some((v) => v.id === id)) return;
+  syncBackgrounds(building);
   const live = liveState(building);
   if (building.variant === null) {
     building.base = live;

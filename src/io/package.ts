@@ -74,21 +74,24 @@ export function writePackage(
   exports: Record<string, Uint8Array | string> = {},
 ): Uint8Array {
   const files: Zippable = {};
-  const stories = building.stories.map((story) => {
-    if (!story.background) return story;
+  // Store the canonical plan and all variant layouts, including stories absent from the view.
+  const plain = JSON.parse(serializeBuilding(building)) as Building;
+  const stories = [plain.stories, ...plain.variants.map((v) => v.layout?.stories ?? [])].flat();
+  for (const story of stories) {
+    if (!story.background) continue;
     const { mime, bytes } = decodeDataUrl(story.background.image);
     const name = `${BACKGROUNDS_FOLDER}${story.id}.${extensionOf(mime)}`;
     // Images are compressed already, so the package stores them without compression.
     files[name] = [bytes, { level: 0 }];
-    return { ...story, background: { ...story.background, image: name } };
-  });
-  const models = (building.models ?? []).map((model) => {
+    story.background.image = name;
+  }
+  const models = plain.models.map((model) => {
     if (model.data === null) return model;
     const name = `${MODELS_FOLDER}${model.id}.glb`;
     files[name] = decodeDataUrl(model.data).bytes;
     return { ...model, data: name };
   });
-  files[PLAN_ENTRY] = strToU8(serializeBuilding({ ...building, stories, models }));
+  files[PLAN_ENTRY] = strToU8(JSON.stringify({ ...plain, models }, null, 2));
   const all = { ...exports };
   if ((models.length > 0 || building.climate) && !("CREDITS.txt" in all)) {
     all["CREDITS.txt"] = credits(building);
@@ -200,6 +203,15 @@ export function readPackage(bytes: Uint8Array): Building {
     inlineImage(raw, files);
     if (Array.isArray(raw.stories)) {
       for (const story of raw.stories) if (isObject(story)) inlineImage(story, files);
+    }
+    if (Array.isArray(raw.variants)) {
+      for (const variant of raw.variants) {
+        if (!isObject(variant) || !isObject(variant.layout)) continue;
+        if (Array.isArray(variant.layout.stories)) {
+          for (const story of variant.layout.stories)
+            if (isObject(story)) inlineImage(story, files);
+        }
+      }
     }
     if (Array.isArray(raw.models)) {
       for (const model of raw.models) if (isObject(model)) inlineModel(model, files);

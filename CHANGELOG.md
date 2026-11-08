@@ -4,6 +4,20 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Saving: a delayed file save marks only the saved snapshot as saved. It does not change a
+  plan opened during the save. Autosave waits for the project lock and a successful write
+  before the app leaves a changed plan without a warning.
+- Variants: background images stay with stories that are absent from another layout. JSON
+  files and packages keep these images. Background edits and removal follow the story id.
+- Editing: failed edits roll back. Undo keeps changes in the middle of long notes. Image
+  processing and model imports check that their document, story, and variant are still open.
+- Areas: triangles of a concave polygon do not overlap when a vertex lies on a diagonal.
+- Energy: the heating balance stays finite for very large heat gains. Climate calculations
+  use the sun path of the correct location, also when two places have the same weather series.
+- Renovation: the estimate counts a new window once when the variant also improves glazing.
+- Files: the reader rejects duplicate object ids and invalid PV dimensions and counts.
+  Backup restore rejects damaged metadata and missing project files.
+- Number fields reject empty values and values above their maximum.
 - Structure: Scale is disabled without a background image, like Straighten. The shortcut C then
   only says that a background is needed first.
 - Renovation: one column in a panel of medium width, next to the 2D and 3D views. Each variant
