@@ -2,7 +2,7 @@
 // and heat loss are in src/model/energy.ts.
 
 import { defaultHeating } from "./heating";
-import type { Envelope, Layer } from "./types";
+import type { Envelope, Household, Layer } from "./types";
 
 export interface Material {
   id: string;
@@ -38,6 +38,14 @@ export const material = (id: string): Material =>
 /** The total thickness of the layers. */
 export const layersThickness = (layers: Layer[]): number =>
   layers.reduce((sum, layer) => sum + layer.thickness, 0);
+
+/**
+ * A usual household of three people in Austria, 2025: 3500 kWh per year, no battery, 0.25 € per
+ * kWh from the grid, and 0.07 € per kWh to the grid.
+ */
+export function defaultHousehold(): Household {
+  return { electricity: 3500, battery: 0, price: 0.25, feedIn: 0.07 };
+}
 
 /**
  * A usual new building in Central Europe: a brick wall with 16 cm EPS, a roof with 22 cm

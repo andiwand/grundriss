@@ -152,29 +152,33 @@ export interface HeatingEnergy {
 }
 
 /**
+ * The price of the final energy of the heating per kWh. A heating with electricity uses the price
+ * of electricity of the household; the other kinds use their own price.
+ */
+export function heatingPrice(building: Building): number {
+  const heating = building.envelope.heating;
+  return HEATING_KINDS[heating.kind].energy === "electricity"
+    ? building.household.price
+    : heating.price;
+}
+
+/**
  * The hot water of one day: the heat with its losses, the final energy, its price per kWh, its
  * CO₂ per kWh, and true if it uses electricity.
  */
-export function hotWaterDay(envelope: Building["envelope"]) {
-  const { hotWater, heating } = envelope;
+export function hotWaterDay(building: Building) {
+  const { hotWater, heating } = building.envelope;
   const heat = hotWater.people * hotWater.liters * HOT_WATER_HEAT * (1 + HOT_WATER_LOSS);
   const own = HEATING_KINDS[heating.kind];
   if (hotWater.heater === "electric") {
-    const electric = HEATING_KINDS.electric;
-    // The price of electricity: the price of the heating if it uses electricity too.
-    const price = own.energy === "electricity" ? heating.price : electric.price;
-    return { heat, final: heat, price, co2: electric.co2, electric: true };
+    const co2 = HEATING_KINDS.electric.co2;
+    return { heat, final: heat, price: building.household.price, co2, electric: true };
   }
   const pump = heating.kind === "heat-pump";
   const efficiency = heating.efficiency * (pump ? HOT_WATER_PUMP : 1);
   const final = heat / efficiency;
-  return {
-    heat,
-    final,
-    price: heating.price,
-    co2: own.co2,
-    electric: own.energy === "electricity",
-  };
+  const price = heatingPrice(building);
+  return { heat, final, price, co2: own.co2, electric: own.energy === "electricity" };
 }
 
 /**
@@ -190,7 +194,7 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
   const heating = building.envelope.heating;
   const info = HEATING_KINDS[heating.kind];
   const pvMonths = pvMonthly(building);
-  const water = hotWaterDay(building.envelope);
+  const water = hotWaterDay(building);
 
   // The whole building is one zone for the utilization: its time constant comes from all rooms.
   const transfer = loss.rooms.reduce((sum, r) => sum + r.transfer, 0);
@@ -254,7 +258,7 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
     hotWater: sum("hotWater"),
     hotWaterFinal,
     hotWaterElectric: water.electric,
-    cost: final * heating.price + hotWaterFinal * water.price,
+    cost: final * heatingPrice(building) + hotWaterFinal * water.price,
     co2: final * info.co2 + hotWaterFinal * water.co2,
     electric: months.reduce((total, m) => total + electricOf(m), 0),
     pvCovered,

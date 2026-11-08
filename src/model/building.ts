@@ -3,7 +3,7 @@
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
 import { DEFAULT_COLORS } from "./colors";
-import { defaultEnvelope } from "./insulation";
+import { defaultEnvelope, defaultHousehold } from "./insulation";
 import { emptyPlan, newId } from "./plan";
 import { roofGeometries } from "./roof";
 import type { Building, Chimney, Id, Point, Stair, Story } from "./types";
@@ -28,6 +28,7 @@ export function emptyBuilding(): Building {
     facade: DEFAULT_COLORS.facade,
     models: [],
     envelope: defaultEnvelope(),
+    household: defaultHousehold(),
     variants: [],
     pv: [],
     location: null,

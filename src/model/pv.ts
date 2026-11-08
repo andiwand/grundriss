@@ -22,6 +22,7 @@
 
 import { pvYieldPerKwp } from "./climate";
 import { findRoof, roofGeometries, roofGeometryOf, type Vec3 } from "./roof";
+import { newId } from "./plan";
 import type { Building, Id, PvArray, PvRack } from "./types";
 
 /** The yield of 1 kWp on a south face with a tilt of 35°, in kWh per year. */
@@ -395,6 +396,32 @@ function overlaps(
  */
 function counterclockwise(quad: Quad): Quad {
   return faceNormal(quad).z >= 0 ? quad : [quad[0], quad[3], quad[2], quad[1]];
+}
+
+/**
+ * A new field on the best free face: the face without a field that has the highest yield per
+ * kWp. A field on a flat face stands on a rack that faces south. Null if no face is free.
+ */
+export function newPvField(building: Building): PvArray | null {
+  const used = new Set(building.pv.map((a) => `${a.roofId}:${a.face}`));
+  const perKwp = (f: FaceInfo) => specificYield(building, f.tilt, f.azimuth);
+  const best = faceInfo(building)
+    .filter((f) => !used.has(`${f.roofId}:${f.index}`))
+    .sort((p, q) => perKwp(q) - perKwp(p))[0];
+  if (!best) return null;
+  return {
+    id: newId("pv"),
+    roofId: best.roofId,
+    face: best.index,
+    panelWidth: 1.13,
+    panelHeight: 1.72,
+    panelPower: 430,
+    portrait: true,
+    margin: 0.3,
+    gap: 0.02,
+    limit: null,
+    rack: best.tilt < FLAT_TILT ? defaultRack(false) : null,
+  };
 }
 
 /** All panels of the building, for the 3D view. */

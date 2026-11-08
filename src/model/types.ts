@@ -263,14 +263,34 @@ export interface Envelope {
 }
 
 /**
- * A variant of the envelope, the heating, and the heated stories, to compare with the plan.
- * `unheated` has the ids of the unheated stories.
+ * The electricity of the household, for the hourly balance with the PV. `price` is the price of
+ * electricity from the grid, also for an electric heating, and `feedIn` the payment for
+ * electricity to the grid, both in currency per kWh.
+ */
+export interface Household {
+  /** The electricity per year without the heating and the hot water, in kWh. */
+  electricity: number;
+  /** The usable capacity of the battery in kWh. 0 means no battery. */
+  battery: number;
+  price: number;
+  feedIn: number;
+}
+
+/**
+ * A variant of the building for the energy and the renovation: the envelope, the heating, the
+ * heated stories, the household with its battery, and the PV fields. `unheated` has the ids of
+ * the unheated stories. `cost` is the investment in currency, or null for the estimate of
+ * `renovation.ts`, and `subsidy` the part that a subsidy pays.
  */
 export interface Variant {
   id: Id;
   name: string;
   envelope: Envelope;
   unheated: Id[];
+  household: Household;
+  pv: PvArray[];
+  cost: number | null;
+  subsidy: number;
 }
 
 /**
@@ -528,6 +548,8 @@ export interface Building {
   /** The 3D models that the furniture of all stories uses. */
   models: Model[];
   envelope: Envelope;
+  /** The electricity of the household, the battery, and the prices of electricity. */
+  household: Household;
   /** The variants of the energy, to compare with the plan. */
   variants: Variant[];
   pv: PvArray[];

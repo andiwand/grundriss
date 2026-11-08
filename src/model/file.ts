@@ -21,6 +21,7 @@ import type {
   HeatingKind,
   HeatingSystem,
   HotWater,
+  Household,
   Fixture,
   Furniture,
   Layer,
@@ -46,7 +47,7 @@ import type {
 import { decodeSeries, SERIES_NAMES } from "./climate";
 import { defaultHeating, HEATING_KINDS } from "./heating";
 import { DEFAULT_COLORS, isColor } from "./colors";
-import { defaultEnvelope } from "./insulation";
+import { defaultEnvelope, defaultHousehold } from "./insulation";
 import { storyBox } from "./roof";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
 
@@ -117,6 +118,7 @@ export function parseBuilding(text: string): Building {
       facade: DEFAULT_COLORS.facade,
       models: [],
       envelope: defaultEnvelope(),
+      household: defaultHousehold(),
       variants: [],
       pv: [],
       location: null,
@@ -190,20 +192,7 @@ export function parseBuilding(text: string): Building {
     }
   }
   const envelope = parseEnvelope(data.envelope);
-  const storyIds = new Set(stories.map((s) => s.id));
-  const variants: Variant[] = list(data, "variants").map((v, i) => {
-    const where = `variant ${i}`;
-    return {
-      id: string(v, "id", where),
-      name: string(v, "name", where),
-      envelope: parseEnvelope(v.envelope),
-      unheated: Array.isArray(v.unheated)
-        ? v.unheated.filter((id): id is string => typeof id === "string" && storyIds.has(id))
-        : [],
-    };
-  });
-  const pv: PvArray[] = list(data, "pv").map((d, i) => {
-    const where = `PV field ${i}`;
+  const parsePv = (d: Data, where: string): PvArray => {
     return {
       id: string(d, "id", where),
       // A field of a file before the roofs is on the only roof.
@@ -218,11 +207,42 @@ export function parseBuilding(text: string): Building {
       limit: d.limit == null ? null : number(d, "limit", where),
       rack: parseRack(d.rack),
     };
+  };
+  const pv = list(data, "pv").map((d, i) => parsePv(d, `PV field ${i}`));
+  const household = parseHousehold(data.household, envelope);
+  const storyIds = new Set(stories.map((s) => s.id));
+  const variants: Variant[] = list(data, "variants").map((v, i) => {
+    const where = `variant ${i}`;
+    return {
+      id: string(v, "id", where),
+      name: string(v, "name", where),
+      envelope: parseEnvelope(v.envelope),
+      unheated: Array.isArray(v.unheated)
+        ? v.unheated.filter((id): id is string => typeof id === "string" && storyIds.has(id))
+        : [],
+      // A variant before the renovation has the household and the PV of the plan.
+      household: v.household == null ? household : parseHousehold(v.household, envelope),
+      pv: v.pv == null ? pv : list(v, "pv").map((d, j) => parsePv(d, `${where}, PV field ${j}`)),
+      cost: v.cost == null ? null : Math.max(0, number(v, "cost", where)),
+      subsidy: Math.max(0, finite(v.subsidy, 0)),
+    };
   });
   const location = parseLocation(data.location);
   const climate = parseClimate(data.climate);
   const facade = isColor(data.facade) ? data.facade : DEFAULT_COLORS.facade;
-  return { stories, roofs, north, facade, models, envelope, variants, pv, location, climate };
+  return {
+    stories,
+    roofs,
+    north,
+    facade,
+    models,
+    envelope,
+    household,
+    variants,
+    pv,
+    location,
+    climate,
+  };
 }
 
 /** A number in the interval [low, high], or an error. */
@@ -418,6 +438,23 @@ function parseEnvelope(data: unknown): Envelope {
     inside: finite(data.inside, defaults.inside),
     heating: parseHeating(data.heating),
     hotWater: parseHotWater(data.hotWater),
+  };
+}
+
+/**
+ * Reads the household. A file without it gets the default household. Its price of electricity is
+ * the price of an electric heating, if the file has one.
+ */
+function parseHousehold(data: unknown, envelope: Envelope): Household {
+  const defaults = defaultHousehold();
+  const electric = HEATING_KINDS[envelope.heating.kind].energy === "electricity";
+  const price = electric ? envelope.heating.price : defaults.price;
+  if (!isObject(data)) return { ...defaults, price };
+  return {
+    electricity: Math.max(0, finite(data.electricity, defaults.electricity)),
+    battery: Math.max(0, finite(data.battery, defaults.battery)),
+    price: Math.max(0, finite(data.price, price)),
+    feedIn: Math.max(0, finite(data.feedIn, defaults.feedIn)),
   };
 }
 

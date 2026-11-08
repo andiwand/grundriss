@@ -309,6 +309,8 @@ export interface FaceResult {
   irradiation: number;
   /** The yield of 1 kWp in kWh per year. */
   yield: number;
+  /** The yield of 1 kWp in each hour of the typical year, in kWh. */
+  hourly: Float32Array;
 }
 
 /** The angle factor of the glass for the beam (Martin & Ruiz). */
@@ -338,6 +340,7 @@ export function faceYear(
   const groundFactor = diffuseAngleFactor(Math.PI - b);
   let irradiation = 0;
   let energy = 0;
+  const hourly = new Float32Array(HOURS);
   for (let h = 0; h < HOURS; h++) {
     const part = irradianceAt(series, sun, h, nx, ny, nz);
     const total = part.beam + part.diffuse + part.ground;
@@ -348,9 +351,11 @@ export function faceYear(
       part.diffuse * skyFactor +
       part.ground * groundFactor;
     const cell = series.temperature[h] + CELL_HEATING * total;
-    energy += Math.max(0, effective * (1 + TEMPERATURE_COEFFICIENT * (cell - 25)));
+    const hour = Math.max(0, effective * (1 + TEMPERATURE_COEFFICIENT * (cell - 25)));
+    energy += hour;
+    hourly[h] = (hour / 1000) * (1 - SYSTEM_LOSS);
   }
-  return { irradiation: irradiation / 1000, yield: (energy / 1000) * (1 - SYSTEM_LOSS) };
+  return { irradiation: irradiation / 1000, yield: (energy / 1000) * (1 - SYSTEM_LOSS), hourly };
 }
 
 const FACE_CACHE_SIZE = 500;

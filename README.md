@@ -34,7 +34,8 @@ account and no server, and your plans stay on your computer as files.
 | **Roofs**     | Gable, half-hip, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
 | **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                                  |
 | **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                               |
-| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, and solar panels with their yield.                                           |
+| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, solar panels, and an hourly balance with a battery.                          |
+| **Renovate**  | Variants with measures, an estimate of their cost, the subsidy, the saving per year, and the payback time.                                                                  |
 | **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                                         |
 
 <p align="center">
@@ -46,7 +47,7 @@ account and no server, and your plans stay on your computer as files.
 ## Use
 
 The app starts with the **Projects** page: start a new plan, open a file, open a plan of this
-browser, or open the example house. With an open plan, the top bar has five topics. Each topic
+browser, or open the example house. With an open plan, the top bar has six topics. Each topic
 shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top left closes the plan and goes back.
 
 - **Overview**: the contents of the open plan. A click on a part opens it in its topic.
@@ -55,7 +56,8 @@ shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top 
 - **Utilities**: water, heating, electricity with PV, and communication.
 - **Interior**: furniture and rooms.
 - **Energy**: the location, the map, the climate, the insulation, the heated stories, the
-  heating and the hot water per year, their cost, and the variants.
+  heating and the hot water per year, and the hourly balance of electricity.
+- **Renovation**: variants of the building with measures, their cost, and their payback.
 
 Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic.
 
@@ -196,7 +198,7 @@ roof on the outline of the walls of the active story. Click a roof to change it:
 
 ### Energy and photovoltaic
 
-The **Energy** topic shows the 2D plan or the 3D view, and a wide panel for the calculations:
+The **Energy** and the **Renovation** topics show the 2D plan or the 3D view, and a wide panel for the calculations:
 the inputs in one column and the results in the other. Split is not available there. Without a
 selection, the panel shows the energy of the building:
 
@@ -254,13 +256,32 @@ a heated room above or below it loses heat through the **slab to an unheated sto
 factor of 0.7 to a cold cellar and 0.9 to a cold attic. The walls of a heated cellar lose less
 in the part that is in the ground.
 
-The **Variants** group compares the plan with variants. **Add a variant** makes one from the
-plan with a usual change: more insulation on the walls, the roof, or the slab, triple glazing,
-a heat pump, or a heated or unheated cellar. Each variant shows its heat demand, class, cost,
-and CO₂, and the difference of the cost to the plan. The check mark puts a variant into the
-plan, so you can change it in the inputs; the disk saves the plan back into the variant. A
-variant keeps the envelope, the heating, the hot water, and the heated stories. Its own walls
-with their own layers stay as in the plan.
+The **Electricity** group sets the household electricity per year (without the heating and the
+hot water), the battery, the price from the grid, and the payment for the feed-in. The price
+from the grid is also the price of an electric heating. **Electricity per year** is an hourly
+balance of the typical year: the PV of each hour against a usual day of a household, the heating
+by the temperature of the hour, and the hot water from 6:00 to 22:00. The battery charges with
+the surplus and loses 5 % each way. The balance gives the PV used in the building, the part of
+the electricity from the PV, the grid, and the **energy cost per year**: the electricity from
+the grid, minus the feed-in, plus the fuel of a heating without electricity.
+
+### Renovation
+
+The **Renovation** topic compares the plan with variants. **Add a variant** makes a copy of the
+plan, or a variant with one measure: more insulation on the walls, the roof, or the slab, triple
+glazing, a heat pump, PV on the best free face, a battery of 10 kWh, or a heated or unheated
+cellar. **Add a measure** adds more measures to a variant. A variant keeps the envelope, the
+heating, the hot water, the heated stories, the household with the battery, and the PV fields.
+Walls with their own layers stay as in the plan.
+
+Each variant shows its energy cost per year, its heat demand and class, its CO₂, the saving per
+year against the plan, and the payback time. The **cost** is an estimate from usual prices in
+Austria, 2025, without the scaffold; the Estimate list shows its items. Type the price of a real
+offer to replace it, and the **subsidy** to take it off. The payback time is the cost after the
+subsidy divided by the saving per year, without interest and without a change of the prices.
+
+The check mark puts a variant into the plan, so you can change it in the other topics. The disk
+saves the plan back into the variant. Undo goes back.
 
 Without a climate, the PV yield is a general estimate for Central Europe.
 

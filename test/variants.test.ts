@@ -6,10 +6,12 @@ import { heatingEnergy } from "../src/model/heating";
 import type { Building, Climate } from "../src/model/types";
 import {
   addInsulation,
+  addMeasure,
   applyVariant,
-  presetVariant,
+  measuresFor,
+  measureVariant,
+  MEASURES,
   sameAsPlan,
-  VARIANT_PRESETS,
   variantOf,
   withVariant,
 } from "../src/model/variants";
@@ -21,7 +23,7 @@ function house(): Building {
   return building;
 }
 
-const preset = (id: string) => VARIANT_PRESETS.find((p) => p.id === id)!;
+const preset = (id: string) => MEASURES.find((m) => m.id === id)!;
 
 describe("variants", () => {
   it("adds the insulation to the best insulation layer, or a new layer", () => {
@@ -42,14 +44,14 @@ describe("variants", () => {
   it("compares a variant with the plan without a change of the plan", () => {
     const building = house();
     const plan = heatingEnergy(building)!;
-    const roof = presetVariant(building, preset("roof"));
+    const roof = measureVariant(building, preset("roof"));
     expect(sameAsPlan(building, roof)).toBe(false);
     expect(sameAsPlan(building, variantOf(building, "Copy"))).toBe(true);
     const better = heatingEnergy(withVariant(building, roof))!;
     expect(better.demand).toBeLessThan(plan.demand);
     expect(heatingEnergy(building)!.demand).toBeCloseTo(plan.demand);
 
-    const gas = presetVariant(
+    const gas = measureVariant(
       {
         ...building,
         envelope: { ...building.envelope, heating: { kind: "gas", efficiency: 0.95, price: 0.11 } },
@@ -63,7 +65,7 @@ describe("variants", () => {
     const building = house();
     const cellar = addCellar(building);
     expect(preset("unheated-cellar").available(building)).toBe(false);
-    const heated = presetVariant(building, preset("heated-cellar"));
+    const heated = measureVariant(building, preset("heated-cellar"));
     expect(heated.unheated).not.toContain(cellar.id);
     applyVariant(building, heated);
     expect(cellar.heated).toBe(true);
@@ -76,11 +78,35 @@ describe("variants", () => {
   it("reads the variants from a file, and leaves out stories that do not exist", () => {
     const building = house();
     const cellar = addCellar(building);
-    const variant = presetVariant(building, preset("walls"));
+    const variant = measureVariant(building, preset("walls"));
     variant.unheated.push("st-gone");
     building.variants.push(variant);
     const read = parseBuilding(serializeBuilding(building));
     expect(read.variants).toEqual([{ ...variant, unheated: [cellar.id] }]);
     expect(read.stories.find((s) => s.id === cellar.id)!.heated).toBe(false);
+  });
+});
+
+describe("measures", () => {
+  it("adds measures to a variant, one after the other, and offers only the new ones", () => {
+    const building = house();
+    const variant = measureVariant(building, preset("roof"));
+    expect(measuresFor(building, variant).map((m) => m.id)).toContain("battery");
+    addMeasure(building, variant, preset("battery"));
+    addMeasure(building, variant, preset("walls"));
+    expect(variant.name).toBe(preset("roof").name);
+    expect(variant.household.battery).toBe(10);
+    expect(measuresFor(building, variant).map((m) => m.id)).not.toContain("battery");
+    // The plan does not change.
+    expect(building.household.battery).toBe(0);
+    expect(sameAsPlan(building, variant)).toBe(false);
+  });
+
+  it("puts PV on the best free face of the variant", () => {
+    const building = house();
+    building.pv = [];
+    const variant = measureVariant(building, preset("pv"));
+    expect(variant.pv).toHaveLength(1);
+    expect(building.pv).toHaveLength(0);
   });
 });

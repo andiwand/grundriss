@@ -4,6 +4,17 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Renovation: a new topic after Energy. It compares variants of the building with the plan. A
+  variant starts from the plan with a measure (insulation, triple glazing, a heat pump, PV, a
+  battery, a heated or unheated cellar), and more measures can go into it. Each variant shows an
+  estimate of its cost with its items, a field for the price of an offer and for the subsidy, the
+  energy cost per year, the saving, the payback time, and the CO₂. The variants moved here from
+  Energy, and they keep the household, the battery, and the PV fields too.
+- Energy: an hourly balance of electricity. The new Electricity group sets the household
+  electricity, the battery, the price from the grid, and the payment for the feed-in. The
+  balance shows the PV used in the building, the part of the electricity from the PV, the grid,
+  and the energy cost per year. An electric heating now uses the price from the grid.
+
 - PV on flat roofs: a field on a flat roof can stand on a rack, in one direction or east-west,
   with its own tilt and direction. The rows of a rack in one direction keep the distance for the
   winter sun. The yield, the PV share of the energy, and the 3D view use the tilted panels. A new

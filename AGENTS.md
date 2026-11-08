@@ -23,8 +23,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 
 - Without an open plan (`planOpen` in `src/main.ts`), the app shows the home page (`#home`) with
   the projects, and the top bar hides the parts with the class `plan-tools`. With an open plan,
-  the user interface has five topics (`Topic`): overview, structure, utilities, interior, and
-  energy. A topic selects the tools of the palette (`data-topic`), the panel without a
+  the user interface has six topics (`Topic`): overview, structure, utilities, interior, energy,
+  and renovation. Energy and renovation have a wide panel (`body.wide`). A topic selects the tools of the palette (`data-topic`), the panel without a
   selection, and the layers. The overview (`#overview`) shows the contents in place of the 2D
   and the 3D view. The topic is not in the plan file.
 - The open plan saves itself in IndexedDB (`src/io/projects.ts`) after each change. Each
@@ -53,8 +53,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   water, heating, electric, or comms. `parsePlan` takes the system from the known type or kind. The insulation is
   in `Building.envelope`, and a wall can override it with its own `layers`. A story can be
   unheated (`Story.heated`); `energy.ts` then uses `Envelope.ceiling` for the slab to it.
-  `Building.variants` are copies of the envelope and the heated stories; `variants.ts` makes
-  them and calculates on a copy of the building. PV fields
+  `Building.variants` are copies of the envelope, the heated stories, the household, and the
+  PV; `variants.ts` makes them and calculates on a copy of the building. PV fields
   (`Building.pv`) are on the faces of `roofSurfaces`. `energy.ts`, `pv.ts`, and
   `quantities.ts` calculate from the model and store nothing.
 - `Building.location` is the place of the building, and `Building.climate` is a typical year of
@@ -103,7 +103,9 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/colors.ts`     | The colors of the wall sides (own, room, or facade) and the defaults of the colors.    |
 | `src/model/walljoin.ts`   | The ends of the two faces of a wall at its joins: flush, miter, or T.                  |
 | `src/model/heating.ts`    | The heating per year: a monthly balance, the heating system, hot water, cost, CO₂.     |
-| `src/model/variants.ts`   | The variants of the energy: presets, apply, and the comparison with the plan.          |
+| `src/model/variants.ts`   | The variants: the measures, apply, and the comparison with the plan.                   |
+| `src/model/balance.ts`    | The hourly balance of electricity: household, heating, PV, battery, and the cost.      |
+| `src/model/renovation.ts` | The cost of a variant, its saving per year, and its payback time.                      |
 | `src/io/climate.ts`       | The place search and the climate download from Open-Meteo, and the typical year.       |
 | `src/io/tiles.ts`         | The map under the 2D plan: the tile sources and the Web Mercator math.                 |
 | `src/model/quantities.ts` | The lengths of the lines and the counts of the devices.                                |

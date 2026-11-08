@@ -1,72 +1,89 @@
 # Plan
 
-## Milestones
+## Done
 
-1. **Manual tracing** (done in 0.1.0): load a scan as the background, set its scale, draw walls,
-   doors, and windows, edit them, see the plan in 3D, and save it as a file.
-2. **Better editing** (done): select more than one object, copy and paste, door hinge side and swing
-   direction, dimension lines, angle snapping, and a wall that keeps its angle on a drag.
-3. **Export** (done): SVG, PDF, and DXF for 2D, glTF for 3D, and the `.grundriss` package.
-4. **Assisted tracing** (done, first version): OpenCV.js (WASM) corrects the perspective of a photo, removes noise,
-   and suggests wall lines. The user accepts or corrects them.
-5. **Furniture** (done): generic pieces, the Kenney kit, Poly Haven, and imported glTF models,
-   with position, rotation, and size in the plan.
-6. **The whole building** (done, first version): more than one story, a cellar and an attic as stories, stairs that
-   connect two stories, a roof (gable, hip, flat, and shed), chimneys, and the orientation of
-   the plan to north. The 3D view stacks the stories. This milestone changes the file format.
-   Later: several roofs on any outline, with settings for each side, dormers, and roof
-   windows (done), attics under the roof with the WoFlV living area (done), and the half-hip
-   end (done).
-7. **Building services** (done, first version): layers on the plan for photovoltaic panels on the roof, heating
-   (radiators, floor heating, and the heat source), the insulation of walls, roof, and floor,
-   and the electrical wiring (sockets, switches, lights, and cables). Each layer can be on or
-   off in the 2D and in the 3D view.
-8. **Energy efficiency** (done: the location, the climate, the heating per year as a monthly
-   balance with the heating system, cost, CO₂, a class, and the PV share, the hot water, heated
-   and unheated stories, and the comparison of variants): first, the location of the building: a place search (Open-Meteo
-   geocoding) or coordinates. A button loads the climate once and stores it in the plan, so that
-   the app works offline after that: a typical year of hourly radiation (global, direct, and
-   diffuse) and temperature from the Open-Meteo archive (CC BY 4.0, free for non-commercial use).
-   The location goes to the service only when the user clicks the button. PVGIS sends no CORS
-   header, so a browser app cannot call it; the app computes the irradiance on each roof face
-   itself (sun position and a transposition model) from the stored radiation. From the stored
-   year come the PV yield of each face, the monthly temperatures, the heating degree days, and
-   the design temperature.
-   Then a model of the yearly energy for heating. It starts from the heat loss
-   of milestone 7: the U-values of the walls, the windows, the doors, the roof, and the floor
-   or the cellar ceiling, and the ventilation. It adds the climate (degree days or monthly
-   temperatures), the solar and internal gains, and the heating technology: a gas or oil
-   boiler with its efficiency, a heat pump with its seasonal performance factor, district
-   heating, or wood, and the losses of the distribution. A heated cellar and an unheated cellar
-   count differently. The result is the heat demand and the final energy in kWh per year and
-   per m², the CO₂, the cost, and an efficiency class. The app compares variants, for example
-   "more insulation on the roof" against "a heat pump", and shows how much PV of milestone 7
-   covers. The model is an estimate in the spirit of EN ISO 13790 and DIN V 18599, not an
-   official energy certificate.
-9. **Automatic recognition** (done, first version: a U-Net trained only on synthetic plans): a segmentation model for floor plans in ONNX Runtime Web. This is
-   research work, and it must not block the other milestones.
-10. **Website** (done): a scroll story at the root of GitHub Pages that builds one house with the
-    engine of the app. The app is at `/app/`.
-11. **Topics and projects** (done): the user interface in five topics (overview, structure,
-    utilities, interior, and energy), water and communication as systems of the utilities, a
-    Projects page with the plans in the browser (IndexedDB) and autosave, and the app as a PWA
-    that the user can install and use offline.
+- Manual tracing on a scan, its scale, walls, doors, windows, and the file (0.1.0).
+- Editing: multiple selection, copy and paste, door hinges, dimensions, and angle snapping.
+- Export: SVG, PDF, DXF, glTF, and the `.grundriss` package.
+- Assisted tracing with OpenCV.js, and a recognition model (U-Net, synthetic plans) in ONNX
+  Runtime Web.
+- Furniture: generic pieces, the Kenney kit, Poly Haven, and own glTF models.
+- The whole building: stories, cellars, attics, stairs, chimneys, and north.
+- Roofs on any outline with a setting for each side: gable, half hip, hip, shed, flat, dormers,
+  roof windows, and the WoFlV living area under the roof.
+- Utilities: water, heating, electricity, and communication, with devices, pipes, and cables.
+- Energy: the envelope, the heat loss, the location, the climate of Open-Meteo, the heating per
+  year (EN ISO 13790), the hot water, heated and unheated stories, and an hourly balance of
+  electricity with PV and a battery.
+- PV on the roof faces, and on racks on flat roofs.
+- Renovation: variants with measures, an estimate of the cost, the subsidy, and the payback.
+- The website: a scroll story at the root of GitHub Pages. The app is at `/app/`.
+- Topics, the Projects page with autosave in IndexedDB, and the app as an installable PWA.
+
+## Next: collaboration with a server
+
+Today the app has no server, and a plan goes to other people only as a file. Live work together
+needs a server, because two browsers cannot find each other on the internet without one. Even a
+direct connection between browsers (WebRTC) needs a server to start the connection, and often a
+relay server for networks that block it.
+
+The goal: a user uploads a plan, and gets a link. Other people open the link and see the plan.
+With the right to edit, they change it at the same time, and each one sees the changes of the
+others live.
+
+Steps, each one useful alone:
+
+1. **Share a copy.** Upload a `.grundriss` package and get a link to a read-only copy. The
+   server stores files only. A link can also hold a small plan without a server, compressed in
+   the URL, but the background image and the models are too large for it.
+2. **Live view.** The owner edits, and the others see each change at once. The server sends the
+   changes of a project to all its viewers (WebSocket).
+3. **Live editing.** All people can edit. Two changes at the same time must merge without loss.
+   A CRDT does this: Yjs or Automerge. `PlanDocument` then keeps the building in the CRDT, and
+   each transaction becomes one change of the CRDT. Undo stays per user, so that an undo does
+   not take back the change of another user. The others show their selection and their pointer.
+4. **Accounts and rights.** Owners, editors, and viewers. Links that expire.
+
+Questions to decide:
+
+- **Hosting.** An own small server (Node with `y-websocket`, files in object storage), or a
+  service, for example Cloudflare Durable Objects, PartyKit, or Liveblocks. The app on GitHub
+  Pages stays as it is; the server is only for the shared projects.
+- **Privacy.** A floor plan of a home is personal data (GDPR). The server must be in the EU, and
+  a user must be able to delete a project. End-to-end encryption with the key in the link is
+  possible for steps 1 and 2.
+- **Offline first.** The app must work as before without the server. A shared project keeps a
+  copy in IndexedDB, and the changes go to the server when the network is back. A CRDT supports
+  this.
+- **Large data.** The background image and the models go to a store for files, not into the
+  live document.
+
+## Ideas
+
+- A report as PDF: the rooms with their areas (WoFlV), the heat loss of each room, the radiators,
+  the energy, and the renovation.
+- A section along a line: the heights of the stories, the slabs, and the roof.
+- Better recognition: real scans and walls drawn as two thin lines in the training data.
+- Shade on the PV from the roof, the chimneys, and the dormers.
 
 ## Known limits
 
 The first versions of the milestones have these limits. Each one is a candidate for a later
 step.
 
-- **Roofs**: no half-hip end. Where two neighboring sides have different overhangs, a small step
+- **Roofs**: where two neighboring sides have different overhangs, a small step
   stays at their corner. In 3D, a dormer does not cut a hole in the main roof face. A flat roof
   ignores dormers and roof windows.
 - **Attic and energy**: the clear height ignores the thickness of the roof. Where two roofs
   overlap on the plan, the overlap counts two times. Roof windows count as roof area, not as
   windows. A slab counts to the ground or to an unheated story only under the label point of the
-  room, so a room that sticks out past the story below loses nothing through that part. A
-  variant does not keep the own layers of single walls.
+  room, so a room that sticks out past the story below loses nothing through that part.
 - **Half hip**: dormers and roof windows go only on eave sides, not on the hip face of a half
   hip.
+- **Electricity and renovation**: the household uses one usual day for all days, with more in
+  winter. The heat pump has one performance factor for the whole year. The battery has no
+  losses at rest. The prices of the renovation are rough values for Austria, 2025. A variant
+  does not keep the own layers of single walls.
 - **Furniture**: the app does not check furniture under a roof. A tall piece under the slope
   goes through the roof without a warning. A compound name without spaces ("gothicbed") can go
   to the wrong group of the catalog.

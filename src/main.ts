@@ -92,17 +92,30 @@ import {
   INTERNAL_GAINS,
 } from "./model/heating";
 import {
+  addMeasure,
   applyVariant,
-  presetVariant,
+  measureVariant,
+  measuresFor,
+  MEASURES,
   sameAsPlan,
-  VARIANT_PRESETS,
+  updateVariant,
   variantOf,
   withVariant,
 } from "./model/variants";
+import { energyBalance, type EnergyBalance } from "./model/balance";
+import { estimateItems, variantEconomy } from "./model/renovation";
 import { DEFAULT_COLORS, roomOnSide, wallSideColor } from "./model/colors";
 import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
-import { defaultRack, faceInfo, FLAT_TILT, pvLayout, pvSummary, specificYield } from "./model/pv";
+import {
+  defaultRack,
+  faceInfo,
+  FLAT_TILT,
+  newPvField,
+  pvLayout,
+  pvSummary,
+  specificYield,
+} from "./model/pv";
 import { climateSummary, DEGREE_DAY_BASE, DEGREE_DAY_LIMIT } from "./model/climate";
 import {
   ATTRIBUTION,
@@ -177,7 +190,7 @@ const HINTS: Record<Tool, string> = {
  * The topics of the user interface. A topic shows its own tools in the palette, its own content
  * in the panel when nothing is selected, and its own layers.
  */
-type Topic = "overview" | "structure" | "utilities" | "interior" | "energy";
+type Topic = "overview" | "structure" | "utilities" | "interior" | "energy" | "renovation";
 type LayerName = keyof typeof editor.layers;
 
 const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: false };
@@ -199,6 +212,7 @@ const topicLayers: Record<Topic, Partial<Record<LayerName, boolean>>> = {
   },
   interior: { ...SERVICE_LAYERS, pv: false, insulation: false },
   energy: { ...SERVICE_LAYERS, pv: true, insulation: true },
+  renovation: { ...SERVICE_LAYERS, pv: true, insulation: true },
 };
 
 /** The topic of the tools that do not belong to all topics. */
@@ -274,16 +288,17 @@ function setTopic(next: Topic): void {
   $("#overview").hidden = !overview;
   $("#area").hidden = overview;
   document.body.classList.toggle("overview", overview);
-  // The energy has no split view: its wide panel takes the place of one view.
-  const energy = next === "energy";
-  document.body.classList.toggle("energy", energy);
-  $<HTMLButtonElement>('[data-view="split"]').disabled = energy;
-  if (energy && currentView === "split") {
-    viewBeforeEnergy = "split";
+  // The energy and the renovation have no split view: their wide panel takes the place of one
+  // view.
+  const wide = next === "energy" || next === "renovation";
+  document.body.classList.toggle("wide", wide);
+  $<HTMLButtonElement>('[data-view="split"]').disabled = wide;
+  if (wide && currentView === "split") {
+    viewBeforeWide = "split";
     setView("2d");
-  } else if (!energy && viewBeforeEnergy) {
-    setView(viewBeforeEnergy);
-    viewBeforeEnergy = null;
+  } else if (!wide && viewBeforeWide) {
+    setView(viewBeforeWide);
+    viewBeforeWide = null;
   }
   if (overview) {
     renderContents();
@@ -344,8 +359,8 @@ function markTool(tool: Tool): void {
 
 type View = "2d" | "split" | "3d";
 let currentView: View = "split";
-/** The view before the energy topic, if the energy changed it, so that it comes back after. */
-let viewBeforeEnergy: View | null = null;
+/** The view before a topic with a wide panel, if it changed the view, so that it comes back. */
+let viewBeforeWide: View | null = null;
 
 function setView(view: View): void {
   currentView = view;
@@ -1340,6 +1355,8 @@ function renderPanel(): void {
       return renderInteriorPanel();
     case "energy":
       return renderEnergyTopic();
+    case "renovation":
+      return renderRenovationTopic();
   }
 }
 
@@ -1472,10 +1489,11 @@ function renderEnergyTopic(): void {
   renderLocationPanel();
   renderEnvelopeInputs();
   renderHeatingInputs();
+  renderElectricityInputs();
   column = results;
   renderHeatLoss();
   renderHeatingResults();
-  renderVariants();
+  renderBalance();
   const building = doc.building;
   if (building.pv.length > 0) {
     const total = pvSummary(building);
@@ -2424,10 +2442,14 @@ function renderHeatingInputs(): void {
     icon: "flame",
     detail: `${pump ? "Performance factor" : "Efficiency"} ${heating.efficiency} · change it in Utilities`,
   });
-  numberField(`Price of ${info.energy}`, heating.price, (v) => setHeating((h) => (h.price = v)), {
-    step: 0.01,
-    unit: "€/kWh",
-  });
+  if (info.energy === "electricity") {
+    paragraph("The heating uses the price of electricity of the Electricity group.", "note");
+  } else {
+    numberField(`Price of ${info.energy}`, heating.price, (v) => setHeating((h) => (h.price = v)), {
+      step: 0.01,
+      unit: "€/kWh",
+    });
+  }
 
   const water = doc.building.envelope.hotWater;
   heading("Hot water", "drop");
@@ -2501,142 +2523,286 @@ function renderHeatingResults(): void {
   );
 }
 
-/**
- * The variants: each one is a copy of the envelope, the heating, and the heated stories. The
- * list compares each variant with the plan. A variant can go to the plan, or take the plan.
- */
-function renderVariants(): void {
-  const building = doc.building;
-  heading("Variants", "copy");
-  const plan = heatingEnergy(building);
-  if (!plan) {
-    paragraph("Variants need the energy per year: load the climate, and draw rooms.", "note");
-    return;
-  }
-  const rows = [
-    { variant: null as Variant | null, energy: plan },
-    ...building.variants.map((variant) => ({
-      variant,
-      energy: heatingEnergy(withVariant(building, variant)),
-    })),
-  ];
-  const most = Math.max(...rows.map((r) => r.energy?.cost ?? 0), 1);
-  const list = document.createElement("div");
-  list.className = "variants";
-  const euro = (value: number) => `${Math.round(value).toLocaleString("en")} €`;
-  for (const { variant, energy } of rows) {
-    const card = document.createElement("div");
-    card.className = variant ? "variant" : "variant plan";
-    const top = document.createElement("div");
-    top.className = "variant-top";
-    if (variant) {
-      const name = document.createElement("input");
-      name.type = "text";
-      name.value = variant.name;
-      name.setAttribute("aria-label", "Name of the variant");
-      name.addEventListener("change", () => {
-        const value = name.value.trim();
-        if (value) editVariant(variant.id, (v) => (v.name = value));
-      });
-      const same = sameAsPlan(building, variant);
-      const action = (iconName: IconName, title: string, act: () => void, disabled = false) => {
-        const element = document.createElement("button");
-        element.className = "icon-button";
-        element.title = title;
-        element.setAttribute("aria-label", title);
-        element.innerHTML = icon(iconName);
-        element.disabled = disabled;
-        element.addEventListener("click", act);
-        return element;
-      };
-      top.append(
-        name,
-        action(
-          "check",
-          same ? "The plan has this variant" : "Use this variant in the plan",
-          () => {
-            doc.editBuilding((b) =>
-              applyVariant(
-                b,
-                b.variants.find((v) => v.id === variant.id)!,
-              ),
-            );
-            showStatus(`The plan now has the variant "${variant.name}". Undo goes back.`);
-          },
-          same,
-        ),
-        action(
-          "save",
-          "Save the plan into this variant",
-          () =>
-            editVariant(variant.id, (v) => {
-              const now = variantOf(doc.building, v.name);
-              v.envelope = now.envelope;
-              v.unheated = now.unheated;
-            }),
-          same,
-        ),
-        action("trash", "Delete the variant", () =>
-          doc.editBuilding((b) => (b.variants = b.variants.filter((v) => v.id !== variant.id))),
-        ),
-      );
-    } else {
-      const name = document.createElement("strong");
-      name.textContent = "Plan";
-      top.append(name);
-    }
-    card.append(top);
-    const line = document.createElement("div");
-    line.className = "variant-values";
-    if (energy) {
-      const delta = energy.cost - plan.cost;
-      const parts = [
-        `${Math.round(energy.perArea)} kWh/m² · ${energy.efficiencyClass}`,
-        `${euro(energy.cost)} per year`,
-        `${(energy.co2 / 1000).toFixed(1)} t CO₂`,
-      ];
-      line.textContent = parts.join(" · ");
-      if (variant && Math.abs(delta) >= 1) {
-        const change = document.createElement("span");
-        change.className = delta < 0 ? "better" : "worse";
-        change.textContent = ` · ${delta < 0 ? "−" : "+"}${euro(Math.abs(delta))}`;
-        line.append(change);
-      }
-      const bar = document.createElement("div");
-      bar.className = "variant-bar";
-      bar.style.width = `${(energy.cost / most) * 100}%`;
-      card.append(line, bar);
-    } else {
-      line.textContent = "No rooms to calculate.";
-      card.append(line);
-    }
-    list.append(card);
-  }
-  section.append(list);
+/** An amount of money, rounded to whole euros, with a thin space between the thousands. */
+const euro = (value: number) => `${Math.round(value).toLocaleString("en").replace(/,/g, " ")} €`;
 
-  const add = document.createElement("select");
-  add.setAttribute("aria-label", "Add a variant");
-  add.append(new Option("Add a variant…", "", true, true));
-  for (const preset of VARIANT_PRESETS.filter((p) => p.available(building))) {
-    add.append(new Option(preset.name, preset.id));
-  }
-  add.addEventListener("change", () => {
-    const preset = VARIANT_PRESETS.find((p) => p.id === add.value);
-    if (!preset) return;
-    doc.editBuilding((b) => b.variants.push(presetVariant(b, preset)));
+/** The electricity of the household, the battery, and the prices of electricity. */
+function renderElectricityInputs(): void {
+  const household = doc.building.household;
+  heading("Electricity", "bolt");
+  const set = (key: keyof typeof household) => (value: number) =>
+    doc.editBuilding((b) => (b.household[key] = value));
+  numberField("Household per year", household.electricity, set("electricity"), {
+    step: 100,
+    unit: "kWh",
   });
-  field("New", add);
+  numberField("Battery", household.battery, set("battery"), { step: 1, unit: "kWh" });
+  numberField("Price from the grid", household.price, set("price"), {
+    step: 0.01,
+    unit: "€/kWh",
+  });
+  numberField("Payment for feed-in", household.feedIn, set("feedIn"), {
+    step: 0.01,
+    unit: "€/kWh",
+  });
   paragraph(
-    "A variant keeps its own envelope, heating, hot water, and heated stories. The check mark puts a variant into the plan, so you can change it in the inputs. The disk saves the plan back into the variant. The bar shows the cost per year.",
+    "The household electricity is without the heating and the hot water. The price from the grid is also the price of an electric heating.",
     "note",
   );
 }
 
+/** The hourly balance of electricity: PV, self-consumption, the grid, and the energy cost. */
+function renderBalance(): void {
+  const balance = energyBalance(doc.building);
+  heading("Electricity per year", "bolt");
+  if (!balance) {
+    paragraph("Load the climate in the Location group for the hourly balance.", "note");
+    return;
+  }
+  const percent = (value: number) => `${Math.round(value * 100)} %`;
+  const tiles: [string, string, boolean?][] = [
+    [kwh(balance.load), "electricity of the building"],
+    [kwh(balance.imported), "from the grid"],
+  ];
+  if (balance.pv > 0) {
+    tiles.push(
+      [kwh(balance.pv), "PV yield"],
+      [kwh(balance.exported), "to the grid"],
+      [percent(balance.selfConsumption), "of the PV used in the building"],
+      [percent(balance.selfSufficiency), "of the electricity from the PV"],
+    );
+  }
+  tiles.push([euro(balance.cost), "energy cost per year", true]);
+  stats(tiles);
+  const parts = [
+    `household ${kwh(balance.household)}`,
+    balance.heating > 0 ? `heating ${kwh(balance.heating)}` : "",
+    balance.hotWater > 0 ? `hot water ${kwh(balance.hotWater)}` : "",
+    balance.fromBattery > 0 ? `from the battery ${kwh(balance.fromBattery)}` : "",
+  ].filter(Boolean);
+  paragraph(
+    `${parts.join(" · ")}. An hourly balance of the typical year: the PV of each hour against a usual day of a household, the heating by the temperature of the hour, and the hot water from 6:00 to 22:00. The energy cost is the electricity from the grid, minus the feed-in, plus the fuel of a heating without electricity.`,
+    "note",
+  );
+  button("Compare renovations", () => setTopic("renovation"), { icon: "coins" });
+}
+
+/**
+ * The renovation: the variants with their measures, their cost, and their economy against the
+ * plan. Each variant is a copy of the envelope, the heating, the heated stories, the household,
+ * and the PV.
+ */
+function renderRenovationTopic(): void {
+  const building = doc.building;
+  heading("Renovation", "coins");
+  const plan = energyBalance(building);
+  if (!plan) {
+    paragraph(
+      "The renovation compares the energy cost per year, so it needs the climate. Load it in the Location group of Energy.",
+      "note",
+    );
+    button("Open Energy", () => setTopic("energy"), { icon: "gauge" });
+    return;
+  }
+  const heat = heatingEnergy(building);
+  stats([
+    [euro(plan.cost), "energy cost per year now"],
+    [`${(plan.co2 / 1000).toFixed(1)} t`, "CO₂ per year"],
+    heat
+      ? [`${Math.round(heat.perArea)} kWh/m² · ${heat.efficiencyClass}`, "heat demand"]
+      : ["–", "heat demand: draw rooms"],
+  ]);
+
+  const list = document.createElement("div");
+  list.className = "variants";
+  for (const variant of building.variants) list.append(variantCard(variant, plan));
+  section.append(list);
+
+  const add = document.createElement("select");
+  add.setAttribute("aria-label", "Add a variant");
+  add.append(new Option("Add a variant…", "", true, true), new Option("Copy of the plan", "copy"));
+  for (const measure of MEASURES.filter((m) => m.available(building))) {
+    add.append(new Option(measure.name, measure.id));
+  }
+  add.addEventListener("change", () => {
+    const measure = MEASURES.find((m) => m.id === add.value);
+    doc.editBuilding((b) =>
+      b.variants.push(measure ? measureVariant(b, measure) : variantOf(b, "Copy of the plan")),
+    );
+  });
+  field("New", add);
+  paragraph(
+    "A variant starts from the plan. Add measures to it, or put it into the plan with the check mark, change it in the other topics, and save it back with the disk. The cost is an estimate from usual prices in Austria, 2025, without the scaffold. Type the price of a real offer to replace it. The payback time ignores interest and changes of the prices.",
+    "note",
+  );
+}
+
+/** The card of one variant: its name, its actions, its measures, its cost, and its economy. */
+function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
+  const building = doc.building;
+  const card = document.createElement("div");
+  card.className = "variant";
+  const top = document.createElement("div");
+  top.className = "variant-top";
+  const name = document.createElement("input");
+  name.type = "text";
+  name.value = variant.name;
+  name.setAttribute("aria-label", "Name of the variant");
+  name.addEventListener("change", () => {
+    const value = name.value.trim();
+    if (value) editVariant(variant.id, (v) => (v.name = value));
+  });
+  const same = sameAsPlan(building, variant);
+  const action = (iconName: IconName, title: string, act: () => void, disabled = false) => {
+    const element = document.createElement("button");
+    element.className = "icon-button";
+    element.title = title;
+    element.setAttribute("aria-label", title);
+    element.innerHTML = icon(iconName);
+    element.disabled = disabled;
+    element.addEventListener("click", act);
+    return element;
+  };
+  top.append(
+    name,
+    action(
+      "check",
+      same ? "The plan has this variant" : "Use this variant in the plan",
+      () => {
+        doc.editBuilding((b) =>
+          applyVariant(
+            b,
+            b.variants.find((v) => v.id === variant.id)!,
+          ),
+        );
+        showStatus(`The plan now has the variant "${variant.name}". Undo goes back.`);
+      },
+      same,
+    ),
+    action(
+      "save",
+      "Save the plan into this variant",
+      () => editVariant(variant.id, (v, b) => updateVariant(v, b)),
+      same,
+    ),
+    action("trash", "Delete the variant", () =>
+      doc.editBuilding((b) => (b.variants = b.variants.filter((v) => v.id !== variant.id))),
+    ),
+  );
+  card.append(top);
+
+  const economy = variantEconomy(building, variant, plan);
+  const items = estimateItems(building, variant);
+  const estimate = items.reduce((sum, i) => sum + i.cost, 0);
+
+  // The cost and the subsidy: two small fields. An empty cost uses the estimate.
+  const money = document.createElement("div");
+  money.className = "variant-money";
+  const moneyField = (
+    label: string,
+    value: number | null,
+    placeholder: string,
+    change: (value: number | null) => void,
+  ) => {
+    const element = document.createElement("label");
+    element.append(label);
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "100";
+    input.placeholder = placeholder;
+    input.value = value == null ? "" : String(Math.round(value));
+    input.addEventListener("change", () => {
+      const text = input.value.trim();
+      const parsed = Number(text);
+      if (text === "") change(null);
+      else if (Number.isFinite(parsed) && parsed >= 0) change(parsed);
+    });
+    element.append(input);
+    money.append(element);
+  };
+  moneyField("Cost €", variant.cost, `${Math.round(estimate)} (estimate)`, (v) =>
+    editVariant(variant.id, (x) => (x.cost = v)),
+  );
+  moneyField("Subsidy €", variant.subsidy || null, "0", (v) =>
+    editVariant(variant.id, (x) => (x.subsidy = v ?? 0)),
+  );
+  card.append(money);
+
+  const values = document.createElement("div");
+  values.className = "variant-values";
+  if (economy) {
+    const result = heatingEnergy(withVariant(building, variant));
+    const lines = [
+      `${euro(economy.balance.cost)} energy cost per year`,
+      result ? `${Math.round(result.perArea)} kWh/m² · ${result.efficiencyClass}` : "",
+      `${(economy.balance.co2 / 1000).toFixed(1)} t CO₂`,
+    ].filter(Boolean);
+    values.textContent = lines.join(" · ");
+    const verdict = document.createElement("div");
+    verdict.className = "variant-verdict";
+    const saving = document.createElement("span");
+    saving.className = economy.saving > 0.5 ? "better" : economy.saving < -0.5 ? "worse" : "";
+    saving.textContent =
+      Math.abs(economy.saving) < 0.5
+        ? "No saving"
+        : `${economy.saving > 0 ? "Saves" : "Costs"} ${euro(Math.abs(economy.saving))} per year`;
+    verdict.append(saving);
+    const payback =
+      economy.payback == null
+        ? ""
+        : economy.net <= 0
+          ? " · pays back at once"
+          : economy.payback > 50
+            ? " · pays back in more than 50 years"
+            : ` · pays back in ${economy.payback < 1 ? "less than 1" : Math.round(economy.payback)} years`;
+    const co2 =
+      Math.abs(economy.co2Saving) >= 50
+        ? ` · ${economy.co2Saving > 0 ? "−" : "+"}${(Math.abs(economy.co2Saving) / 1000).toFixed(1)} t CO₂`
+        : "";
+    verdict.append(`${payback}${co2}`);
+    card.append(values, verdict);
+  }
+
+  // The items of the estimate, and a list to add one more measure.
+  const details = document.createElement("details");
+  details.className = "variant-details";
+  const summary = document.createElement("summary");
+  summary.textContent =
+    items.length === 0 ? "No changes against the plan" : `Estimate · ${euro(estimate)}`;
+  details.append(summary);
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "variant-item";
+    const label = document.createElement("span");
+    label.textContent = item.name;
+    const cost = document.createElement("span");
+    cost.textContent = euro(item.cost);
+    row.append(label, cost);
+    details.append(row);
+  }
+  card.append(details);
+  const measures = measuresFor(building, variant);
+  if (measures.length > 0) {
+    const add = document.createElement("select");
+    add.className = "variant-add";
+    add.setAttribute("aria-label", "Add a measure to the variant");
+    add.append(new Option("Add a measure…", "", true, true));
+    for (const measure of measures) add.append(new Option(measure.name, measure.id));
+    add.addEventListener("change", () => {
+      const measure = MEASURES.find((m) => m.id === add.value);
+      if (measure) editVariant(variant.id, (v, b) => addMeasure(b, v, measure));
+    });
+    card.append(add);
+  }
+  return card;
+}
+
 /** Changes one variant of the building. */
-function editVariant(id: string, edit: (variant: Variant) => void): void {
+function editVariant(id: string, edit: (variant: Variant, building: Building) => void): void {
   doc.editBuilding((b) => {
     const variant = b.variants.find((v) => v.id === id);
-    if (variant) edit(variant);
+    if (variant) edit(variant, b);
   });
 }
 
@@ -2807,33 +2973,14 @@ function renderPvPanel(): void {
       },
     );
   });
-  // The best free face is the face with the highest yield per kWp.
-  const used = new Set(building.pv.map((a) => `${a.roofId}:${a.face}`));
-  const perKwp = (f: { tilt: number; azimuth: number }) =>
-    specificYield(building, f.tilt, f.azimuth);
-  const free = faces
-    .filter((f) => !used.has(`${f.roofId}:${f.index}`))
-    .sort((p, q) => perKwp(q) - perKwp(p));
-  if (free.length > 0) {
+  if (newPvField(building)) {
     button(
       "Add a PV field",
       () =>
-        doc.editBuilding((b) =>
-          b.pv.push({
-            id: newId("pv"),
-            roofId: free[0].roofId,
-            face: free[0].index,
-            panelWidth: 1.13,
-            panelHeight: 1.72,
-            panelPower: 430,
-            portrait: true,
-            margin: 0.3,
-            gap: 0.02,
-            limit: null,
-            // A field on a flat roof stands on a rack that faces south.
-            rack: free[0].tilt < FLAT_TILT ? defaultRack(false) : null,
-          }),
-        ),
+        doc.editBuilding((b) => {
+          const field = newPvField(b);
+          if (field) b.pv.push(field);
+        }),
       { icon: "plus" },
     );
   }
