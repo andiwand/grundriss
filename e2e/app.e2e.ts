@@ -79,22 +79,12 @@ test("compares the variants in a table", async ({ page }) => {
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await page.locator('[data-topic-tab="renovation"]').click();
   await page.locator('select[aria-label="Add a variant"]').selectOption("copy");
-  // On a phone, the sheet of the panel grows with an animation: the click waits until it stops.
-  // The choice of the variant can scroll the panel, so the panel goes back to its top, where
-  // the heading with Compare is.
-  if (await isPhone(page)) {
-    await page.locator("#panel").evaluate((panel) => panel.scrollTo(0, 0));
-    const top = async () => (await page.locator("#panel").boundingBox())!.y;
-    let last = NaN;
-    await expect
-      .poll(async () => {
-        const now = await top();
-        const still = Math.abs(now - last) < 0.5;
-        last = now;
-        return still;
-      })
-      .toBe(true);
-  }
+  // The switch of the variants is in the top bar now. The page must still fit the screen of
+  // a phone: a wider page scrolls across, and a click misses the fixed sheet.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
   await page.locator("#panel .heading-action", { hasText: "Compare" }).click();
   // A dialog with a column for the plan and one for the variant. Esc closes it.
   await expect(page.locator(".compare-dialog table.compare thead th")).toHaveCount(3);

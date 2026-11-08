@@ -3133,6 +3133,14 @@ body.compact .file-name {
   max-width: none;
 }
 
+/* The switch of the variants shrinks like the name, so that the top bar fits a phone. */
+body.compact .variant-switch {
+  flex: 0 1 auto;
+  min-width: 64px;
+  max-width: 30vw;
+  margin-left: 0;
+}
+
 body.compact .topbar .spacer {
   display: none;
 }
