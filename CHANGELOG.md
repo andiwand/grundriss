@@ -4,6 +4,10 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Renovation: one column in a panel of medium width, next to the 2D and 3D views. Each variant
+  is a group with its key numbers, a table of the cost items with a field for your own price,
+  its measures, and its name. "Compare" next to the heading opens the table of all variants in
+  a dialog, so the panel stays as it is.
 - Website: shorter, plainer texts in English and German.
 - Renovation: "Compare" shows the plan and all variants in one table, with the cost, the
   subsidy, the energy cost, the saving, the payback, the cost over 20 years, the heat demand,

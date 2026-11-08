@@ -163,8 +163,6 @@ export function renderPanel(): void {
   const focused = document.activeElement;
   if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
   panel.replaceChildren();
-  // The comparison of the variants takes the place of the views; the renovation sets it again.
-  document.body.classList.remove("comparing");
   setColumn(panel);
   setSection(panel);
   const plan = doc.plan;

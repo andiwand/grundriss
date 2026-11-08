@@ -349,7 +349,7 @@ year grows with **Energy prices**, and **Interest** discounts it.
 Each item of the estimate has a field for your own price, for example from an offer; the arrow
 next to it goes back to the estimate. The total cost of a variant works the same way.
 
-**Compare** shows the plan and all variants in one table: the investment, the subsidy, the
+**Compare**, next to the heading, opens a table of the plan and all variants over the app: the investment, the subsidy, the
 energy cost and the saving per year, the payback, the cost over 20 years (the investment and the
 energy cost of 20 years, with the interest and the change of the energy prices), the heat demand,
 the CO₂, the self-sufficiency, the heating, PV, the battery, and the rooms. The best value of

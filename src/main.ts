@@ -179,10 +179,11 @@ function setTopic(next: Topic): void {
   $("#overview").hidden = !overview;
   $("#area").hidden = overview;
   document.body.classList.toggle("overview", overview);
-  // The energy and the renovation have no split view: their wide panel takes the place of one
-  // view.
-  const wide = next === "energy" || next === "renovation";
+  // The energy has no split view: its wide panel takes the place of one view.
+  const wide = next === "energy";
   document.body.classList.toggle("wide", wide);
+  // The renovation has one column of variants: a panel of medium width is enough.
+  document.body.classList.toggle("medium", next === "renovation");
   updateSplitButton();
   if (wide && currentView === "split") {
     viewBeforeWide = "split";

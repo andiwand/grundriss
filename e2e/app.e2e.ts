@@ -79,11 +79,11 @@ test("compares the variants in a table", async ({ page }) => {
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await page.locator('[data-topic-tab="renovation"]').click();
   await page.locator('select[aria-label="Add a variant"]').selectOption("copy");
-  await page.locator(".renovation-views button", { hasText: "Compare" }).click();
-  // A column for the plan and one for the variant.
-  await expect(page.locator("table.compare thead th")).toHaveCount(3);
-  await page.locator(".renovation-views button", { hasText: "Variants" }).click();
-  await expect(page.locator("table.compare")).toHaveCount(0);
+  await page.locator("#panel .heading-action", { hasText: "Compare" }).click();
+  // A dialog with a column for the plan and one for the variant. Esc closes it.
+  await expect(page.locator(".compare-dialog table.compare thead th")).toHaveCount(3);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".compare-dialog")).toHaveCount(0);
 });
 
 test("exports the report and the quantities", async ({ page }) => {

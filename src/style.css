@@ -463,6 +463,8 @@ body:not(.no-plan) .brand:hover .brand-back {
 /* ----- The work area ----- */
 
 #area {
+  /* The width of the panel: medium for the renovation, which has more to show. */
+  --panel-width: 272px;
   display: grid;
   gap: 8px;
   padding: 8px;
@@ -482,15 +484,15 @@ body:not(.no-plan) .brand:hover .brand-back {
 }
 
 #area.view-split {
-  grid-template-columns: 1fr 1fr 272px;
+  grid-template-columns: 1fr 1fr var(--panel-width);
 }
 
 #area.view-2d {
-  grid-template-columns: 1fr 0 272px;
+  grid-template-columns: 1fr 0 var(--panel-width);
 }
 
 #area.view-3d {
-  grid-template-columns: 0 1fr 272px;
+  grid-template-columns: 0 1fr var(--panel-width);
 }
 
 #area.view-2d,
@@ -503,7 +505,11 @@ body:not(.no-plan) .brand:hover .brand-back {
   margin-left: 8px;
 }
 
-/* The energy and the renovation have a wide panel for their calculations beside one view. It uses the columns of the
+body.medium #area {
+  --panel-width: 440px;
+}
+
+/* The energy has a wide panel for its calculations beside one view. It uses the columns of the
    split view, and the panel takes the place of the second view, so that the edge between the
    view and the panel is where the edge between the two views is. */
 body.wide #area.view-2d,
@@ -524,24 +530,6 @@ body.wide #area.view-3d #plan-2d {
 
 body.wide #area.view-3d #plan-3d {
   grid-area: 1 / 1;
-}
-
-/* The comparison of the variants takes the place of the view too. The panel is as wide as the
-   table, in the middle, so that a few variants do not give a very wide card. */
-body.comparing #area #panel {
-  grid-area: 1 / 1 / 2 / 4;
-}
-
-body.comparing:not(.compact) #area #panel {
-  justify-self: center;
-  /* src/ui/renovation.ts sets the width from the number of columns of the table. */
-  width: min(100%, var(--compare-width, 900px));
-}
-
-body.comparing #area #plan-2d,
-body.comparing #area #plan-3d,
-body.comparing .empty-state {
-  display: none;
 }
 
 body.wide .empty-state {
@@ -812,11 +800,11 @@ body.wide .empty-state {
 
 /* In a wide panel, a field keeps its value near its label, so the eye does not cross the panel.
    The labels have one width, so all values start at the same line. */
-body.wide:not(.compact) #panel .field {
+body.wide:not(.compact) #panel > section .field {
   grid-template-columns: 180px 112px;
 }
 
-body.wide:not(.compact) #panel .field.choice {
+body.wide:not(.compact) #panel > section .field.choice {
   grid-template-columns: 180px 220px;
 }
 
@@ -2586,32 +2574,76 @@ body.overview #layers-button {
   }
 }
 
-/* The variants of the renovation: a card for each variant, in a grid. */
-#panel .variants {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
+/* The variants of the renovation: each one is a group of the panel. Its head has the name, the
+   state, the saving, and the actions; the body has the key numbers and the items of the cost. */
+#panel details.group.variant > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
 }
 
-#panel .variant {
+/* The four key numbers of a variant in one row, if the panel has room. */
+#panel details.group.variant .stats {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+#panel .variant-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+#panel .variant-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#panel .variant-tag.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+#panel .variant-tag.plain {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+#panel .variant-result {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#panel .variant-result.better {
+  color: var(--good);
+}
+
+#panel .variant-result.worse {
+  color: var(--danger);
+}
+
+#panel .variant-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  gap: 2px;
+}
+
+#panel .variant-actions .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+#panel .variant-actions .icon-button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* The open variant: the plan shows it, and the changes go into it. */
-#panel .variant.open {
+#panel details.group.variant.open {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
-}
-
-#panel .variant-top .icon-button.active {
-  color: var(--accent);
-  background: var(--accent-soft);
 }
 
 #panel .variant-warning {
@@ -2626,171 +2658,125 @@ body.overview #layers-button {
   color: var(--accent);
 }
 
-#panel .variant-top {
-  display: flex;
+/* A price in the table of the cost: a field, and the button back to the estimate. */
+#panel .price {
+  display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
-  min-height: 28px;
 }
 
-#panel .variant-top input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-weight: 600;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-}
-
-#panel .variant-top input:hover,
-#panel .variant-top input:focus {
-  border-color: var(--line);
-  background: var(--surface-2);
-}
-
-#panel .variant-top .icon-button {
-  width: 28px;
-  height: 28px;
-  flex: none;
-}
-
-#panel .variant-money {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-#panel .variant-money label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  color: var(--ink-2);
-  font-size: 12px;
-}
-
-#panel .variant-money input,
-#panel .variant-add {
-  box-sizing: border-box;
-  width: 100%;
-  font: inherit;
-  height: 28px;
-  min-width: 0;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--ink);
-}
-
-#panel .variant-values {
-  color: var(--ink-2);
-  font-size: 12px;
-}
-
-#panel .variant-verdict {
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
-#panel .variant-verdict .better {
-  color: var(--good);
-  font-weight: 600;
-}
-
-#panel .variant-verdict .worse {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-#panel .variant-details summary {
-  cursor: pointer;
-  color: var(--ink-2);
-  font-size: 12px;
-}
-
-#panel .variant-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0 0 12px;
-  color: var(--ink-2);
-  font-size: 12px;
-}
-
-#panel .variant-item > span {
-  flex: 1;
-}
-
-/* An own price: the field shows it, and the placeholder shows the estimate. */
-#panel .variant-item input {
-  width: 84px;
+#panel .price input {
+  width: 92px;
   height: 26px;
   padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
   text-align: right;
-  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-#panel .money-input {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+#panel .price input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
-#panel .money-input input {
-  flex: 1;
-  min-width: 0;
-}
-
-#panel .icon-button.reset {
+#panel .icon-button.reset,
+#panel .reset-space {
+  flex: none;
   width: 24px;
   height: 24px;
   color: var(--accent);
 }
 
-#panel .renovation-views {
-  align-self: flex-start;
-  margin-bottom: 4px;
+/* The table of the cost leaves room for the button after an own price. */
+#panel details.group.variant .panel-table td:last-child {
+  padding-right: 0;
 }
 
-/* The comparison of the variants. */
+/* The comparison of the variants: a dialog over the app, about as wide as its table. */
+.compare-dialog {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  padding: 16px 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.compare-dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.compare-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.compare-dialog .note {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+/* A small button at the end of the heading of a panel section, for example Compare. */
+#panel h2 .heading-action {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
 /* The frame of the table. A table wider than the panel scrolls across. */
-#panel .compare-wrap {
+.compare-dialog .compare-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
 
-#panel table.compare {
+.compare-dialog table.compare {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
-#panel table.compare th,
-#panel table.compare td {
+.compare-dialog table.compare th,
+.compare-dialog table.compare td {
   padding: 6px 16px;
   border-bottom: 1px solid var(--line);
   text-align: right;
   white-space: nowrap;
 }
 
-#panel table.compare thead th {
+.compare-dialog table.compare thead th {
   position: sticky;
   top: 0;
   background: var(--surface-2);
   font-weight: 600;
 }
 
-#panel table.compare thead th.open {
+.compare-dialog table.compare thead th.open {
   color: var(--accent);
 }
 
-#panel table.compare tbody th {
+.compare-dialog table.compare tbody th {
   position: sticky;
   left: 0;
   background: var(--surface);
@@ -2799,21 +2785,21 @@ body.overview #layers-button {
   color: var(--ink-2);
 }
 
-#panel table.compare tbody tr:last-child > * {
+.compare-dialog table.compare tbody tr:last-child > * {
   border-bottom: none;
 }
 
-#panel .compare-block {
+.compare-dialog .compare-block {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-#panel .compare-block p {
+.compare-dialog .compare-block p {
   margin: 0;
 }
 
-#panel table.compare td.best {
+.compare-dialog table.compare td.best {
   color: var(--good);
   font-weight: 600;
 }
@@ -2900,14 +2886,6 @@ body.overview #layers-button {
 .badge.bad {
   background: var(--danger-soft);
   color: var(--danger);
-}
-
-#panel .variant-subsidy {
-  height: auto;
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: 12px;
-  white-space: normal;
 }
 
 /* The notes of the objects: a text and photos. */

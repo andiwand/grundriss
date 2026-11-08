@@ -233,6 +233,33 @@ export const ENERGY: Record<string, string> = {
     "Sie sehen und bearbeiten die Variante „{name}“. Die Zahlen unten vergleichen mit dem Plan.",
   "Another floor plan": "Anderer Grundriss",
   Variants: "Varianten",
+  "No variants yet. Start one with New variant.":
+    "Noch keine Varianten. Legen Sie eine unter Neue Variante an.",
+  "The cost is an estimate from usual prices of the region, without the scaffold. Type the price of an offer to replace an item. For Germany, the app estimates the federal subsidy (BEG EM 2025, without the bonus for the income and the iSFP). For Austria, see umweltfoerderung.at and the programs of your state.":
+    "Die Kosten sind eine Schätzung aus üblichen Preisen der Region, ohne Gerüst. Geben Sie den Preis eines Angebots ein, um einen Posten zu ersetzen. Für Deutschland schätzt die App die Bundesförderung (BEG EM 2025, ohne Einkommensbonus und iSFP). Für Österreich: siehe umweltfoerderung.at und die Programme Ihres Bundeslandes.",
+  "The plan": "Der Plan",
+  'You see and edit the variant "{name}". The numbers compare with the plan.':
+    "Sie sehen und bearbeiten die Variante „{name}“. Die Zahlen vergleichen mit dem Plan.",
+  "Prices and interest": "Preise und Zinsen",
+  "New variant": "Neue Variante",
+  "Choose…": "Auswählen…",
+  "A measure": "Eine Maßnahme",
+  "Start from": "Ausgehend von",
+  "A variant starts from the plan. Open it to change it in all topics, also its walls and rooms; the plan stays as it is. The check mark makes a variant the new plan.":
+    "Eine Variante beginnt beim Plan. Öffnen Sie sie, um sie in allen Bereichen zu ändern, auch Wände und Räume; der Plan bleibt, wie er ist. Das Häkchen macht eine Variante zum neuen Plan.",
+  open: "offen",
+  "own floor plan": "eigener Grundriss",
+  "saves {amount} per year": "spart {amount} pro Jahr",
+  "costs {amount} more per year": "kostet {amount} mehr pro Jahr",
+  "investment after the subsidy": "Investition nach der Förderung",
+  "saving per year": "Einsparung pro Jahr",
+  "saving per year: needs the climate": "Einsparung pro Jahr: braucht das Klima",
+  "years to pay back": "Jahre bis zur Amortisation",
+  "kWh/m² heat demand": "kWh/m² Heizwärmebedarf",
+  Total: "Summe",
+  Item: "Posten",
+  "Your price": "Ihr Preis",
+  "Add a measure": "Maßnahme hinzufügen",
   Compare: "Vergleich",
   Investment: "Investition",
   "After the subsidy": "Nach der Förderung",
@@ -248,8 +275,11 @@ export const ENERGY: Record<string, string> = {
   "Use the sum of the items: {amount}": "Summe der Posten verwenden: {amount}",
   "Use the estimate: {amount}": "Schätzung verwenden: {amount}",
   "Price of {item} in €": "Preis von {item} in €",
-  "The cost over {years} years is the investment after the subsidy and the energy cost of {years} years in the money of today, with the interest and the change of the energy prices of the Variants view. The best value of each row is green.":
-    "Die Kosten über {years} Jahre sind die Investition nach der Förderung und die Energiekosten von {years} Jahren in heutigem Geld, mit den Zinsen und der Änderung der Energiepreise der Ansicht Varianten. Der beste Wert jeder Zeile ist grün.",
+  "The cost over {years} years is the investment after the subsidy and the energy cost of {years} years in the money of today, with the interest and the change of the energy prices under Prices and interest. The best value of each row is green.":
+    "Die Kosten über {years} Jahre sind die Investition nach der Förderung und die Energiekosten von {years} Jahren in heutigem Geld, mit den Zinsen und der Änderung der Energiepreise unter Preise und Zinsen. Der beste Wert jeder Zeile ist grün.",
+  "Compare the plan and all variants in a table":
+    "Den Plan und alle Varianten in einer Tabelle vergleichen",
+  "Compare the variants": "Varianten vergleichen",
   "Floor plan {count}": "Grundriss {count}",
   "Own floor plan: {rooms} rooms, {area} m² (the plan: {plan} rooms)":
     "Eigener Grundriss: {rooms} Räume, {area} m² (der Plan: {plan} Räume)",
