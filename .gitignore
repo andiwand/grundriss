@@ -10,3 +10,4 @@ test-results/
 playwright-report/
 server/dist
 server/data
+.e2e-server
