@@ -35,6 +35,10 @@
         title="The variant that you see and edit"
         hidden
       ></select>
+      <!-- A plan of a server: its state, and the dialog of the plan (src/ui/remote.ts). The
+           share button is next to Export. -->
+      <button class="remote-state plan-tools" id="remote-state" hidden></button>
+
       <div class="spacer"></div>
       <nav class="segmented topics plan-tools" id="topics" aria-label="Topic">
         <button data-topic-tab="overview" data-icon="layers" title="The contents of the plan">
@@ -90,13 +94,6 @@
         ></button>
       </div>
       <button
-        id="language"
-        class="ghost"
-        data-icon="globe"
-        title="Change the language"
-        data-no-translate
-      ></button>
-      <button
         id="install"
         class="ghost home-only"
         data-icon="install"
@@ -123,6 +120,15 @@
       >
         Export
       </button>
+      <button
+        id="share"
+        class="ghost plan-tools"
+        data-icon="share"
+        title="Share the plan with a link, or put it on a server"
+        hidden
+      >
+        Share
+      </button>
       <div class="divider plan-tools"></div>
       <div class="group plan-tools">
         <button class="icon-button" id="undo" data-icon="undo" title="Undo (Ctrl+Z)"></button>
@@ -142,6 +148,14 @@
         <button data-view="split" data-icon="split" title="2D and 3D">Split</button>
         <button data-view="3d" data-icon="view3d" title="3D only">3D</button>
       </div>
+      <!-- The language is a setting of the app, so it is at the end of the bar. -->
+      <button
+        id="language"
+        class="ghost"
+        data-icon="globe"
+        title="Change the language"
+        data-no-translate
+      ></button>
     </header>
     <main id="area" class="view-split">
       <section id="plan-2d" class="pane">

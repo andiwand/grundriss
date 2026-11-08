@@ -217,3 +217,21 @@ describe("history: limit, copies, and the end of a drag", () => {
     expect(doc.building).toBe(before);
   });
 });
+
+describe("a document that only reads", () => {
+  it("drops the changes of a transaction, and blocks undo and redo", () => {
+    const doc = new PlanDocument();
+    doc.edit((plan) => addVertex(plan, { x: 0, y: 0 }));
+    let blocked = 0;
+    doc.readOnly = true;
+    doc.onBlocked = () => blocked++;
+    doc.edit((plan) => addVertex(plan, { x: 1, y: 1 }));
+    expect(doc.plan.vertices).toHaveLength(1);
+    doc.undo();
+    expect(doc.plan.vertices).toHaveLength(1);
+    expect(blocked).toBe(2);
+    doc.readOnly = false;
+    doc.undo();
+    expect(doc.plan.vertices).toHaveLength(0);
+  });
+});

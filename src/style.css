@@ -414,19 +414,28 @@ body:not(.no-plan) .brand:hover .brand-back {
   gap: 6px;
 }
 
+/* With an open plan, the language is only the globe at the end of the bar; its title names the
+   language. The Projects page shows the code of the language too. */
+body:not(.no-plan) #language {
+  gap: 0;
+  padding: 0 8px;
+  font-size: 0;
+}
+
 /* The top bar gets shorter in steps before it wraps: first the views, Layers, and Export show
    only their icons, then the topics and the back button. Each button keeps its title. */
-@media (max-width: 1600px) {
+@media (max-width: 1660px) {
   #views button,
   #layers-button,
-  #export {
+  #export,
+  #share {
     gap: 0;
     padding: 0 8px;
     font-size: 0;
   }
 }
 
-@media (max-width: 1440px) {
+@media (max-width: 1500px) {
   .topics button span {
     display: none;
   }
@@ -438,22 +447,29 @@ body:not(.no-plan) .brand:hover .brand-back {
 }
 
 /* The switch of the variants takes about 140 px, so with it the steps come earlier. */
-@media (max-width: 1740px) {
+@media (max-width: 1800px) {
   body.has-variants #views button,
   body.has-variants #layers-button,
-  body.has-variants #export {
+  body.has-variants #export,
+  body.remote-plan #views button,
+  body.remote-plan #layers-button,
+  body.remote-plan #export,
+  body.has-variants #share,
+  body.remote-plan #share {
     gap: 0;
     padding: 0 8px;
     font-size: 0;
   }
 }
 
-@media (max-width: 1580px) {
-  body.has-variants .topics button span {
+@media (max-width: 1640px) {
+  body.has-variants .topics button span,
+  body.remote-plan .topics button span {
     display: none;
   }
 
-  body.has-variants .topics button {
+  body.has-variants .topics button,
+  body.remote-plan .topics button {
     gap: 0;
     padding: 0 8px;
   }
@@ -3435,4 +3451,275 @@ body.compact .home h2 {
   padding: 4px 2px 0;
   color: var(--ink-3);
   font-size: 12px;
+}
+
+/* ----- Plans on a server (src/ui/remote.ts) ----- */
+
+/* The mark of a plan of a server in the top bar: the server, or who edits. */
+.remote-state {
+  height: 28px;
+  max-width: 200px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remote-state .icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.remote-state.busy {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.remote-state.bad {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* On a phone, the share button shows only its icon, like the mark of the server. */
+body.compact .remote-state {
+  font-size: 0;
+  gap: 0;
+  flex: none;
+  padding: 0 7px;
+}
+
+body.compact #share {
+  font-size: 0;
+  gap: 0;
+  padding: 0 8px;
+}
+
+/* A dialog of the app: a head with the title and a close button, and a body. */
+.app-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 16px 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.app-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.app-dialog-head h2 {
+  margin: 0;
+  font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-dialog h3 {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.dialog-form > button.primary,
+.app-dialog-body > button.primary {
+  align-self: flex-start;
+}
+
+.dialog-field {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.dialog-field input,
+.dialog-field select {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.dialog-pair {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dialog-pair > input,
+.dialog-pair > select {
+  flex: 1;
+}
+
+.dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.dialog-note {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.dialog-note.strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.dialog-note.warning {
+  color: var(--danger);
+}
+
+.dialog-note:empty {
+  display: none;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.new-link {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.token-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.token-row span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.token-row small {
+  color: var(--ink-3);
+}
+
+/* The servers on the home page: a head with the name and the tools, and the plans. */
+.server-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.server-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-head h3 .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.server-head h3 small {
+  color: var(--ink-3);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The tools of a server are always visible, next to its name, not over a picture. */
+.server-head .project-tools {
+  position: static;
+  display: flex;
+  gap: 2px;
+  padding: 0;
+  background: none;
+  opacity: 1;
+}
+
+.project.remote .project-picture .icon {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+}
+
+.project-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.remote-mark {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.remote-mark.busy {
+  background: var(--surface-2);
+  color: var(--ink-2);
 }

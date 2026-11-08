@@ -48,6 +48,60 @@ export function updateTitle(): void {
   $<HTMLButtonElement>("#redo").disabled = !doc.canRedo;
 }
 
+/**
+ * The hooks of the plans on a server (remote.ts). That module sets them, so that this module
+ * does not import it.
+ */
+export const remoteHooks = {
+  /** True if the open plan is on a server. */
+  active: (): boolean => false,
+  /** Saves the open plan to its server. */
+  save: async (): Promise<void> => {},
+  /** True if the server misses changes of the open plan. */
+  unsaved: (): boolean => false,
+  /** Ends the connection of the open plan, before another plan opens. */
+  end: (): void => {},
+  /** Adds the servers and their plans to the home page. */
+  home: (_list: HTMLElement): void => {},
+  /** Opens the dialog to connect a server. */
+  connect: (): void => {},
+  /** True if a server can take plans of this browser. */
+  canUpload: (): boolean => false,
+  /** Opens the dialog that copies or moves a project of this browser to a server. */
+  toServer: (_project: { id: string; name: string } | null): void => {},
+};
+
+/** Saves a building as a new project in this browser, for example a copy of a plan of a server. */
+export async function addProject(building: Building, name: string): Promise<string> {
+  const id = newProjectId();
+  const now = Date.now();
+  await saveProject({
+    id,
+    name,
+    created: now,
+    updated: now,
+    preview: projectPreview(building),
+    data: serializeBuilding(building),
+  });
+  return id;
+}
+
+/** Reads a project of this browser as a building. */
+export async function projectBuilding(id: string): Promise<Building> {
+  const project = await loadProject(id);
+  if (!project) throw new Error("The project is not in the browser any more.");
+  return parseBuilding(project.data);
+}
+
+/** Moves a project of this browser to the trash, for example after its move to a server. */
+export async function trashProjectById(id: string): Promise<void> {
+  await deleteProject(id);
+  if (id === projectId) {
+    projectId = null;
+    storedBuilding = doc.building;
+  }
+}
+
 /** True if the browser can store projects. Until the check ends, the app assumes it cannot. */
 export let storageOk = false;
 
@@ -143,6 +197,13 @@ export const projectName = () => app.fileName.replace(/\.(grundriss|json)$/i, ""
 
 /** Saves the open plan to the browser soon, if it changed since the last save. */
 export function scheduleAutosave(): void {
+  // A plan of a server saves to the server, after the same short wait.
+  if (remoteHooks.active()) {
+    if (doc.inTransaction) return;
+    window.clearTimeout(autosaveTimer);
+    autosaveTimer = window.setTimeout(() => void remoteHooks.save(), AUTOSAVE_DELAY);
+    return;
+  }
   if (!storageOk || doc.inTransaction || doc.building === storedBuilding) return;
   window.clearTimeout(autosaveTimer);
   autosaveTimer = window.setTimeout(() => void storeProject(), AUTOSAVE_DELAY);
@@ -154,6 +215,7 @@ export function scheduleAutosave(): void {
  */
 export async function storeProject(): Promise<void> {
   window.clearTimeout(autosaveTimer);
+  if (remoteHooks.active()) return remoteHooks.save();
   const building = doc.building;
   if (doc.inTransaction) return;
   const pending = pendingSaves.get(building);
@@ -210,6 +272,7 @@ export async function storeProject(): Promise<void> {
 
 /** True if closing the page can lose changes that are neither in a file nor in the browser. */
 export function hasUnsavedChanges(): boolean {
+  if (remoteHooks.active()) return remoteHooks.unsaved();
   return doc.dirty && (!storageOk || readOnly || doc.building !== storedBuilding);
 }
 
@@ -244,8 +307,10 @@ export function load(
   building: Building = emptyBuilding(),
   name = "plan.grundriss",
   handle: FileSystemFileHandle | null = null,
-  project: { id: string; created: number } | "from-file" | null = null,
+  project: { id: string; created: number } | "from-file" | "remote" | null = null,
 ) {
+  // A plan of a server keeps its connection only while it is open.
+  if (project !== "remote") remoteHooks.end();
   setSuggestions(null);
   // The search of a place and a download of the climate belong to the old plan.
   resetLocation();
@@ -255,8 +320,9 @@ export function load(
   doc.replace(building);
   app.fileName = name;
   app.fileHandle = handle;
-  projectId = project && project !== "from-file" ? project.id : null;
-  projectCreated = project && project !== "from-file" ? project.created : 0;
+  const local = project && typeof project === "object" ? project : null;
+  projectId = local ? local.id : null;
+  projectCreated = local ? local.created : 0;
   storedBuilding = project === "from-file" ? null : doc.building;
   saveFailed = false;
   locking = lockProject(projectId);
@@ -302,7 +368,7 @@ async function openProject(id: string): Promise<void> {
  * The names that the model gives a new plan, in the language of the app: the stories, the rooms,
  * and the roofs. The plan keeps the names as text, so they stay in this language.
  */
-function localize(building: Building): Building {
+export function localize(building: Building): Building {
   for (const story of building.stories) {
     story.name = t(story.name);
     for (const room of story.rooms) {
@@ -331,7 +397,7 @@ export async function openExample(): Promise<void> {
 const relativeTime = new Intl.RelativeTimeFormat(locale(), { numeric: "auto" });
 
 /** "5 minutes ago", "yesterday", or "3 weeks ago". */
-function ago(time: number): string {
+export function ago(time: number): string {
   const seconds = (time - Date.now()) / 1000;
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["year", 31536000],
@@ -544,6 +610,7 @@ function fillProjects(projects: ProjectInfo[] | null): void {
     mine.append(grid);
   }
   list.append(mine);
+  remoteHooks.home(list);
 
   // The backup and the trash are less frequent, so they are links at the end.
   const links = document.createElement("nav");
@@ -557,6 +624,7 @@ function fillProjects(projects: ProjectInfo[] | null): void {
     links.append(element);
     return element;
   };
+  link("cloud", t("Connect a server"), () => remoteHooks.connect());
   link("save", t("Back up all projects"), () => void backUpProjects());
   link("upload", t("Restore a backup"), () => void restoreProjects());
   list.append(links);
@@ -606,6 +674,11 @@ function projectCard(project: ProjectInfo): HTMLElement {
       iconButton(iconName, title, action, { danger, label: `${title}: ${project.name}` }),
     );
   tool("rename", t("Rename"), () => renameInPlace(card, project));
+  if (remoteHooks.canUpload()) {
+    tool("cloud", t("Copy or move to a server"), () =>
+      remoteHooks.toServer({ id: project.id, name: project.name }),
+    );
+  }
   tool("copy", t("Duplicate"), () => void duplicateProject(project.id));
   tool("trash", t("Delete"), () => void trashProject(project), true);
   card.append(open, tools);

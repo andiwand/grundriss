@@ -6,6 +6,7 @@ import { fmt } from "./model/format";
 import { buildingTakeoff } from "./model/takeoff";
 import { isCompact, selectionChanged, setupCompact, toolChanged, topicChanged } from "./ui/compact";
 import { renderContents } from "./ui/contents";
+import { setupRemote } from "./ui/remote";
 import { setupEdit3d } from "./ui/edit3d";
 import {
   $,
@@ -959,6 +960,7 @@ document.addEventListener("visibilitychange", () => {
 doc.subscribe(scheduleAutosave);
 
 void startProjects();
+setupRemote();
 
 // ----- Installed app -----
 

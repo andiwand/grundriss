@@ -5,6 +5,7 @@
 // - The files of the build: from the cache first. Their names contain a hash, so they never change.
 // - Other files of the app (models, the recognition): from the cache, and the network updates them.
 // - Other servers (the climate, the map tiles, Poly Haven): never in this cache.
+// - The API of a Grundriss server (`api/` below the scope): never in this cache.
 
 const VERSION = "__VERSION__";
 const PRECACHE = __PRECACHE__;
@@ -40,6 +41,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   const scope = new URL(self.registration.scope);
   if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  // The API of a Grundriss server under the same path: always from the network.
+  if (url.pathname.startsWith(`${scope.pathname}api/`)) return;
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));
   } else if (url.pathname.startsWith(`${scope.pathname}assets/`)) {

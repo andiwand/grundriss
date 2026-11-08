@@ -55,6 +55,13 @@ export function sameTree(a: unknown, b: unknown): boolean {
 
 export class PlanDocument {
   building: Building;
+  /**
+   * True if the plan must not change, for example a plan of a server that another person edits.
+   * A transaction then drops its changes, and undo and redo do nothing. `onBlocked` tells the
+   * user.
+   */
+  readOnly = false;
+  onBlocked: () => void = () => {};
   private activeId: Id;
   private undoStack: Building[] = [];
   private redoStack: Building[] = [];
@@ -154,6 +161,12 @@ export class PlanDocument {
   /** Ends the transaction. A transaction without changes leaves no entry in the history. */
   commit(): void {
     if (this.before === null) return;
+    if (this.readOnly) {
+      const changed = this.changed;
+      this.cancel();
+      if (changed) this.onBlocked();
+      return;
+    }
     if (this.changed) for (const story of this.building.stories) normalize(story);
     // A drag can end where it started. Then the building is the same, and it needs no entry.
     if (this.changed && this.compare && sameTree(this.before, this.building)) {
@@ -224,6 +237,7 @@ export class PlanDocument {
   }
 
   undo(): void {
+    if (this.readOnly) return this.onBlocked();
     this.cancel();
     const previous = this.undoStack.pop();
     if (!previous) return;
@@ -233,6 +247,7 @@ export class PlanDocument {
   }
 
   redo(): void {
+    if (this.readOnly) return this.onBlocked();
     this.cancel();
     const next = this.redoStack.pop();
     if (!next) return;
