@@ -205,7 +205,12 @@ selection, the panel shows the energy of the building:
   the temperatures. A click on a room shows its heat loss and its heating. A click on a wall
   shows its U-value, and the wall can get its own layers.
 - **Photovoltaic**: in **Utilities**, the Electricity group has the PV fields. **Add a PV field** fills the best face of the roof with panels. The field
-  gives the number of panels, the peak power, and the yield per year.
+  gives the number of panels, the peak power, and the yield per year. On a flat roof, the
+  **Mounting** of a field is flat on the roof, a rack in one direction, or an east-west rack. A
+  rack has its own tilt and direction. The rows of a rack in one direction keep a distance, so
+  that a row does not shade the next row at noon on 21 December. An east-west rack puts two
+  panels back to back, so half of the panels face each way. A new field on a flat roof gets a
+  rack to the south with 15°.
 
 ### Location and climate
 

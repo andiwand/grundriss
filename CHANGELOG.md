@@ -4,6 +4,11 @@ The changes that a user notices.
 
 ## Unreleased
 
+- PV on flat roofs: a field on a flat roof can stand on a rack, in one direction or east-west,
+  with its own tilt and direction. The rows of a rack in one direction keep the distance for the
+  winter sun. The yield, the PV share of the energy, and the 3D view use the tilted panels. A new
+  field on a flat roof gets a rack to the south with 15°.
+
 - Roofs: a new kind of side, the half hip. Its gable wall goes up to a height, and a small hip
   face closes the top. The hip lines go on to the overhang, so the faces meet without a gap. The
   roof panel and the add buttons have a **Half hip** preset.

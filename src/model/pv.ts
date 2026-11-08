@@ -14,17 +14,39 @@
 // When the building has a stored climate (`Building.climate`), the yield comes from the hourly
 // radiation of the location instead (`pvYieldPerKwp` in climate.ts). Real values also depend on
 // the shade and the products, and the app ignores the shade.
+//
+// On a flat face, a field can stand on a rack (`PvArray.rack`): the panels get their own tilt
+// and direction. The rows of a rack that faces one way keep a distance, so that a row does not
+// shade the next row at noon on 21 December. An east-west rack puts two panels back to back, and
+// the pairs keep only a small distance for maintenance.
 
 import { pvYieldPerKwp } from "./climate";
 import { findRoof, roofGeometries, roofGeometryOf, type Vec3 } from "./roof";
-import type { Building, Id, PvArray } from "./types";
+import type { Building, Id, PvArray, PvRack } from "./types";
 
 /** The yield of 1 kWp on a south face with a tilt of 35°, in kWh per year. */
 export const SPECIFIC_YIELD = 1000;
 /** The panels lie this far above the face of the roof. */
 export const PANEL_LIFT = 0.05;
-/** A face with less tilt than this counts as flat. */
-const FLAT_TILT = 1;
+/** A face with less tilt than this counts as flat, so a field on it can use a rack. */
+export const FLAT_TILT = 1;
+/** The latitude of the rack rows of a building without a location: Central Europe. */
+const DEFAULT_LATITUDE = 48;
+/** The free distance between the pairs of an east-west rack, in meters. */
+export const EAST_WEST_GAP = 0.3;
+
+/**
+ * The height of the sun at noon on 21 December in degrees, at least 10°. The rows of a rack keep
+ * the shade of this sun off the next row.
+ */
+export function winterSunElevation(latitude: number): number {
+  return Math.max(10, 90 - Math.abs(latitude) - 23.44);
+}
+
+/** The usual rack of a new field on a flat face: one way, or east-west. */
+export function defaultRack(eastWest: boolean): PvRack {
+  return eastWest ? { tilt: 10, azimuth: 90, eastWest } : { tilt: 15, azimuth: 180, eastWest };
+}
 
 export type Quad = [Vec3, Vec3, Vec3, Vec3];
 
@@ -34,10 +56,12 @@ export interface PvLayout {
   count: number;
   /** The peak power in kWp. */
   peak: number;
-  /** The tilt of the face in degrees. */
+  /** The tilt of the panels in degrees: of the face, or of the rack. */
   tilt: number;
-  /** The direction of the face in degrees from north, clockwise. */
+  /** The direction of the panels in degrees from north, clockwise. */
   azimuth: number;
+  /** The groups of panels with one direction, and their peak power in kWp. */
+  parts: { tilt: number; azimuth: number; peak: number }[];
   /** The area of the panels in m². */
   area: number;
   /** The estimate of the yield in kWh per year. */
@@ -202,11 +226,18 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
   if (!face || face.length < 3) return null;
   const normal = faceNormal(face);
   if (normal.z < 0.1) return null;
-  const { tilt, azimuth } = orientation(normal, building.north);
+  const face0 = orientation(normal, building.north);
+  const rack = face0.tilt < FLAT_TILT ? array.rack : null;
+  const tilt = rack ? rack.tilt : face0.tilt;
+  const azimuth = rack ? rack.azimuth : face0.azimuth;
 
-  // The frame of the face: s along the eave, t up the slope. A flat face uses the plan axes.
+  // The frame of the face: s along the eave, t up the slope. A flat face uses the plan axes. On a
+  // rack, t goes from the low edge of the panels to the high edge, away from their direction.
   let up: Vec3;
-  if (tilt < FLAT_TILT) {
+  if (rack) {
+    const angle = ((rack.azimuth + building.north) * Math.PI) / 180;
+    up = { x: -Math.sin(angle), y: Math.cos(angle), z: 0 };
+  } else if (face0.tilt < FLAT_TILT) {
     up = { x: 0, y: -1, z: 0 };
   } else {
     up = unit3(sub3({ x: 0, y: 0, z: 1 }, scale3(normal, normal.z)));
@@ -225,6 +256,23 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
   const ph = array.portrait ? long : short;
   const { margin, gap } = array;
 
+  // A row takes `rowDepth` of t, and the next row starts `rowGap` after it. A panel on a rack
+  // takes less depth on the plan, and its high edge is `rise` above its low edge.
+  const slope = rack ? (rack.tilt * Math.PI) / 180 : 0;
+  const depth = ph * Math.cos(slope);
+  const rise = ph * Math.sin(slope);
+  let rowDepth = ph;
+  let rowGap = gap;
+  if (rack?.eastWest) {
+    rowDepth = 2 * depth;
+    rowGap = Math.max(gap, EAST_WEST_GAP);
+  } else if (rack) {
+    rowDepth = depth;
+    const latitude = building.location?.latitude ?? building.climate?.latitude ?? DEFAULT_LATITUDE;
+    const sun = (winterSunElevation(latitude) * Math.PI) / 180;
+    rowGap = Math.max(gap, rise / Math.tan(sun));
+  }
+
   // The dormers and the windows of the side of the face take parts of the face. A panel keeps
   // the margin from them too.
   const holes = geometry.holes
@@ -236,20 +284,20 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
       })),
     );
   const clearOfHoles = (s: number, t: number) =>
-    holes.every((hole) => !overlaps(hole, s, t, pw, ph, margin));
+    holes.every((hole) => !overlaps(hole, s, t, pw, rowDepth, margin));
 
   const ts = polygon.map((p) => p.t);
   const t0 = Math.min(...ts) + margin;
   const t1 = Math.max(...ts) - margin;
-  const rows = Math.floor((t1 - t0 + gap) / (ph + gap));
+  const rows = Math.floor((t1 - t0 + rowGap) / (rowDepth + rowGap));
   const panels2d: { s: number; t: number }[] = [];
   if (rows > 0) {
     // The rows are centered between the bottom and the top of the usable area.
-    const start = t0 + (t1 - t0 - (rows * (ph + gap) - gap)) / 2;
+    const start = t0 + (t1 - t0 - (rows * (rowDepth + rowGap) - rowGap)) / 2;
     for (let r = 0; r < rows; r++) {
-      const bottom = start + r * (ph + gap);
+      const bottom = start + r * (rowDepth + rowGap);
       const a = span(polygon, bottom);
-      const b = span(polygon, bottom + ph);
+      const b = span(polygon, bottom + rowDepth);
       if (!a || !b) continue;
       const s0 = Math.max(a[0], b[0]) + margin;
       const s1 = Math.min(a[1], b[1]) - margin;
@@ -262,33 +310,57 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
         const corners = [
           { s, t: bottom },
           { s: s + pw, t: bottom },
-          { s: s + pw, t: bottom + ph },
-          { s, t: bottom + ph },
+          { s: s + pw, t: bottom + rowDepth },
+          { s, t: bottom + rowDepth },
         ];
         if (corners.every((p) => inset(polygon, p) >= margin - 1e-6) && clearOfHoles(s, bottom))
           panels2d.push({ s, t: bottom });
       }
     }
   }
-  const chosen = array.limit == null ? panels2d : panels2d.slice(0, Math.max(0, array.limit));
 
   const lift = scale3(normal, PANEL_LIFT);
-  const at = (s: number, t: number) => add3(origin, scale3(along, s), scale3(up, t), lift);
-  const panels: Quad[] = chosen.map(({ s, t }) => {
-    const quad: Quad = [at(s, t), at(s + pw, t), at(s + pw, t + ph), at(s, t + ph)];
-    return counterclockwise(quad);
-  });
+  const at = (s: number, t: number, z = 0) =>
+    add3(origin, scale3(along, s), scale3(up, t), lift, { x: 0, y: 0, z });
+  // Each panel with true if it faces the opposite direction (the back half of an east-west pair).
+  const all: { quad: Quad; back: boolean }[] = [];
+  for (const { s, t } of panels2d) {
+    if (!rack) {
+      all.push({ quad: [at(s, t), at(s + pw, t), at(s + pw, t + ph), at(s, t + ph)], back: false });
+      continue;
+    }
+    const high = t + depth;
+    all.push({
+      quad: [at(s, t), at(s + pw, t), at(s + pw, high, rise), at(s, high, rise)],
+      back: false,
+    });
+    if (rack.eastWest) {
+      const end = t + 2 * depth;
+      all.push({
+        quad: [at(s, high, rise), at(s + pw, high, rise), at(s + pw, end), at(s, end)],
+        back: true,
+      });
+    }
+  }
+  const chosen = array.limit == null ? all : all.slice(0, Math.max(0, array.limit));
+  const panels = chosen.map((p) => counterclockwise(p.quad));
 
   const count = panels.length;
   const peak = (count * array.panelPower) / 1000;
+  const backs = chosen.filter((p) => p.back).length;
+  const parts = [{ tilt, azimuth, peak: ((count - backs) * array.panelPower) / 1000 }];
+  if (backs > 0) {
+    parts.push({ tilt, azimuth: (azimuth + 180) % 360, peak: (backs * array.panelPower) / 1000 });
+  }
   return {
     panels,
     count,
     peak,
     tilt,
     azimuth,
+    parts,
     area: count * pw * ph,
-    yield: peak * specificYield(building, tilt, azimuth),
+    yield: parts.reduce((sum, p) => sum + p.peak * specificYield(building, p.tilt, p.azimuth), 0),
   };
 }
 

@@ -355,6 +355,7 @@ export function makeHouse(): Building {
     margin: 0.35,
     gap: 0.03,
     limit: null,
+    rack: null,
   });
   return building;
 }

@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import { emptyBuilding } from "../src/model/building";
 import { pvYieldPerKwp } from "../src/model/climate";
 import {
+  defaultRack,
   faceInfo,
   pvLayout,
   pvPanels,
   pvSummary,
   specificYield,
+  winterSunElevation,
   yieldFactor,
 } from "../src/model/pv";
+import { parseBuilding, serializeBuilding } from "../src/model/file";
 import { roofGeometryOf } from "../src/model/roof";
 import { boxHouse } from "./houses";
 import type { Building, Climate, PvArray, RoofKind } from "../src/model/types";
@@ -28,6 +31,7 @@ const field = (face: number, change: Partial<PvArray> = {}): PvArray => ({
   margin: 0.3,
   gap: 0.02,
   limit: null,
+  rack: null,
   ...change,
 });
 
@@ -182,5 +186,92 @@ describe("yield from the climate", () => {
     expect(layout.yield / layout.peak).toBeGreaterThan(1100);
     const back = pvLayout(building, field(north))!;
     expect(back.yield / back.peak).toBeLessThan(0.6 * (layout.yield / layout.peak));
+  });
+});
+
+describe("racks on a flat roof", () => {
+  /** The tilt and the azimuth of a panel from its corners: the low edge and the high edge. */
+  const panelOrientation = (quad: { x: number; y: number; z: number }[]) => {
+    const sorted = [...quad].sort((p, q) => p.z - q.z);
+    const mid = (a: (typeof quad)[number], b: (typeof quad)[number]) => ({
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+      z: (a.z + b.z) / 2,
+    });
+    const low = mid(sorted[0], sorted[1]);
+    const high = mid(sorted[2], sorted[3]);
+    const run = Math.hypot(high.x - low.x, high.y - low.y);
+    const tilt = (Math.atan2(high.z - low.z, run) * 180) / Math.PI;
+    // The panel faces from its high edge to its low edge, on the plan with y down.
+    const azimuth = ((Math.atan2(low.x - high.x, -(low.y - high.y)) * 180) / Math.PI + 360) % 360;
+    return { tilt, azimuth };
+  };
+
+  it("tilts the panels to the south and keeps the rows out of the shade", () => {
+    const building = house("flat");
+    const flat = pvLayout(building, field(0))!;
+    const layout = pvLayout(building, field(0, { rack: defaultRack(false) }))!;
+    expect(layout.tilt).toBe(15);
+    expect(layout.azimuth).toBe(180);
+    expect(layout.count).toBeGreaterThan(0);
+    // A rack needs space between the rows, so fewer panels fit, but each one gives more.
+    expect(layout.count).toBeLessThan(flat.count);
+    expect(layout.yield / layout.peak).toBeGreaterThan(flat.yield / flat.peak);
+    for (const quad of layout.panels) {
+      const o = panelOrientation(quad);
+      expect(o.tilt).toBeCloseTo(15);
+      expect(o.azimuth).toBeCloseTo(180);
+    }
+    // The shade of the high edge of a row at the winter sun ends before the next row starts.
+    const rows = [
+      ...new Set(layout.panels.map((q) => Math.round(Math.min(...q.map((p) => p.y)) * 1000))),
+    ]
+      .map((y) => y / 1000)
+      .sort((a, b) => a - b);
+    expect(rows.length).toBeGreaterThan(1);
+    const quad = layout.panels[0];
+    const rise = Math.max(...quad.map((p) => p.z)) - Math.min(...quad.map((p) => p.z));
+    const shade = rise / Math.tan((winterSunElevation(48) * Math.PI) / 180);
+    const depth = Math.max(...quad.map((p) => p.y)) - Math.min(...quad.map((p) => p.y));
+    expect(rows[1] - rows[0]).toBeGreaterThanOrEqual(depth + shade - 1e-3);
+  });
+
+  it("puts two panels back to back on an east-west rack, with two directions", () => {
+    const building = house("flat");
+    const layout = pvLayout(building, field(0, { rack: defaultRack(true) }))!;
+    expect(layout.count % 2).toBe(0);
+    expect(layout.parts.map((p) => p.azimuth).sort((a, b) => a - b)).toEqual([90, 270]);
+    expect(layout.parts[0].peak).toBeCloseTo(layout.parts[1].peak);
+    const directions = layout.panels.map((q) => Math.round(panelOrientation(q).azimuth));
+    expect(new Set(directions)).toEqual(new Set([90, 270]));
+  });
+
+  it("ignores the rack on a sloped face", () => {
+    const building = house("gable");
+    const index = faceTo(building, 180);
+    const plain = pvLayout(building, field(index))!;
+    const racked = pvLayout(building, field(index, { rack: defaultRack(false) }))!;
+    expect(racked.count).toBe(plain.count);
+    expect(racked.tilt).toBeCloseTo(35);
+  });
+
+  it("splits the PV of the months by the directions of an east-west rack", () => {
+    const building = house("flat");
+    building.climate = vienna as Climate;
+    building.pv = [field(0, { rack: defaultRack(true) })];
+    const layout = pvLayout(building, building.pv[0])!;
+    const east = pvYieldPerKwp(building.climate, 10, 90);
+    const west = pvYieldPerKwp(building.climate, 10, 270);
+    expect(layout.yield).toBeCloseTo(layout.parts[0].peak * east + layout.parts[1].peak * west);
+  });
+
+  it("keeps the rack in the file, and an old file has no rack", () => {
+    const building = house("flat");
+    building.pv = [field(0, { rack: { tilt: 12, azimuth: 95, eastWest: true } })];
+    const read = parseBuilding(serializeBuilding(building));
+    expect(read.pv[0].rack).toEqual({ tilt: 12, azimuth: 95, eastWest: true });
+    const data = JSON.parse(serializeBuilding(building));
+    delete data.pv[0].rack;
+    expect(parseBuilding(JSON.stringify(data)).pv[0].rack).toBeNull();
   });
 });

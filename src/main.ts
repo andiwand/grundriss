@@ -102,7 +102,7 @@ import {
 import { DEFAULT_COLORS, roomOnSide, wallSideColor } from "./model/colors";
 import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
-import { faceInfo, pvLayout, pvSummary, specificYield } from "./model/pv";
+import { defaultRack, faceInfo, FLAT_TILT, pvLayout, pvSummary, specificYield } from "./model/pv";
 import { climateSummary, DEGREE_DAY_BASE, DEGREE_DAY_LIMIT } from "./model/climate";
 import {
   ATTRIBUTION,
@@ -2718,7 +2718,7 @@ function renderPvPanel(): void {
     const layout = pvLayout(building, array);
     const face = faces.find((f) => f.roofId === array.roofId && f.index === array.face);
     group(
-      `Field ${i + 1} · ${face ? `${compass(face.azimuth)} ${Math.round(face.tilt)}°` : "no face"} · ${layout?.count ?? 0} panels`,
+      `Field ${i + 1} · ${array.rack && face && face.tilt < FLAT_TILT ? "rack " : ""}${layout ? `${compass(layout.azimuth)} ${Math.round(layout.tilt)}°` : "no face"} · ${layout?.count ?? 0} panels`,
       false,
       () => {
         const set = (edit: (a: PvArray) => void) =>
@@ -2743,6 +2743,38 @@ function renderPvPanel(): void {
               a.face = Number(index);
             }),
         );
+        if (face && face.tilt < FLAT_TILT) {
+          const rack = array.rack;
+          selectField(
+            "Mounting",
+            !rack ? "flat" : rack.eastWest ? "east-west" : "one-way",
+            [
+              ["flat", "Flat on the roof"],
+              ["one-way", "Rack, one direction"],
+              ["east-west", "Rack, east-west"],
+            ],
+            (value) =>
+              set((a) => (a.rack = value === "flat" ? null : defaultRack(value === "east-west"))),
+          );
+          if (rack) {
+            numberField("Tilt", rack.tilt, (v) => set((a) => (a.rack!.tilt = Math.min(60, v))), {
+              step: 1,
+              unit: "°",
+            });
+            numberField(
+              rack.eastWest ? "First half faces" : "Faces",
+              rack.azimuth,
+              (v) => set((a) => (a.rack!.azimuth = ((v % 360) + 360) % 360)),
+              { min: -360, step: 5, unit: "° from N" },
+            );
+            paragraph(
+              rack.eastWest
+                ? "Two panels lean back to back: one half faces the direction, and the other half the opposite direction. 90° is east."
+                : "180° is south. The rows keep a distance, so that a row does not shade the next row at noon on 21 December.",
+              "note",
+            );
+          }
+        }
         numberField("Panel power", array.panelPower, (v) => set((a) => (a.panelPower = v)), {
           min: 50,
           step: 5,
@@ -2798,6 +2830,8 @@ function renderPvPanel(): void {
             margin: 0.3,
             gap: 0.02,
             limit: null,
+            // A field on a flat roof stands on a rack that faces south.
+            rack: free[0].tilt < FLAT_TILT ? defaultRack(false) : null,
           }),
         ),
       { icon: "plus" },

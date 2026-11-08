@@ -22,7 +22,7 @@
 
 import { climateFaceMonths, climateSeries, MONTH_DAYS, monthlyMeans } from "./climate";
 import { buildingHeatLoss } from "./energy";
-import { pvLayout, faceInfo } from "./pv";
+import { pvLayout } from "./pv";
 import type { Building, HeatingKind, HeatingSystem } from "./types";
 
 /** The internal gains of people and devices in a home, in W per m² of floor (ÖNORM B 8110-6). */
@@ -269,15 +269,17 @@ function pvMonthly(building: Building): number[] {
   const result = new Array<number>(12).fill(0);
   const climate = building.climate;
   if (!climate) return result;
-  const faces = faceInfo(building);
   for (const array of building.pv) {
     const layout = pvLayout(building, array);
-    const face = faces.find((f) => f.roofId === array.roofId && f.index === array.face);
-    if (!layout || !face) continue;
-    const months = climateFaceMonths(climate, face.tilt, face.azimuth);
-    const total = months.reduce((sum, v) => sum + v, 0);
-    if (total <= 0) continue;
-    months.forEach((v, m) => (result[m] += (layout.yield * v) / total));
+    if (!layout) continue;
+    // Each direction of the field has its own months. An east-west rack has two.
+    for (const part of layout.parts) {
+      const months = climateFaceMonths(climate, part.tilt, part.azimuth);
+      const total = months.reduce((sum, v) => sum + v, 0);
+      if (total <= 0 || layout.peak <= 0) continue;
+      const share = (layout.yield * part.peak) / layout.peak;
+      months.forEach((v, m) => (result[m] += (share * v) / total));
+    }
   }
   return result;
 }

@@ -112,6 +112,7 @@ describe("file format", () => {
       margin: 0.3,
       gap: 0.02,
       limit: null,
+      rack: null,
     });
     building.north = 30;
     expect(parseBuilding(serializeBuilding(building))).toEqual(building);

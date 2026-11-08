@@ -30,6 +30,7 @@ import type {
   Plan,
   Point,
   PvArray,
+  PvRack,
   Roof,
   RoofSide,
   RoofWindow,
@@ -215,6 +216,7 @@ export function parseBuilding(text: string): Building {
       margin: number(d, "margin", where),
       gap: number(d, "gap", where),
       limit: d.limit == null ? null : number(d, "limit", where),
+      rack: parseRack(d.rack),
     };
   });
   const location = parseLocation(data.location);
@@ -416,6 +418,19 @@ function parseEnvelope(data: unknown): Envelope {
     inside: finite(data.inside, defaults.inside),
     heating: parseHeating(data.heating),
     hotWater: parseHotWater(data.hotWater),
+  };
+}
+
+/** Reads the rack of a PV field. A file without it, or a damaged rack, has no rack. */
+function parseRack(data: unknown): PvRack | null {
+  if (!isObject(data)) return null;
+  const tilt = finite(data.tilt, NaN);
+  const azimuth = finite(data.azimuth, NaN);
+  if (!Number.isFinite(tilt) || !Number.isFinite(azimuth)) return null;
+  return {
+    tilt: Math.min(60, Math.max(0, tilt)),
+    azimuth: ((azimuth % 360) + 360) % 360,
+    eastWest: data.eastWest === true,
   };
 }
 

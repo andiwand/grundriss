@@ -293,6 +293,19 @@ export interface PvArray {
   gap: number;
   /** The most panels to use, or null for as many as fit. */
   limit: number | null;
+  /** The rack of the panels on a flat face, or null for panels flat on the face. */
+  rack: PvRack | null;
+}
+
+/**
+ * A rack on a flat roof. The panels have the tilt `tilt` and face `azimuth` (degrees from north,
+ * clockwise). The rows keep a distance, so that a row does not shade the next row. An east-west
+ * rack puts two panels back to back: one faces `azimuth`, and one faces the opposite direction.
+ */
+export interface PvRack {
+  tilt: number;
+  azimuth: number;
+  eastWest: boolean;
 }
 
 /**
