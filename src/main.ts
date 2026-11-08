@@ -1,197 +1,98 @@
-import { Editor2D, type Tool } from "./editor/editor2d";
-import { fillIcons, icon, type IconName } from "./icons";
+import { type Tool } from "./editor/editor2d";
+import { CSV_DE, CSV_EN, takeoffZip } from "./export/csv";
+import { buildingReport } from "./export/report";
+import { currentLanguage, locale, setLanguage, t, translatePage } from "./i18n";
+import { fmt } from "./model/format";
+import { buildingTakeoff } from "./model/takeoff";
+import { isCompact, selectionChanged, setupCompact, toolChanged, topicChanged } from "./ui/compact";
+import { renderContents } from "./ui/contents";
+import {
+  $,
+  app,
+  doc,
+  editor,
+  HINTS,
+  type LayerName,
+  shell,
+  showStatus,
+  status,
+  type Topic,
+  type View,
+  view3d,
+} from "./ui/context";
+import { placeMenu } from "./ui/panel";
+import {
+  confirmDiscard,
+  load,
+  newPlan,
+  openExample,
+  openFile,
+  projectId,
+  projectName,
+  renderHome,
+  scheduleAutosave,
+  startProjects,
+  storageOk,
+  storeProject,
+  updateTitle,
+} from "./ui/projects";
+import { renderPanel } from "./ui/selection";
+import { showShortcuts } from "./ui/shortcuts";
+import { backgroundElement, replaceBackground, tracing, work } from "./ui/tracing";
+import { drawInsulation, openServicesMenu } from "./ui/utilities";
+
+import { fillIcons, icon } from "./icons";
+
 import { exportGlb } from "./export/gltf";
+
 import { buildingExports } from "./export/building";
+
 import { slug, storyExtras } from "./export/context";
+
 import { buildingToDxf } from "./export/dxf";
+
 import { buildingToPdf } from "./export/pdf";
+
 import { planToSvg } from "./export/svg";
-import {
-  EXPORT_TYPES,
-  openPlanFile,
-  pickFile,
-  readImage,
-  saveBlob,
-  savePlanFile,
-} from "./io/files";
+
+import { EXPORT_TYPES, pickFile, readImage, saveBlob, savePlanFile } from "./io/files";
+
 import { isPackageName, readBuildingFile, writePackage } from "./io/package";
-import {
-  deleteProject,
-  keepProjects,
-  listProjects,
-  loadProject,
-  newProjectId,
-  projectsAvailable,
-  renameProject,
-  saveProject,
-  type ProjectInfo,
-} from "./io/projects";
-import { distance } from "./model/geometry";
-import {
-  addCellar,
-  addStoryOnTop,
-  chimneyExtent,
-  defaultWallHeight,
-  emptyBuilding,
-  findStory,
-  sortStories,
-  stairRise,
-  stairShape,
-} from "./model/building";
-import { parseBuilding, serializeBuilding } from "./model/file";
-import { PlanDocument } from "./model/history";
-import {
-  findChimney,
-  findDimension,
-  findOpening,
-  findStair,
-  findVertex,
-  findWall,
-  getVertex,
-  removeOpening,
-  removeVertex,
-  removeWall,
-  setWallLength,
-  wallEnds,
-  wallLength,
-} from "./model/plan";
-import { editRoomInfo, findRoom, findRooms, planOutline } from "./model/rooms";
-import type {
-  Building,
-  Dormer,
-  Roof,
-  RoofKind,
-  RoofSide,
-  RoofWindow,
-  Envelope,
-  Variant,
-  Item,
-  ItemKind,
-  Layer,
-  Location as PlanLocation,
-  PvArray,
-  Opening,
-  OpeningKind,
-  Point,
-  RoomInfo,
-  ServiceSystem,
-  StairKind,
-} from "./model/types";
-import { addRecognized, recognizedToWorld, type RecognizedOpening } from "./recognition/openings";
-import { addWallSegments, toWorld, type WallSegment } from "./tracing/segments";
+
+import { renameProject } from "./io/projects";
+
+import { addCellar, addStoryOnTop, findStory } from "./model/building";
+
+import { serializeBuilding } from "./model/file";
+
+import type { Building, Point, ServiceSystem } from "./model/types";
+
 import { Catalog } from "./ui/catalog";
+
 import { topView } from "./view3d/models";
-import { buildModelAsync, View3D } from "./view3d/view3d";
-import { findFurniture, genericType } from "./model/furniture";
-import { buildingHeatLoss, isOuterWall, roomHeatLoss, uValue, wallLayers } from "./model/energy";
-import {
-  defaultHeating,
-  HEATING_KINDS,
-  heatingEnergy,
-  HOT_WATER_LOSS,
-  INTERNAL_GAINS,
-} from "./model/heating";
-import {
-  addMeasure,
-  applyVariant,
-  measureVariant,
-  measuresFor,
-  MEASURES,
-  sameAsPlan,
-  updateVariant,
-  variantOf,
-  withVariant,
-} from "./model/variants";
-import { energyBalance, type EnergyBalance } from "./model/balance";
-import { estimateItems, variantEconomy } from "./model/renovation";
-import { DEFAULT_COLORS, roomOnSide, wallSideColor } from "./model/colors";
-import { makeHouse } from "./model/example";
-import { MATERIALS, layersThickness } from "./model/insulation";
-import {
-  defaultRack,
-  faceInfo,
-  FLAT_TILT,
-  newPvField,
-  pvLayout,
-  pvSummary,
-  specificYield,
-} from "./model/pv";
-import { climateSummary, DEGREE_DAY_BASE, DEGREE_DAY_LIMIT } from "./model/climate";
-import {
-  ATTRIBUTION,
-  ATTRIBUTION_URL,
-  CLIMATE_YEARS,
-  downloadClimate,
-  searchPlaces,
-  type Place,
-} from "./io/climate";
+
+import { buildModelAsync } from "./view3d/view3d";
+
 import { MAP_SOURCES, type MapSourceId } from "./io/tiles";
-import { buildingQuantities } from "./model/quantities";
-import { newRoof, roofBase, roofGeometryOf, storyBox } from "./model/roof";
-import { livingArea, roofIsCeiling } from "./model/attic";
-import type { Room } from "./model/rooms";
-import type { Story } from "./model/types";
-import { halfHipHeight, presetSides } from "./model/roofshape";
-import { newId } from "./model/plan";
-import {
-  FIXTURE_TYPES,
-  RUN_KINDS,
-  SERVICE_SYSTEMS,
-  findFixture,
-  findRun,
-  fixtureSymbol,
-  fixtureType,
-  newFixture,
-  runKind,
-  runLength,
-  systemColor,
-} from "./model/services";
 
-const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
-  document.querySelector<T>(selector)!;
-
+translatePage();
 fillIcons();
 
-const doc = new PlanDocument();
-const editor = new Editor2D($("#plan-2d"), doc);
-const view3d = new View3D($("#plan-3d"));
-const panel = $("#panel");
-const status = $("#status");
-
-let fileName = "plan.grundriss";
-let fileHandle: FileSystemFileHandle | null = null;
-let calibration: { a: Point; b: Point } | null = null;
-
-const HINTS: Record<Tool, string> = {
-  select:
-    "Click to select, Shift+click to add. Click in a room to name it or to set its height. Drag on the empty plan to select in a box. Drag a wall to move it: the next walls keep their angles (Shift: free). Pan: two-finger scroll, Space+drag, or right drag.",
-  pan: "Drag to move the view. The wheel or a pinch zooms. V goes back to Select. In other tools, hold Space and drag, or drag with the right button.",
-  wall: "Click to add corners. A click on a corner or a wall ends the chain. The direction snaps to 15°. Shift: 45° steps. Alt: free. Esc: stop.",
-  door: "Click on a wall to put a door in it.",
-  window: "Click on a wall to put a window in it.",
-  dimension:
-    "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.",
-  stair:
-    "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.",
-  fixture:
-    "Click to place the device. A device for a wall goes against the nearest wall. Alt: no snap. Esc: stop.",
-  run: "Click the points of the line. A click on a device ends the line there. Double click or Enter: end. Esc: stop.",
-  furniture:
-    "Click to place the piece. Near a wall, its back goes against the wall. R: turn by 90°, Shift+R: by 15°. Shift+click: place more. Alt: no snap. Esc: stop.",
-  chimney: "Click where the chimney goes. It goes up through the stories above and the roof.",
-  calibrate: "Click two points on the background with a known distance between them.",
-  rectify: "Click the four corners of the plan on the background, in any order. Esc: stop.",
-  map: "Drag to move the map under the plan. Shift+drag turns the map around the place. Esc: done.",
-};
+const languageButton = $("#language");
+// The button shows the code of the other language, and its title names it in full.
+languageButton.append(currentLanguage() === "de" ? "EN" : "DE");
+languageButton.title = currentLanguage() === "de" ? "Switch to English" : "Auf Deutsch umschalten";
+languageButton.addEventListener("click", () =>
+  setLanguage(currentLanguage() === "de" ? "en" : "de"),
+);
 
 // ----- Topics -----
 
-/**
- * The topics of the user interface. A topic shows its own tools in the palette, its own content
- * in the panel when nothing is selected, and its own layers.
- */
-type Topic = "overview" | "structure" | "utilities" | "interior" | "energy" | "renovation";
-type LayerName = keyof typeof editor.layers;
+/** The split view is not available on a phone, and in the topics with a wide panel. */
+function updateSplitButton(): void {
+  $<HTMLButtonElement>('[data-view="split"]').disabled =
+    isCompact() || document.body.classList.contains("wide");
+}
 
 const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: false };
 
@@ -230,29 +131,14 @@ const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
   furniture: "interior",
 };
 
-const SYSTEM_ICONS: Record<ServiceSystem, IconName> = {
-  water: "drop",
-  heating: "flame",
-  electric: "bolt",
-  comms: "antenna",
-};
+const HOME_HINT = t("Click a plan to open it, or start a new plan.");
 
-const HOME_HINT = "Click a plan to open it, or start a new plan.";
-const OVERVIEW_HINT = "Click a part of the plan to open it in its topic.";
-
-let topic: Topic = "structure";
-/**
- * True while a plan is open. Without an open plan, the app shows the home page with the projects,
- * and the top bar hides the topics and the tools of the plan.
- */
-let planOpen = false;
-/** True if a plan opened while the views were hidden, so that they fit it when they show. */
-let fitPending = false;
+const OVERVIEW_HINT = t("Click a part of the plan to open it in its topic.");
 
 /** Shows the home page. The open plan closes; it is already in the browser. */
 function showHome(): void {
-  if (planOpen && !confirmDiscard()) return;
-  planOpen = false;
+  if (app.planOpen && !confirmDiscard()) return;
+  app.planOpen = false;
   closeMenus();
   if (catalog.isOpen) catalog.close();
   editor.cancel();
@@ -268,10 +154,11 @@ function showHome(): void {
 
 /** Leaves the home page for the open plan, in the topic. */
 function enterPlan(next: Topic): void {
-  planOpen = true;
+  app.planOpen = true;
   document.body.classList.remove("no-plan");
-  $("#brand").title =
-    "Close the plan and show the projects. The plan is already saved in the browser.";
+  $("#brand").title = t(
+    "Close the plan and show the projects. The plan is already saved in the browser.",
+  );
   $("#home").hidden = true;
   if (status.textContent === HOME_HINT) showStatus(HINTS[editor.tool]);
   updateTitle();
@@ -283,8 +170,10 @@ function enterPlan(next: Topic): void {
  * plan in place of the views.
  */
 function setTopic(next: Topic): void {
-  topic = next;
+  app.topic = next;
   const overview = next === "overview";
+  // The overview hides the plan, so a key must not change a selection that nobody sees.
+  if (overview) editor.select(null);
   $("#overview").hidden = !overview;
   $("#area").hidden = overview;
   document.body.classList.toggle("overview", overview);
@@ -292,7 +181,7 @@ function setTopic(next: Topic): void {
   // view.
   const wide = next === "energy" || next === "renovation";
   document.body.classList.toggle("wide", wide);
-  $<HTMLButtonElement>('[data-view="split"]').disabled = wide;
+  updateSplitButton();
   if (wide && currentView === "split") {
     viewBeforeWide = "split";
     setView("2d");
@@ -304,8 +193,8 @@ function setTopic(next: Topic): void {
     renderContents();
     showStatus(OVERVIEW_HINT);
   } else if (status.textContent === OVERVIEW_HINT) showStatus(HINTS[editor.tool]);
-  if (!overview && fitPending) {
-    fitPending = false;
+  if (!overview && app.fitPending) {
+    app.fitPending = false;
     // The views get their size in the next frame.
     requestAnimationFrame(() => {
       editor.fit();
@@ -331,19 +220,15 @@ function setTopic(next: Topic): void {
   const owner = TOOL_TOPIC[editor.tool];
   if (owner && owner !== next) setTool("select");
   applyLayers();
-}
-
-function showStatus(text: string, error = false): void {
-  status.textContent = text;
-  status.classList.toggle("error", error);
+  topicChanged();
 }
 
 function setTool(tool: Tool): void {
   // A tool of another topic, for example from a shortcut, opens its topic first.
   const owner = TOOL_TOPIC[tool];
-  if (owner && owner !== topic) setTopic(owner);
+  if (owner && owner !== app.topic) setTopic(owner);
   editor.tool = tool;
-  calibration = null;
+  app.calibration = null;
   markTool(tool);
   showStatus(HINTS[tool]);
   renderPanel();
@@ -355,14 +240,17 @@ function markTool(tool: Tool): void {
     button.classList.toggle("active", button.dataset.tool === tool);
   }
   $("#furniture").classList.toggle("active", tool === "furniture" || catalog.isOpen);
+  toolChanged(tool);
 }
 
-type View = "2d" | "split" | "3d";
 let currentView: View = "split";
+
 /** The view before a topic with a wide panel, if it changed the view, so that it comes back. */
 let viewBeforeWide: View | null = null;
 
 function setView(view: View): void {
+  // A phone shows one view at a time.
+  if (view === "split" && isCompact()) view = "2d";
   currentView = view;
   $("#area").className = `view-${view}`;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-view]")) {
@@ -372,64 +260,6 @@ function setView(view: View): void {
 
 // ----- Assisted tracing -----
 
-interface Suggestion {
-  /** The suggested wall in meters. */
-  segment: WallSegment;
-  accepted: boolean;
-}
-
-/** A door or a window that the recognition suggests, in meters, on the wall `segment`. */
-interface OpeningSuggestion {
-  opening: RecognizedOpening;
-  accepted: boolean;
-}
-
-/** The suggested walls that wait for the user, or null if there are none. */
-let suggestions: Suggestion[] | null = null;
-/** The suggested doors and windows. Only the recognition gives them. */
-let openingSuggestions: OpeningSuggestion[] = [];
-/** The text of the work that runs now, for example "Finding walls…", or null. */
-let busy: string | null = null;
-let cleanStrength = 0.5;
-
-/** The tracing functions need OpenCV, so they load only when the user needs them. */
-const tracing = () => import("./tracing/trace");
-
-async function backgroundElement(): Promise<HTMLImageElement> {
-  const image = new Image();
-  image.src = doc.plan.background!.image;
-  await image.decode();
-  return image;
-}
-
-/** Runs a slow tracing step, and shows the work in the panel while it runs. */
-async function work(text: string, step: () => Promise<void>): Promise<void> {
-  if (busy) return;
-  busy = text;
-  renderPanel();
-  // OpenCV blocks the page while it works. A short wait lets the browser show the panel first.
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  try {
-    await step();
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
-  } finally {
-    busy = null;
-    renderPanel();
-  }
-}
-
-/** Puts a new image in the background. The image keeps its width in meters. */
-function replaceBackground(image: { dataUrl: string; width: number; height: number }): void {
-  doc.edit((plan) => {
-    const background = plan.background!;
-    background.scale *= background.width / image.width;
-    background.image = image.dataUrl;
-    background.width = image.width;
-    background.height = image.height;
-  });
-}
-
 editor.onCorners = (corners) => {
   const background = doc.plan.background;
   if (!background) return;
@@ -437,2554 +267,15 @@ editor.onCorners = (corners) => {
     x: (p.x - background.x) / background.scale,
     y: (p.y - background.y) / background.scale,
   })) as typeof corners;
-  void work("Straightening the image…", async () => {
+  void work(t("Straightening the image…"), async () => {
     const { rectify } = await tracing();
     replaceBackground(await rectify(await backgroundElement(), pixels));
     editor.clearCalibration();
     editor.fit();
     setTool("calibrate");
-    showStatus("The image is straight. Its size changed, so set the scale again.");
+    showStatus(t("The image is straight. Its size changed, so set the scale again."));
   });
 };
-
-function cleanBackground(): void {
-  void work("Cleaning the image…", async () => {
-    const { cleanUp } = await tracing();
-    replaceBackground(await cleanUp(await backgroundElement(), { strength: cleanStrength }));
-    showStatus("The image is clean. Undo brings back the old image.");
-  });
-}
-
-function suggestWalls(): void {
-  void work("Finding walls…", async () => {
-    const { suggestWalls } = await tracing();
-    const pixels = await suggestWalls(await backgroundElement());
-    const world = toWorld(pixels, doc.plan.background!);
-    if (world.length === 0) {
-      showStatus("The app found no walls. Clean the image first, or draw the walls by hand.");
-      return;
-    }
-    setSuggestions(world.map((segment) => ({ segment, accepted: true })));
-    showStatus("Click a suggested wall to reject it or to accept it again. Then add the walls.");
-  });
-}
-
-function setSuggestions(list: Suggestion[] | null, openings: OpeningSuggestion[] = []): void {
-  suggestions = list;
-  openingSuggestions = list ? openings : [];
-  editor.setOverlay("suggestions", list ? drawSuggestions : null);
-  renderPanel();
-}
-
-function drawSuggestions(group: SVGGElement): void {
-  const ns = "http://www.w3.org/2000/svg";
-  for (const suggestion of suggestions ?? []) {
-    const { a, b, thickness } = suggestion.segment;
-    const element = document.createElementNS(ns, "g");
-    element.setAttribute("class", suggestion.accepted ? "suggestion" : "suggestion rejected");
-    for (const [className, width] of [
-      ["body", thickness],
-      ["axis", null],
-    ] as const) {
-      const line = document.createElementNS(ns, "line");
-      line.setAttribute("x1", String(a.x));
-      line.setAttribute("y1", String(a.y));
-      line.setAttribute("x2", String(b.x));
-      line.setAttribute("y2", String(b.y));
-      line.setAttribute("class", className);
-      if (width !== null) line.setAttribute("stroke-width", String(width));
-      element.append(line);
-    }
-    // The editor must not see this press, else it starts a selection box.
-    element.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      suggestion.accepted = !suggestion.accepted;
-      setSuggestions(suggestions, openingSuggestions);
-    });
-    group.append(element);
-  }
-  // A door or a window shows as a short colored bar on its wall.
-  for (const suggestion of openingSuggestions) {
-    const { kind, segment, center, width } = suggestion.opening;
-    const wall = suggestions?.[segment]?.segment;
-    if (!wall) continue;
-    const length = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1;
-    const dx = ((wall.b.x - wall.a.x) / length) * (width / 2);
-    const dy = ((wall.b.y - wall.a.y) / length) * (width / 2);
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", String(center.x - dx));
-    line.setAttribute("y1", String(center.y - dy));
-    line.setAttribute("x2", String(center.x + dx));
-    line.setAttribute("y2", String(center.y + dy));
-    line.setAttribute("stroke-width", String(wall.thickness + 0.06));
-    const state = suggestion.accepted ? "" : " rejected";
-    line.setAttribute("class", `opening-suggestion ${kind}${state}`);
-    line.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      suggestion.accepted = !suggestion.accepted;
-      setSuggestions(suggestions, openingSuggestions);
-    });
-    group.append(line);
-  }
-}
-
-function acceptSuggestions(): void {
-  const walls = suggestions ?? [];
-  const accepted: WallSegment[] = [];
-  // The index of each accepted wall in `accepted`. An opening refers to its wall by this index.
-  const newIndex = new Map<number, number>();
-  walls.forEach((s, i) => {
-    if (!s.accepted) return;
-    newIndex.set(i, accepted.length);
-    accepted.push(s.segment);
-  });
-  // An opening on a rejected wall goes away with the wall, so that it does not land on a wrong
-  // wall of the plan.
-  const openings = openingSuggestions
-    .filter((o) => o.accepted && newIndex.has(o.opening.segment))
-    .map((o) => ({ ...o.opening, segment: newIndex.get(o.opening.segment)! }));
-  let wallIds: string[] = [];
-  let openingIds: string[] = [];
-  doc.edit((plan) => {
-    const options = { tolerance: 0.1, height: defaultWallHeight(plan) };
-    if (openingSuggestions.length > 0) {
-      ({ walls: wallIds, openings: openingIds } = addRecognized(plan, accepted, openings, options));
-    } else {
-      wallIds = addWallSegments(plan, accepted, options);
-    }
-  });
-  setSuggestions(null);
-  editor.select(wallIds.map((id) => ({ kind: "wall" as const, id })));
-  const added = openingIds.length > 0 ? ` and ${openingIds.length} doors and windows` : "";
-  showStatus(
-    `Added ${wallIds.length} walls${added}. Check them, and correct them where necessary.`,
-  );
-}
-
-/** Recognizes the walls, the doors, and the windows of the background with the model. */
-function recognizePlan(): void {
-  void work("Loading the recognition (about 15 MB the first time)…", async () => {
-    const recognition = await import("./recognition");
-    const result = await recognition.recognize(await backgroundElement(), (done, total) => {
-      busy = `Recognizing the plan: part ${done} of ${total}…`;
-      renderPanel();
-    });
-    busy = "Finding the walls…";
-    renderPanel();
-    const world = recognizedToWorld(result, doc.plan.background!);
-    if (world.walls.length === 0) {
-      showStatus("The model found no walls. Straighten and clean the image, then try again.");
-      return;
-    }
-    setSuggestions(
-      world.walls.map((segment) => ({ segment, accepted: true })),
-      world.openings.map((opening) => ({ opening, accepted: true })),
-    );
-    showStatus(
-      "Click a suggested wall, door, or window to reject it or to accept it again. Then add them.",
-    );
-  });
-}
-
-function renderTracing(): boolean {
-  if (busy) {
-    heading("Assisted tracing", "wand");
-    paragraph(busy, "busy");
-    return true;
-  }
-  if (suggestions) {
-    const accepted = suggestions.filter((s) => s.accepted).length;
-    const count = (kind: string) =>
-      openingSuggestions.filter((o) => o.accepted && o.opening.kind === kind).length;
-    heading(openingSuggestions.length > 0 ? "Recognized plan" : "Suggested walls", "sparkle");
-    stats([
-      [String(accepted), "walls"],
-      [String(suggestions.length - accepted), "rejected"],
-      ...(openingSuggestions.length > 0
-        ? ([
-            [String(count("door")), "doors"],
-            [String(count("window")), "windows"],
-          ] as [string, string][])
-        : []),
-    ]);
-    paragraph(
-      "Click a suggestion on the plan to reject it, or to accept it again. Doors are orange, windows are blue.",
-      "note",
-    );
-    button(`Add ${accepted} walls`, acceptSuggestions, { kind: "primary", icon: "check" });
-    button("Discard", () => setSuggestions(null), { icon: "close" });
-    return true;
-  }
-  if (editor.tool === "rectify") {
-    heading("Straighten the image", "crop");
-    paragraph(
-      "Click the four corners of the plan on the background. The app corrects the perspective " +
-        "of the photo, so that the plan becomes a rectangle.",
-    );
-    button("Cancel", () => setTool("select"), { icon: "close" });
-    return true;
-  }
-  return false;
-}
-
-// ----- The panel -----
-
-/** The section of the panel that the helpers below append to. */
-let section: HTMLElement = panel;
-/** The element that takes the sections of the headings: the panel, or a column of it. */
-let column: HTMLElement = panel;
-
-function heading(text: string, iconName?: IconName): void {
-  section = document.createElement("section");
-  const element = document.createElement("h2");
-  if (iconName) element.innerHTML = icon(iconName);
-  element.append(text);
-  section.append(element);
-  column.append(section);
-}
-
-function paragraph(text: string, className?: string): void {
-  const element = document.createElement("p");
-  element.textContent = text;
-  if (className) element.className = className;
-  section.append(element);
-}
-
-function button(
-  text: string,
-  action: () => void,
-  options: { kind?: "primary" | "danger"; icon?: IconName; detail?: string } = {},
-): HTMLButtonElement {
-  let row = section.lastElementChild;
-  if (!row?.classList.contains("actions")) {
-    row = document.createElement("div");
-    row.className = "actions";
-    section.append(row);
-  }
-  const element = document.createElement("button");
-  if (options.kind) element.className = options.kind;
-  if (options.icon) element.innerHTML = icon(options.icon);
-  if (options.detail) {
-    // A list item: the text on the first line, and the detail small below it.
-    element.classList.add("item");
-    const label = document.createElement("span");
-    const detail = document.createElement("small");
-    label.textContent = text;
-    detail.textContent = options.detail;
-    const lines = document.createElement("span");
-    lines.className = "lines";
-    lines.append(label, detail);
-    element.append(lines);
-  } else {
-    element.append(text);
-  }
-  element.addEventListener("click", action);
-  row.append(element);
-  return element;
-}
-
-/** A row of the panel: a label on the left and a control in a box on the right. */
-function field(text: string, control: HTMLElement, unit?: string): void {
-  const label = document.createElement("label");
-  label.className = "field";
-  label.append(text);
-  const box = document.createElement("span");
-  box.className = "input";
-  box.append(control);
-  if (unit) {
-    const element = document.createElement("span");
-    element.className = "unit";
-    element.textContent = unit;
-    box.append(element);
-  }
-  label.append(box);
-  section.append(label);
-}
-
-/**
- * A field for a color "#rrggbb". The plan changes when the user closes the color picker. With
- * `reset`, a button after the color gives back the default color.
- */
-function colorField(
-  text: string,
-  value: string,
-  change: (value: string) => void,
-  reset?: { title: string; action: () => void },
-): void {
-  const input = document.createElement("input");
-  input.type = "color";
-  input.value = value;
-  input.addEventListener("change", () => change(input.value));
-  field(text, input);
-  if (reset) {
-    const box = section.lastElementChild!.querySelector(".input")!;
-    const clear = document.createElement("button");
-    clear.className = "icon-button reset";
-    clear.title = reset.title;
-    clear.innerHTML = icon("close");
-    clear.addEventListener("click", (event) => {
-      event.preventDefault();
-      reset.action();
-    });
-    box.append(clear);
-  }
-}
-
-function numberField(
-  text: string,
-  value: number,
-  change: (value: number) => void,
-  options: { step?: number; min?: number; max?: number; unit?: string } = {},
-): HTMLInputElement {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.step = String(options.step ?? 0.01);
-  input.min = String(options.min ?? 0);
-  if (options.max !== undefined) input.max = String(options.max);
-  input.value = String(Math.round(value * 1000) / 1000);
-  input.addEventListener("change", () => {
-    const parsed = Number(input.value);
-    if (Number.isFinite(parsed) && parsed >= (options.min ?? 0)) change(parsed);
-  });
-  field(text, input, options.unit ?? "m");
-  return input;
-}
-
-/** A slider from 0 to 1. It changes the plan only when the user releases it. */
-function rangeField(text: string, value: number, change: (value: number) => void): void {
-  const label = document.createElement("label");
-  label.className = "field";
-  label.append(text);
-  const input = document.createElement("input");
-  input.type = "range";
-  input.min = "0";
-  input.max = "1";
-  input.step = "0.05";
-  input.value = String(value);
-  input.addEventListener("change", () => change(Number(input.value)));
-  label.append(input);
-  section.append(label);
-}
-
-function stats(items: [value: string, text: string, wide?: boolean][]): void {
-  const grid = document.createElement("div");
-  grid.className = "stats";
-  for (const [value, text, wide] of items) {
-    const tile = document.createElement("div");
-    tile.className = wide ? "stat wide" : "stat";
-    const strong = document.createElement("strong");
-    strong.textContent = value;
-    const span = document.createElement("span");
-    span.textContent = text;
-    tile.append(strong, span);
-    grid.append(tile);
-  }
-  section.append(grid);
-}
-
-function renderPanel(): void {
-  updateMapCredit();
-  panel.replaceChildren();
-  column = panel;
-  section = panel;
-  const plan = doc.plan;
-  if (renderTracing()) return;
-  // The card is only for a new plan. A tool other than "select" hides it, so that it does not
-  // block the clicks of that tool.
-  $<HTMLButtonElement>('[data-tool="rectify"]').disabled = !plan.background;
-  $("#empty-state").hidden =
-    plan.walls.length > 0 || plan.background !== null || editor.tool !== "select";
-
-  if (editor.tool === "calibrate") {
-    heading("Set the scale", "ruler");
-    if (!plan.background) {
-      paragraph("Load a background first.");
-      button("Load background", () => void loadBackground(), { icon: "image" });
-      return;
-    }
-    if (!calibration) {
-      paragraph("Click two points on the background, for example the ends of a known wall.");
-      return;
-    }
-    const measured = distance(calibration.a, calibration.b);
-    paragraph(`The line is ${measured.toFixed(3)} m long at the current scale.`);
-    const { a } = calibration;
-    const input = numberField("Real length", measured, () => {}, { min: 0.001 });
-    input.focus();
-    input.select();
-    button(
-      "Apply",
-      () => {
-        const real = Number(input.value);
-        if (!(real > 0) || measured === 0) return;
-        const factor = real / measured;
-        // The background grows about the first point, so that point stays in its place.
-        doc.edit((plan) => {
-          const background = plan.background!;
-          background.scale *= factor;
-          background.x = a.x + (background.x - a.x) * factor;
-          background.y = a.y + (background.y - a.y) * factor;
-        });
-        editor.clearCalibration();
-        setTool("select");
-        showStatus("The scale of the background is set. Now draw the walls on it.");
-      },
-      { kind: "primary", icon: "check" },
-    );
-    return;
-  }
-
-  const items = editor.selection;
-  if (items.length > 1) {
-    heading("Selection", "select");
-    // The panel shows a count for each kind in the selection, and no count of 0.
-    const kinds: [ItemKind, string, string][] = [
-      ["wall", "wall", "walls"],
-      ["opening", "opening", "openings"],
-      ["dimension", "dimension", "dimensions"],
-      ["vertex", "corner", "corners"],
-      ["stair", "stair", "stairs"],
-      ["chimney", "chimney", "chimneys"],
-      ["room", "room", "rooms"],
-      ["furniture", "furniture", "furniture"],
-      ["fixture", "device", "devices"],
-      ["run", "line", "lines"],
-      ["roof", "roof", "roofs"],
-      ["roof-corner", "roof corner", "roof corners"],
-    ];
-    stats(
-      kinds
-        .map(([kind, one, many]) => {
-          const count = items.filter((i) => i.kind === kind).length;
-          return [String(count), count === 1 ? one : many] as [string, string];
-        })
-        .filter(([count]) => count !== "0"),
-    );
-    paragraph("Drag the selection or use the arrow keys to move it.", "note");
-    button("Duplicate", () => editor.duplicate(), { icon: "copy" });
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-  const selection = items[0];
-  if (selection?.kind === "dimension") {
-    const dimension = findDimension(plan, selection.id);
-    if (!dimension) return;
-    heading("Dimension", "dimension");
-    stats([[`${distance(dimension.a, dimension.b).toFixed(3)} m`, "length", true]]);
-    numberField(
-      "Offset",
-      dimension.offset,
-      (value) => doc.edit((plan) => (findDimension(plan, dimension.id)!.offset = value)),
-      { min: -1e6 },
-    );
-    paragraph("Drag the dimension line to change its offset.", "note");
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-  if (selection?.kind === "room") {
-    const room = findRoom(plan, selection.id);
-    if (!room) return;
-    const key = room.key;
-    const story = plan;
-    const change = (edit: (info: RoomInfo) => void) =>
-      doc.edit((plan) => {
-        const current = findRoom(plan, key);
-        if (current) editRoomInfo(plan, current, edit);
-      });
-    heading("Room", "view2d");
-    const height = room.info?.height ?? defaultWallHeight(story);
-    stats([
-      [`${room.area.toFixed(2)} m²`, "area"],
-      [`${height.toFixed(2)} m`, "clear height"],
-    ]);
-    renderLivingArea(story, room);
-    textField("Name", room.info?.name ?? "", (value) => change((info) => (info.name = value)), {
-      placeholder: "For example Kitchen",
-      allowEmpty: true,
-    });
-    numberField("Height", height, (value) => change((info) => (info.height = value)), {
-      min: 0.5,
-    });
-    paragraph(
-      room.info?.height == null
-        ? `The room has the clear height of the story: ${defaultWallHeight(story).toFixed(2)} m. Type a height for a lowered ceiling or a high room.`
-        : "The room has its own height. The 3D view shows its ceiling.",
-      "note",
-    );
-    if (room.info?.height != null) {
-      button("Height of the story", () => change((info) => (info.height = null)), {
-        icon: "layers",
-      });
-    }
-
-    colorField(
-      "Wall color",
-      room.info?.wallColor ?? DEFAULT_COLORS.room,
-      (value) => change((info) => (info.wallColor = value)),
-      room.info?.wallColor
-        ? { title: "Default color", action: () => change((info) => (info.wallColor = null)) }
-        : undefined,
-    );
-
-    const loss = roomHeatLoss(doc.building, story, room);
-    heading("Heating", "flame");
-    if (!story.heated) {
-      paragraph(
-        `${story.name} is unheated, so its rooms lose no heat. Make it heated in the panel of the story or in Energy.`,
-        "note",
-      );
-      return;
-    }
-    checkField("Floor heating", room.info?.floorHeating ?? false, (value) =>
-      change((info) => (info.floorHeating = value)),
-    );
-    numberField(
-      "Temperature",
-      loss.temperature,
-      (value) => change((info) => (info.temperature = value)),
-      { min: -30, step: 0.5, unit: "°C" },
-    );
-    const supply = loss.heating + (loss.floorHeating?.power ?? 0);
-    stats([
-      [`${Math.round(loss.total)} W`, "heat loss"],
-      [`${Math.round(loss.total / Math.max(loss.area, 0.01))} W/m²`, "per area"],
-      [`${Math.round(supply)} W`, "heating power", true],
-    ]);
-    const parts: [string, number][] = [
-      ["walls", loss.walls],
-      ["windows", loss.windows],
-      ["doors", loss.doors],
-      ["roof", loss.roof],
-      ["floor", loss.floor],
-      ["ceiling", loss.ceiling],
-      ["ventilation", loss.ventilation],
-    ];
-    paragraph(
-      parts
-        .filter(([, value]) => value > 0.5)
-        .map(([name, value]) => `${name} ${Math.round(value)} W`)
-        .join(" · "),
-      "note",
-    );
-    if (loss.floorHeating) {
-      paragraph(
-        `Floor heating: about ${Math.round(loss.floorHeating.power)} W and ${Math.round(loss.floorHeating.pipe)} m of pipe.`,
-        "note",
-      );
-    }
-    if (supply < loss.total * 0.95) {
-      paragraph(
-        `The heating power is ${Math.round(loss.total - supply)} W too low. Add a radiator, or use floor heating.`,
-        "warning",
-      );
-    }
-    return;
-  }
-
-  if (selection?.kind === "fixture") {
-    const fixture = findFixture(plan, selection.id);
-    if (!fixture) return;
-    const id = fixture.id;
-    const type = fixtureType(fixture.type);
-    const set = (key: "elevation" | "width" | "rotation" | "power") => (value: number) =>
-      doc.edit((plan) => (findFixture(plan, id)![key] = value));
-    heading(type.name, SYSTEM_ICONS[fixture.system]);
-    textField(
-      "Label",
-      fixture.label,
-      (value) => doc.edit((plan) => (findFixture(plan, id)!.label = value)),
-      { placeholder: "For example K1", allowEmpty: true },
-    );
-    numberField("Height", fixture.elevation, set("elevation"), { min: -1 });
-    if (fixture.system === "heating" || fixture.system === "water") {
-      numberField("Width", fixture.width, set("width"), { min: 0.05 });
-    }
-    if (fixture.system === "heating") {
-      numberField("Power", fixture.power ?? 0, set("power"), { min: 0, step: 50, unit: "W" });
-    }
-    numberField("Rotation", fixture.rotation, set("rotation"), { min: -360, step: 1, unit: "°" });
-    paragraph("The height is the height of the center above the floor.", "note");
-    button("Duplicate", () => editor.duplicate(), { icon: "copy" });
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-
-  if (selection?.kind === "run") {
-    const run = findRun(plan, selection.id);
-    if (!run) return;
-    const id = run.id;
-    heading(runKind(run.kind).name, SYSTEM_ICONS[run.system]);
-    stats([
-      [`${runLength(run).toFixed(2)} m`, "length on the plan"],
-      [String(run.points.length), "points"],
-    ]);
-    selectField(
-      "Kind",
-      run.kind,
-      RUN_KINDS.filter((k) => k.system === run.system).map((k) => [k.kind, k.name]),
-      (kind) => doc.edit((plan) => (findRun(plan, id)!.kind = kind)),
-    );
-    numberField(
-      "Height",
-      run.elevation,
-      (value) => doc.edit((plan) => (findRun(plan, id)!.elevation = value)),
-      { min: -1 },
-    );
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-
-  if (selection?.kind === "roof") {
-    renderRoofPanel(selection.id, null);
-    return;
-  }
-  if (selection?.kind === "roof-corner") {
-    const [roofId, index] = selection.id.split(":");
-    renderRoofPanel(roofId, Number(index));
-    return;
-  }
-
-  if (selection?.kind === "furniture") {
-    const piece = findFurniture(plan, selection.id);
-    if (!piece) return;
-    const id = piece.id;
-    const source = piece.source;
-    const model =
-      source.kind === "model"
-        ? doc.building.models.find((m) => m.id === source.modelId)
-        : undefined;
-    const set = (key: "width" | "depth" | "height" | "elevation" | "rotation") => (value: number) =>
-      doc.edit((plan) => (findFurniture(plan, id)![key] = value));
-    heading("Furniture", "sofa");
-    textField("Name", piece.name, (value) =>
-      doc.edit((plan) => (findFurniture(plan, id)!.name = value)),
-    );
-    numberField("Width", piece.width, set("width"), { min: 0.05 });
-    numberField("Depth", piece.depth, set("depth"), { min: 0.05 });
-    numberField("Height", piece.height, set("height"), { min: 0.05 });
-    numberField("Above floor", piece.elevation, set("elevation"), { min: -10 });
-    numberField("Rotation", piece.rotation, set("rotation"), { min: -360, step: 1, unit: "°" });
-    if (model) {
-      const origin = { import: "Imported model", kenney: "Kenney", polyhaven: "Poly Haven" }[
-        model.origin
-      ];
-      paragraph([origin, model.license, model.credit].filter(Boolean).join(" · "), "note");
-    }
-    button("Turn 90°", () => editor.rotate(90), { icon: "rotate" });
-    button(
-      "Usual size",
-      () =>
-        doc.edit((plan) => {
-          const p = findFurniture(plan, id)!;
-          if (p.source.kind === "generic") {
-            const t = genericType(p.source.type);
-            Object.assign(p, { width: t.width, depth: t.depth, height: t.height });
-          } else if (model) {
-            Object.assign(p, { width: model.size.x, depth: model.size.y, height: model.size.z });
-          }
-        }),
-      { icon: "fit" },
-    );
-    button("Duplicate", () => editor.duplicate(), { icon: "copy" });
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-
-  if (selection?.kind === "stair") {
-    const stair = findStair(plan, selection.id);
-    if (!stair) return;
-    const shape = stairShape(stair, stairRise(doc.building, plan));
-    heading("Stair", "stair");
-    stats([
-      [String(shape.count), "steps"],
-      [`${(shape.stepHeight * 100).toFixed(1)} cm`, "step height"],
-      [`${(shape.stepDepth * 100).toFixed(1)} cm`, "step depth", true],
-    ]);
-    numberField(
-      "Width",
-      stair.width,
-      (value) => doc.edit((plan) => (findStair(plan, stair.id)!.width = value)),
-      { min: 0.4 },
-    );
-    numberField(
-      "Run",
-      distance(stair.a, stair.b),
-      (value) =>
-        doc.edit((plan) => {
-          const s = findStair(plan, stair.id)!;
-          const length = distance(s.a, s.b);
-          if (length === 0) return;
-          s.b = {
-            x: s.a.x + ((s.b.x - s.a.x) * value) / length,
-            y: s.a.y + ((s.b.y - s.a.y) * value) / length,
-          };
-        }),
-      { min: 0.5 },
-    );
-    selectField<StairKind>(
-      "Shape",
-      stair.kind,
-      [
-        ["straight", "Straight"],
-        ["l", "L (quarter turn)"],
-        ["u", "U (half turn)"],
-      ],
-      (kind) =>
-        doc.edit((plan) => {
-          const s = findStair(plan, stair.id)!;
-          // A U stair comes back along the first flight, so its second flight has the same run.
-          if (kind === "u" && s.kind !== "u") s.run2 = distance(s.a, s.b);
-          if (kind === "l" && s.kind !== "l") s.run2 = Math.max(1, distance(s.a, s.b) / 2);
-          s.kind = kind;
-        }),
-    );
-    if (stair.kind !== "straight") {
-      selectField<"1" | "-1">(
-        "Turn",
-        stair.turn === 1 ? "1" : "-1",
-        [
-          ["1", "To the right"],
-          ["-1", "To the left"],
-        ],
-        (turn) => doc.edit((plan) => (findStair(plan, stair.id)!.turn = turn === "1" ? 1 : -1)),
-      );
-      numberField(
-        "Second run",
-        stair.run2,
-        (value) => doc.edit((plan) => (findStair(plan, stair.id)!.run2 = value)),
-        { min: 0.3 },
-      );
-    }
-    paragraph(
-      "The stair goes up to the floor of the next story. The run is the first flight. The landing counts as one step.",
-      "note",
-    );
-    button(
-      "Turn around",
-      () =>
-        doc.edit((plan) => {
-          const s = findStair(plan, stair.id)!;
-          [s.a, s.b] = [s.b, s.a];
-        }),
-      { icon: "flipHinge" },
-    );
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-
-  if (selection?.kind === "chimney") {
-    const chimney = findChimney(plan, selection.id);
-    if (!chimney) return;
-    const extent = chimneyExtent(doc.building, plan, chimney);
-    heading("Chimney", "chimney");
-    const set = (key: "width" | "depth") => (value: number) =>
-      doc.edit((plan) => (findChimney(plan, chimney.id)![key] = value));
-    numberField("Width", chimney.width, set("width"), { min: 0.1 });
-    numberField("Depth", chimney.depth, set("depth"), { min: 0.1 });
-    numberField(
-      "Top",
-      extent.top,
-      (value) => doc.edit((plan) => (findChimney(plan, chimney.id)!.top = value)),
-      { min: -1e6 },
-    );
-    paragraph(
-      chimney.top === null
-        ? "The top is automatic: 0.8 m above the roof. Type a height to fix it."
-        : "The top is fixed. The height is above the ground.",
-      "note",
-    );
-    if (chimney.top !== null) {
-      button(
-        "Automatic top",
-        () => doc.edit((plan) => (findChimney(plan, chimney.id)!.top = null)),
-        { icon: "check" },
-      );
-    }
-    button("Delete", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-    return;
-  }
-
-  if (selection?.kind === "wall") {
-    const wall = findWall(plan, selection.id);
-    if (!wall) return;
-    heading("Wall", "wall");
-    numberField("Length", wallLength(plan, wall), (value) =>
-      doc.edit((plan) => setWallLength(plan, wall.id, value)),
-    );
-    numberField("Thickness", wall.thickness, (value) =>
-      doc.edit((plan) => (findWall(plan, wall.id)!.thickness = value)),
-    );
-    numberField("Height", wall.height, (value) =>
-      doc.edit((plan) => (findWall(plan, wall.id)!.height = value)),
-    );
-    // The color of each side: its own color, or the color of the room or the facade there.
-    const rooms = findRooms(plan);
-    for (const side of [1, -1] as const) {
-      const key = side === 1 ? "right" : "left";
-      const room = roomOnSide(plan, wall, side, rooms);
-      const own = wall.colors[key];
-      colorField(
-        room ? `Side to ${room.info?.name || "the room"}` : "Outside",
-        wallSideColor(doc.building, plan, wall, side, rooms),
-        (value) => doc.edit((plan) => (findWall(plan, wall.id)!.colors[key] = value)),
-        own
-          ? {
-              title: room ? "Color of the room" : "Color of the facade",
-              action: () => doc.edit((plan) => (findWall(plan, wall.id)!.colors[key] = null)),
-            }
-          : undefined,
-      );
-    }
-    const outer = isOuterWall(plan, wall);
-    const layers = wallLayers(doc.building, wall);
-    heading("Insulation", "layers");
-    stats([
-      [outer ? "Outer" : "Inner", "wall"],
-      [outer ? `${uValue(layers, "wall").toFixed(2)}` : "–", "U-value W/(m²K)"],
-    ]);
-    if (!outer) {
-      paragraph("An inner wall between two rooms does not lose heat.", "note");
-    } else if (wall.layers === null) {
-      paragraph("The wall has the layers of the outer walls of the building.", "note");
-      button(
-        "Own layers",
-        () =>
-          doc.edit(
-            (plan) =>
-              (findWall(plan, wall.id)!.layers = structuredClone(doc.building.envelope.wall)),
-          ),
-        { icon: "layers" },
-      );
-    } else {
-      layerEditor(wall.layers, "wall", (change) =>
-        doc.edit((plan) => change(findWall(plan, wall.id)!.layers!)),
-      );
-      button(
-        "Layers of the building",
-        () => doc.edit((plan) => (findWall(plan, wall.id)!.layers = null)),
-        { icon: "layers" },
-      );
-    }
-    button("Delete wall", () => doc.edit((plan) => removeWall(plan, wall.id)), {
-      kind: "danger",
-      icon: "trash",
-    });
-    return;
-  }
-
-  if (selection?.kind === "opening") {
-    const opening = findOpening(plan, selection.id);
-    if (!opening) return;
-    heading(opening.kind === "door" ? "Door" : "Window", opening.kind);
-    const select = document.createElement("select");
-    for (const kind of ["door", "window"] as OpeningKind[]) {
-      select.append(
-        new Option(kind === "door" ? "Door" : "Window", kind, false, kind === opening.kind),
-      );
-    }
-    select.addEventListener("change", () =>
-      doc.edit((plan) => (findOpening(plan, opening.id)!.kind = select.value as OpeningKind)),
-    );
-    field("Kind", select);
-    const set = (key: "width" | "height" | "sill" | "offset") => (value: number) =>
-      doc.edit((plan) => (findOpening(plan, opening.id)![key] = value));
-    numberField("Width", opening.width, set("width"), { min: 0.1 });
-    numberField("Height", opening.height, set("height"), { min: 0.1 });
-    numberField("Sill", opening.sill, set("sill"));
-    numberField("Position", opening.offset, set("offset"));
-    if (opening.kind === "door") {
-      const flip = (change: (o: Opening) => void) => () =>
-        doc.edit((plan) => change(findOpening(plan, opening.id)!));
-      button(
-        "Flip hinge",
-        flip((o) => (o.hinge = o.hinge === "a" ? "b" : "a")),
-        {
-          icon: "flipHinge",
-        },
-      );
-      button(
-        "Flip swing",
-        flip((o) => (o.swing = o.swing === 1 ? -1 : 1)),
-        {
-          icon: "flipSwing",
-        },
-      );
-    }
-    button("Delete", () => doc.edit((plan) => removeOpening(plan, opening.id)), {
-      kind: "danger",
-      icon: "trash",
-    });
-    return;
-  }
-
-  if (selection?.kind === "vertex") {
-    const vertex = findVertex(plan, selection.id);
-    if (!vertex) return;
-    heading("Corner", "select");
-    numberField(
-      "x",
-      vertex.x,
-      (value) => doc.edit((plan) => (getVertex(plan, vertex.id).x = value)),
-      {
-        min: -1e6,
-      },
-    );
-    numberField(
-      "y",
-      vertex.y,
-      (value) => doc.edit((plan) => (getVertex(plan, vertex.id).y = value)),
-      {
-        min: -1e6,
-      },
-    );
-    button("Delete corner", () => doc.edit((plan) => removeVertex(plan, vertex.id)), {
-      kind: "danger",
-      icon: "trash",
-    });
-    return;
-  }
-
-  switch (topic) {
-    case "overview":
-      return;
-    case "structure":
-      return renderStructurePanel();
-    case "utilities":
-      return renderUtilitiesPanel();
-    case "interior":
-      return renderInteriorPanel();
-    case "energy":
-      return renderEnergyTopic();
-    case "renovation":
-      return renderRenovationTopic();
-  }
-}
-
-/** The scan or the photo of a plan under the active story, and the assisted tracing. */
-function renderBackgroundPanel(): void {
-  const plan = doc.plan;
-  heading("Background", "image");
-  if (plan.background) {
-    rangeField("Opacity", plan.background.opacity, (value) =>
-      doc.edit((plan) => (plan.background!.opacity = value)),
-    );
-    button("Set scale", () => setTool("calibrate"), { icon: "ruler" });
-    button("Remove", () => doc.edit((plan) => (plan.background = null)), {
-      kind: "danger",
-      icon: "trash",
-    });
-    heading("Assisted tracing", "wand");
-    paragraph("These steps load OpenCV (about 10 MB) the first time.", "note");
-    button("Straighten", () => setTool("rectify"), { icon: "crop" });
-    rangeField("Clean-up strength", cleanStrength, (value) => (cleanStrength = value));
-    button("Clean up", cleanBackground, { icon: "wand" });
-    button("Suggest walls", suggestWalls, { icon: "wand" });
-    button("Recognize plan", recognizePlan, { kind: "primary", icon: "sparkle" });
-    paragraph(
-      "Recognize plan finds walls, doors, and windows with a neural network that runs in the browser. It needs about 15 MB the first time.",
-      "note",
-    );
-  } else {
-    paragraph("Load a scan or a photo of a plan as the background, and draw the walls on it.");
-    button("Load background", () => void loadBackground(), { icon: "image" });
-  }
-}
-
-/** The story, the walls and the rooms of the plan, the orientation, and the roofs. */
-function renderStructurePanel(): void {
-  const plan = doc.plan;
-  renderStoryPanel();
-  heading("Plan", "view2d");
-  const rooms = findRooms(plan);
-  const area = rooms.reduce((sum, room) => sum + room.area, 0);
-  stats([
-    [String(plan.walls.length), "walls"],
-    [String(plan.openings.length), "openings"],
-    [String(rooms.length), "rooms"],
-    [`${area.toFixed(1)} m²`, "area"],
-  ]);
-  paragraph("The area is inside the center lines of the walls.", "note");
-  // Before the first wall, the background comes first, because the tracing starts with it.
-  if (plan.walls.length === 0) {
-    renderBackgroundPanel();
-    renderBuildingPanel();
-  } else {
-    renderBuildingPanel();
-    renderBackgroundPanel();
-  }
-}
-
-const SYSTEM_HINTS: Record<ServiceSystem, string> = {
-  water:
-    "The pipes of cold water, hot water, and waste water, with the outlets, the drains, and the hot water tank.",
-  heating: "The pipes of the heating, the radiators, the manifolds, and the heat source.",
-  electric: "The sockets, the switches, the lights, the cables, and the photovoltaic system.",
-  comms: "The network, phone, TV, and SAT sockets and cables.",
-};
-
-/** The systems of the building services: their quantities, the heating, and the PV. */
-function renderUtilitiesPanel(): void {
-  const { runs, fixtures } = buildingQuantities(doc.building);
-  for (const { system, name } of SERVICE_SYSTEMS) {
-    heading(name, SYSTEM_ICONS[system]);
-    const own = {
-      runs: runs.filter((q) => runKind(q.kind).system === system),
-      fixtures: fixtures.filter((q) => fixtureType(q.type).system === system),
-    };
-    if (own.runs.length === 0 && own.fixtures.length === 0) {
-      paragraph(SYSTEM_HINTS[system], "note");
-    } else {
-      group("Quantities of the building", false, () => {
-        for (const run of own.runs) paragraph(`${run.name}: ${run.length.toFixed(1)} m`);
-        for (const fixture of own.fixtures) paragraph(`${fixture.name}: ${fixture.count}`);
-        if (own.runs.length > 0) paragraph("The lengths include the drops to the devices.", "note");
-      });
-    }
-    const add = button(`Add ${name.toLowerCase()}`, () => openServicesMenu(system, add), {
-      icon: "plus",
-    });
-    add.dataset.menu = "";
-    if (system === "heating") renderHeatingSystem();
-    if (system === "electric") renderPvPanel();
-  }
-}
-
-/** The furniture and the rooms of the active story. */
-function renderInteriorPanel(): void {
-  const plan = doc.plan;
-  heading("Furniture", "sofa");
-  const total = doc.building.stories.reduce((sum, story) => sum + story.furniture.length, 0);
-  stats([
-    [String(plan.furniture.length), `pieces on ${plan.name}`],
-    [String(total), "pieces in the building"],
-  ]);
-  button("Open the furniture catalog", () => catalog.open(), { kind: "primary", icon: "sofa" });
-  paragraph(
-    "Click a piece on the plan to move it, to turn it, or to change its size. R turns a selected piece.",
-    "note",
-  );
-  const rooms = findRooms(plan);
-  if (rooms.length === 0) return;
-  heading("Rooms", "view2d");
-  for (const room of rooms) {
-    button(room.info?.name || "Room", () => editor.select({ kind: "room", id: room.key }), {
-      icon: "view2d",
-      detail: `${room.area.toFixed(2)} m²`,
-    });
-  }
-  paragraph("Click a room to change its name, its height, and the color of its walls.", "note");
-}
-
-/** The location and the climate, the envelope, the heating per year, and the PV yield. */
-function renderEnergyTopic(): void {
-  // The wide panel of the energy has two columns when it has room: the inputs and the results.
-  const columns = document.createElement("div");
-  columns.className = "panel-columns";
-  const inputs = document.createElement("div");
-  const results = document.createElement("div");
-  inputs.className = results.className = "panel-column";
-  columns.append(inputs, results);
-  panel.append(columns);
-  column = inputs;
-  renderLocationPanel();
-  renderEnvelopeInputs();
-  renderHeatingInputs();
-  renderElectricityInputs();
-  column = results;
-  renderHeatLoss();
-  renderHeatingResults();
-  renderBalance();
-  const building = doc.building;
-  if (building.pv.length > 0) {
-    const total = pvSummary(building);
-    heading("Photovoltaic", "sparkle");
-    stats([
-      [`${total.peak.toFixed(1)} kWp`, `${total.count} panels`],
-      [`${Math.round(total.yield)} kWh`, "per year"],
-    ]);
-    pvSourceNote();
-    button("Change the PV fields", () => setTopic("utilities"), { icon: "bolt" });
-  }
-  column = panel;
-}
-
-function textField(
-  text: string,
-  value: string,
-  change: (value: string) => void,
-  options: { placeholder?: string; allowEmpty?: boolean } = {},
-): void {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value;
-  if (options.placeholder) input.placeholder = options.placeholder;
-  input.addEventListener("change", () => {
-    const trimmed = input.value.trim();
-    if (trimmed || options.allowEmpty) change(trimmed);
-  });
-  field(text, input);
-}
-
-function selectField<T extends string>(
-  text: string,
-  value: T,
-  options: [T, string][],
-  change: (value: T) => void,
-): void {
-  const select = document.createElement("select");
-  for (const [key, label] of options) select.append(new Option(label, key, false, key === value));
-  select.addEventListener("change", () => change(select.value as T));
-  field(text, select);
-}
-
-/**
- * The living area by the WoFlV of a room under a roof: the floor area with a clear height of
- * 2 m or more counts fully, 1 m to 2 m counts half. A room that the roof does not cut shows
- * nothing.
- */
-function renderLivingArea(story: Story, room: Room): void {
-  const area = livingArea(doc.building, story, room);
-  if (area.living >= area.floor - 0.005 && !roofIsCeiling(doc.building, story)) return;
-  stats([
-    [`${area.living.toFixed(1)} m² of ${area.floor.toFixed(1)} m²`, "living area (WoFlV)", true],
-  ]);
-  paragraph(
-    `The roof is over the room. ${area.full.toFixed(1)} m² have a clear height of 2 m or more and count fully. ${area.half.toFixed(1)} m² have 1 m to 2 m and count half. The area under 1 m does not count. The 2D editor shows the lines of 1 m and 2 m.`,
-    "note",
-  );
-}
-
-/** The living area by the WoFlV of all rooms of a story, if a roof cuts a room of it. */
-function renderStoryLivingArea(story: Story): void {
-  const areas = findRooms(story).map((room) => livingArea(doc.building, story, room));
-  const floor = areas.reduce((sum, a) => sum + a.floor, 0);
-  const living = areas.reduce((sum, a) => sum + a.living, 0);
-  if (areas.length === 0 || (living >= floor - 0.005 && !roofIsCeiling(doc.building, story))) {
-    return;
-  }
-  stats([[`${living.toFixed(1)} m² of ${floor.toFixed(1)} m²`, "living area (WoFlV)", true]]);
-}
-
-/** The values of the active story. A change of its height moves the stories above with it. */
-function renderStoryPanel(): void {
-  const story = doc.plan;
-  const id = story.id;
-  heading("Story", "layers");
-  textField("Name", story.name, (value) =>
-    doc.editBuilding((b) => (findStory(b, id)!.name = value)),
-  );
-  numberField(
-    "Floor level",
-    story.elevation,
-    (value) =>
-      doc.editBuilding((b) => {
-        findStory(b, id)!.elevation = value;
-        sortStories(b);
-      }),
-    { min: -1e6 },
-  );
-  numberField(
-    "Story height",
-    story.height,
-    (value) =>
-      doc.editBuilding((b) => {
-        const s = findStory(b, id)!;
-        const delta = value - s.height;
-        for (const other of b.stories) if (other.elevation > s.elevation) other.elevation += delta;
-        s.height = value;
-      }),
-    { min: 0.5 },
-  );
-  checkField("Heated", story.heated, (value) =>
-    doc.editBuilding((b) => (findStory(b, id)!.heated = value)),
-  );
-  renderStoryLivingArea(story);
-  if (doc.building.stories.length > 1) {
-    button(
-      "Delete story",
-      () => {
-        doc.editBuilding((b) => {
-          b.stories = b.stories.filter((s) => s.id !== id);
-          // A roof on the deleted story goes away with its PV fields.
-          const gone = new Set(b.roofs.filter((r) => r.storyId === id).map((r) => r.id));
-          b.roofs = b.roofs.filter((r) => !gone.has(r.id));
-          b.pv = b.pv.filter((a) => !gone.has(a.roofId));
-        });
-      },
-      { kind: "danger", icon: "trash" },
-    );
-  }
-}
-
-/** The orientation and the roofs of the building. */
-function renderBuildingPanel(): void {
-  const building = doc.building;
-  heading("Building", "roof");
-  numberField(
-    "North",
-    building.north,
-    (value) => doc.editBuilding((b) => (b.north = ((value % 360) + 360) % 360)),
-    { min: -360, step: 1, unit: "°" },
-  );
-  colorField("Facade", building.facade, (value) => doc.editBuilding((b) => (b.facade = value)));
-  heading("Roofs", "roof");
-  for (const roof of building.roofs) {
-    const story = findStory(building, roof.storyId);
-    button(
-      roof.name,
-      () => {
-        if (story && story.id !== doc.activeStoryId) doc.setActiveStory(story.id);
-        editor.select({ kind: "roof", id: roof.id });
-      },
-      { icon: "roof", detail: story?.name ?? "No story" },
-    );
-  }
-  paragraph(
-    `Add a roof on the walls of ${doc.plan.name}. Then click it to change its sides, its outline, and its dormers.`,
-    "note",
-  );
-  for (const [preset, name] of [
-    ["gable", "Gable"],
-    ["half-hip", "Half hip"],
-    ["hip", "Hip"],
-    ["shed", "Shed"],
-    ["flat", "Flat"],
-  ] as const) {
-    button(name, () => addRoof(preset), { icon: "plus" });
-  }
-}
-
-/** Adds a roof on the outline of the walls of the active story. */
-function addRoof(preset: RoofKind): void {
-  const roof = newRoof(doc.building, doc.plan, preset);
-  if (!roof) {
-    showStatus("The walls of this story close no outline, so the roof has no outline yet.", true);
-    return;
-  }
-  doc.editBuilding((b) => b.roofs.push(roof));
-  editor.select({ kind: "roof", id: roof.id });
-  showStatus("Added the roof. Drag its corners, or drag a + to add a corner.");
-}
-
-/** The panel of a roof: its settings, its sides, its dormers, and its windows. */
-function renderRoofPanel(roofId: string, corner: number | null): void {
-  const building = doc.building;
-  const roof = building.roofs.find((r) => r.id === roofId);
-  if (!roof) return;
-  const change = (edit: (roof: Roof) => void) =>
-    doc.editBuilding((b) => edit(b.roofs.find((r) => r.id === roofId)!));
-  const geometry = roofGeometryOf(building, roof);
-  const story = findStory(building, roof.storyId);
-
-  if (corner !== null) {
-    const point = roof.outline[corner];
-    heading(`${roof.name} · corner ${corner + 1}`, "roof");
-    numberField("x", point.x, (v) => change((r) => (r.outline[corner].x = v)), { min: -1e6 });
-    numberField("y", point.y, (v) => change((r) => (r.outline[corner].y = v)), { min: -1e6 });
-    paragraph("Drag the corner on the plan. Delete removes it.", "note");
-    button("Whole roof", () => editor.select({ kind: "roof", id: roofId }), { icon: "roof" });
-    return;
-  }
-
-  heading(roof.name, "roof");
-  stats([
-    [`${geometry.top.toFixed(2)} m`, "top above ground"],
-    [String(roof.outline.length), "sides"],
-  ]);
-  textField("Name", roof.name, (v) => change((r) => (r.name = v)));
-  colorField("Color", roof.color, (v) => change((r) => (r.color = v)));
-  colorField("Underside", roof.underside, (v) => change((r) => (r.underside = v)));
-  selectField(
-    "On story",
-    roof.storyId,
-    building.stories.map((s) => [s.id, s.name]),
-    (storyId) => change((r) => (r.storyId = storyId)),
-  );
-  numberField(
-    "Eave height",
-    roof.base ?? (story ? roofBase(building, story) : 0),
-    (v) => change((r) => (r.base = v)),
-    { min: -100 },
-  );
-  if (roof.base !== null) {
-    button("Usual eave height", () => change((r) => (r.base = null)), {
-      icon: "layers",
-    });
-  }
-  checkField("Flat roof", roof.flat, (v) => change((r) => (r.flat = v)));
-  paragraph("Presets for all sides:", "note");
-  for (const [preset, name] of [
-    ["gable", "Gable"],
-    ["half-hip", "Half hip"],
-    ["hip", "Hip"],
-    ["shed", "Shed"],
-  ] as const) {
-    button(
-      name,
-      () =>
-        change((r) => {
-          const pitch = r.sides.find((side) => side.kind === "eave")?.pitch ?? 35;
-          const overhang = r.sides[0]?.overhang ?? 0.4;
-          r.sides = presetSides(r.outline, preset, pitch, overhang);
-          r.flat = false;
-        }),
-      { icon: "roof" },
-    );
-  }
-  button(
-    "Outline from the walls",
-    () => {
-      const outline = story ? planOutline(story) : null;
-      if (!outline) {
-        showStatus("The walls of the story close no outline.", true);
-        return;
-      }
-      change((r) => {
-        const pitch = r.sides.find((side) => side.kind === "eave")?.pitch ?? 35;
-        r.outline = outline;
-        r.sides = presetSides(outline, "gable", pitch, r.sides[0]?.overhang ?? 0.4);
-        r.dormers = [];
-        r.windows = [];
-      });
-    },
-    { icon: "fit" },
-  );
-
-  const sideLength = (i: number) => {
-    const p = roof.outline[i];
-    const q = roof.outline[(i + 1) % roof.outline.length];
-    return Math.hypot(q.x - p.x, q.y - p.y);
-  };
-  group("Sides", true, () => {
-    roof.sides.forEach((side, i) => {
-      const row = document.createElement("div");
-      row.className = "side-row";
-      const label = document.createElement("span");
-      label.textContent = String(i + 1);
-      const kind = document.createElement("select");
-      kind.append(
-        new Option("Eave", "eave", false, side.kind === "eave"),
-        new Option("Gable", "gable", false, side.kind === "gable"),
-        new Option("Half hip", "half-hip", false, side.kind === "half-hip"),
-      );
-      kind.addEventListener("change", () =>
-        change((r) => {
-          const next = r.sides[i];
-          next.kind = kind.value as RoofSide["kind"];
-          if (next.kind === "half-hip") {
-            next.gableHeight ??= halfHipHeight(sideLength(i), next.pitch);
-          } else delete next.gableHeight;
-        }),
-      );
-      const pitch = document.createElement("input");
-      pitch.type = "number";
-      pitch.min = "1";
-      pitch.max = "85";
-      pitch.value = String(side.pitch);
-      pitch.title = "Pitch in degrees";
-      pitch.disabled = side.kind === "gable";
-      pitch.addEventListener("change", () => {
-        const v = Number(pitch.value);
-        if (v > 0 && v < 90) change((r) => (r.sides[i].pitch = v));
-      });
-      const overhang = document.createElement("input");
-      overhang.type = "number";
-      overhang.step = "0.05";
-      overhang.min = "0";
-      overhang.value = String(side.overhang);
-      overhang.title = "Overhang in meters";
-      overhang.addEventListener("change", () => {
-        const v = Number(overhang.value);
-        if (v >= 0) change((r) => (r.sides[i].overhang = v));
-      });
-      row.append(label, kind, pitch, overhang);
-      section.append(row);
-      if (side.kind === "half-hip") {
-        numberField(
-          `Side ${i + 1}: gable wall`,
-          side.gableHeight ?? 0,
-          (v) => change((r) => (r.sides[i].gableHeight = v)),
-          { step: 0.05, unit: "m" },
-        );
-      }
-    });
-    paragraph(
-      "Each row: the kind, the pitch in °, and the overhang in m. A half-hip side has a gable wall up to its height, and a small hip face above it.",
-      "note",
-    );
-  });
-
-  const eaves = roof.sides
-    .map((side, i) => ({ side, i }))
-    .filter(({ side }) => side.kind === "eave")
-    .map(({ i }) => i);
-  // A new dormer or window goes on the longest eave side. The copy keeps `eaves` in side order.
-  const longest = [...eaves].sort((a, b) => sideLength(b) - sideLength(a))[0];
-
-  const misfit = (id: string) => {
-    if (geometry.misfits.includes(id)) {
-      paragraph(
-        "It does not fit on the roof face of its side, so the 3D view does not show it. Move it nearer to the eave, or make it smaller.",
-        "warning",
-      );
-    }
-  };
-  const hasMisfit = (items: { id: string }[]) => items.some((i) => geometry.misfits.includes(i.id));
-
-  group(`Dormers · ${roof.dormers.length}`, hasMisfit(roof.dormers), () => {
-    roof.dormers.forEach((dormer) => {
-      const set = (edit: (d: Dormer) => void) =>
-        change((r) => edit(r.dormers.find((d) => d.id === dormer.id)!));
-      paragraph(`Dormer on side ${dormer.side + 1}`);
-      misfit(dormer.id);
-      selectField(
-        "Side",
-        String(dormer.side),
-        eaves.map((i) => [String(i), `Side ${i + 1}`]),
-        (v) => set((d) => (d.side = Number(v))),
-      );
-      selectField(
-        "Kind",
-        dormer.kind,
-        [
-          ["gable", "Gable"],
-          ["shed", "Shed"],
-          ["flat", "Flat"],
-        ],
-        (v) => set((d) => (d.kind = v)),
-      );
-      numberField("Position", dormer.offset, (v) => set((d) => (d.offset = v)));
-      numberField("From eave", dormer.distance, (v) => set((d) => (d.distance = v)));
-      numberField("Width", dormer.width, (v) => set((d) => (d.width = v)), { min: 0.4 });
-      numberField("Wall height", dormer.height, (v) => set((d) => (d.height = v)), { min: 0.3 });
-      if (dormer.kind !== "flat") {
-        numberField("Pitch", dormer.pitch, (v) => set((d) => (d.pitch = v)), {
-          min: 1,
-          step: 1,
-          unit: "°",
-        });
-      }
-      button(
-        "Remove",
-        () => change((r) => (r.dormers = r.dormers.filter((d) => d.id !== dormer.id))),
-        {
-          kind: "danger",
-          icon: "trash",
-        },
-      );
-    });
-    if (longest !== undefined && !roof.flat) {
-      button(
-        "Add a dormer",
-        () =>
-          change((r) =>
-            r.dormers.push({
-              id: newId("dm"),
-              side: longest,
-              offset: sideLength(longest) / 2,
-              distance: 1,
-              width: 1.8,
-              height: 1.2,
-              kind: "gable",
-              pitch: 25,
-            }),
-          ),
-        { icon: "plus" },
-      );
-    }
-  });
-
-  group(`Roof windows · ${roof.windows.length}`, hasMisfit(roof.windows), () => {
-    roof.windows.forEach((window) => {
-      const set = (edit: (w: RoofWindow) => void) =>
-        change((r) => edit(r.windows.find((w) => w.id === window.id)!));
-      paragraph(`Window on side ${window.side + 1}`);
-      misfit(window.id);
-      selectField(
-        "Side",
-        String(window.side),
-        eaves.map((i) => [String(i), `Side ${i + 1}`]),
-        (v) => set((w) => (w.side = Number(v))),
-      );
-      numberField("Position", window.offset, (v) => set((w) => (w.offset = v)));
-      numberField("From eave", window.distance, (v) => set((w) => (w.distance = v)));
-      numberField("Width", window.width, (v) => set((w) => (w.width = v)), { min: 0.3 });
-      numberField("Length", window.length, (v) => set((w) => (w.length = v)), { min: 0.3 });
-      button(
-        "Remove",
-        () => change((r) => (r.windows = r.windows.filter((w) => w.id !== window.id))),
-        {
-          kind: "danger",
-          icon: "trash",
-        },
-      );
-    });
-    if (longest !== undefined && !roof.flat) {
-      button(
-        "Add a roof window",
-        () =>
-          change((r) =>
-            r.windows.push({
-              id: newId("rw"),
-              side: longest,
-              offset: sideLength(longest) / 3,
-              distance: 1.5,
-              width: 0.78,
-              length: 1.4,
-            }),
-          ),
-        { icon: "plus" },
-      );
-    }
-  });
-
-  paragraph("Drag the corners of the outline on the plan. Drag a + to add a corner.", "note");
-  button("Delete roof", () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-}
-
-// ----- Location and climate -----
-
-/** The state of the location group. It is not in the plan, so it stays across renders. */
-/** True or false after the user opens or closes the place group, null before. */
-let locationOpen: boolean | null = null;
-let placeQuery = "";
-let placeResults: Place[] = [];
-/** The text of the request that runs, or null. */
-let locationBusy: string | null = null;
-let locationMessage: { text: string; error: boolean } | null = null;
-let climateRequest: AbortController | null = null;
-
-const compassName = (azimuth: number) =>
-  ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(azimuth / 45) % 8];
-
-/** A field for a latitude or a longitude in degrees. An empty field shows no value. */
-function coordinateField(
-  text: string,
-  value: number | null,
-  limit: number,
-  change: (value: number) => void,
-): void {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.step = "0.0001";
-  input.min = String(-limit);
-  input.max = String(limit);
-  input.value = value === null ? "" : String(Math.round(value * 10000) / 10000);
-  input.addEventListener("change", () => {
-    const parsed = Number(input.value);
-    if (input.value !== "" && Number.isFinite(parsed) && Math.abs(parsed) <= limit) change(parsed);
-  });
-  field(text, input, "°");
-}
-
-/** The center of the walls of the active story, or the origin. A new location is there. */
-function planCenter(): Point {
-  const box = storyBox(doc.plan);
-  return box ? { x: (box[0].x + box[2].x) / 2, y: (box[0].y + box[2].y) / 2 } : { x: 0, y: 0 };
-}
-
-/** Changes the location of the building. A building without a location gets one. */
-function editLocation(edit: (location: PlanLocation) => void) {
-  doc.editBuilding((b) => {
-    b.location ??= { name: "", latitude: 0, longitude: 0, ...planCenter() };
-    edit(b.location);
-  });
-}
-
-/** Searches places by name. This sends the name to open-meteo.com. */
-async function findPlaces(query: string): Promise<void> {
-  placeQuery = query;
-  if (locationBusy) return;
-  if (query.trim().length < 2) {
-    locationMessage = { text: "Type at least two letters of the place.", error: true };
-    renderPanel();
-    return;
-  }
-  locationBusy = "Searching the place…";
-  locationMessage = null;
-  renderPanel();
-  try {
-    placeResults = await searchPlaces(query);
-    if (placeResults.length === 0) {
-      locationMessage = { text: `Found no place for "${query.trim()}".`, error: false };
-    }
-  } catch (error) {
-    placeResults = [];
-    locationMessage = { text: (error as Error).message, error: true };
-  } finally {
-    locationBusy = null;
-    renderPanel();
-  }
-}
-
-/**
- * Downloads the climate of the location and stores it in the building. This sends the
- * coordinates to open-meteo.com. If the location changes during the download, the result goes
- * away.
- */
-async function loadClimate(): Promise<void> {
-  const location = doc.building.location;
-  if (!location || locationBusy) return;
-  const { latitude, longitude } = location;
-  climateRequest = new AbortController();
-  locationBusy = `Loading ${CLIMATE_YEARS} years of weather data from open-meteo.com…`;
-  locationMessage = null;
-  renderPanel();
-  try {
-    const climate = await downloadClimate(latitude, longitude, {
-      signal: climateRequest.signal,
-    });
-    const now = doc.building.location;
-    if (now?.latitude !== latitude || now.longitude !== longitude) {
-      locationMessage = {
-        text: "The location changed during the download. Load the climate again.",
-        error: true,
-      };
-    } else {
-      doc.editBuilding((b) => (b.climate = climate));
-      locationMessage = {
-        text: "Loaded the climate. The plan stores it, so the app needs no network for it now.",
-        error: false,
-      };
-    }
-  } catch (error) {
-    locationMessage = climateRequest.signal.aborted
-      ? { text: "Stopped the download.", error: false }
-      : { text: (error as Error).message, error: true };
-  } finally {
-    locationBusy = null;
-    climateRequest = null;
-    renderPanel();
-  }
-}
-
-/** The location: the place search, the coordinates, the map under the plan, and the climate. */
-function renderLocationPanel(): void {
-  const building = doc.building;
-  const location = building.location;
-  heading("Location", "pin");
-  const title = location?.name
-    ? `Place · ${location.name}`
-    : location
-      ? `Place · ${location.latitude.toFixed(2)}, ${location.longitude.toFixed(2)}`
-      : "Place";
-  group(title, locationOpen ?? !location, () => {
-    const search = document.createElement("input");
-    search.type = "search";
-    search.placeholder = "Town or city";
-    search.value = placeQuery;
-    search.addEventListener("input", () => (placeQuery = search.value));
-    search.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") void findPlaces(search.value);
-    });
-    field("Search", search);
-    button("Search", () => void findPlaces(search.value), { icon: "search" });
-    for (const place of placeResults) {
-      button(
-        place.label,
-        () => {
-          placeResults = [];
-          locationMessage = null;
-          editLocation((l) => {
-            l.name = place.label;
-            l.latitude = place.latitude;
-            l.longitude = place.longitude;
-          });
-        },
-        { icon: "pin" },
-      );
-    }
-    if (location) {
-      textField("Name", location.name, (value) => editLocation((l) => (l.name = value)), {
-        allowEmpty: true,
-      });
-    }
-    coordinateField("Latitude", location?.latitude ?? null, 90, (value) =>
-      editLocation((l) => (l.latitude = value)),
-    );
-    coordinateField("Longitude", location?.longitude ?? null, 180, (value) =>
-      editLocation((l) => (l.longitude = value)),
-    );
-    if (location) {
-      const moving = editor.tool === "map";
-      button(
-        moving ? "Done" : "Move the map",
-        () => {
-          if (moving) return setTool("select");
-          // Without a map, the map of OpenStreetMap shows, so that there is something to move.
-          if (!editor.mapSource) setMapSource("osm");
-          setTool("map");
-        },
-        { icon: moving ? "check" : "hand", kind: moving ? "primary" : undefined },
-      );
-      // The point of the plan at the place: the map in the Layers menu lies under it.
-      const limit = { min: -10000, step: 0.1 };
-      numberField("Plan point x", location.x, (v) => editLocation((l) => (l.x = v)), limit);
-      numberField("Plan point y", location.y, (v) => editLocation((l) => (l.y = v)), limit);
-      paragraph(
-        "The plan point is at the latitude and the longitude. Move the map, or change the plan point and North, until the map fits the plan.",
-        "note",
-      );
-    }
-  });
-  const details = section.lastElementChild as HTMLDetailsElement;
-  details.addEventListener("toggle", () => (locationOpen = details.open));
-  if (locationBusy) {
-    paragraph(locationBusy, "busy");
-    if (climateRequest) button("Stop", () => climateRequest?.abort(), { icon: "close" });
-  } else if (location) {
-    button(building.climate ? "Load the climate again" : "Load climate", () => void loadClimate(), {
-      kind: "primary",
-    });
-  }
-  paragraph(
-    "Search and Load climate send the place to open-meteo.com. The app sends nothing before you click. The plan stores the climate, so it works offline after that.",
-    "note",
-  );
-  if (locationMessage) {
-    paragraph(locationMessage.text, locationMessage.error ? "warning" : "note");
-  }
-  if (building.climate) renderClimateSummary();
-}
-
-/** The values of the stored climate, and the credit of the data. */
-function renderClimateSummary(): void {
-  const building = doc.building;
-  const climate = building.climate!;
-  const summary = climateSummary(climate);
-  const location = building.location;
-  if (
-    location &&
-    (Math.abs(location.latitude - climate.latitude) > 0.01 ||
-      Math.abs(location.longitude - climate.longitude) > 0.01)
-  ) {
-    paragraph(
-      `The climate is for ${climate.latitude.toFixed(2)}, ${climate.longitude.toFixed(2)}. Load it again for the new location.`,
-      "warning",
-    );
-  }
-  // The best roof face of the building, else the best tilt toward the equator.
-  const faces = faceInfo(building).map((f) => ({
-    ...f,
-    perKwp: specificYield(building, f.tilt, f.azimuth),
-  }));
-  const best = faces.sort((p, q) => q.perKwp - p.perKwp)[0];
-  stats([
-    [`${summary.meanTemperature.toFixed(1)} °C`, "mean temperature"],
-    [`${summary.designTemperature.toFixed(1)} °C`, "design temperature"],
-    [`${Math.round(summary.degreeDays)} K·d`, `degree days ${DEGREE_DAY_BASE}/${DEGREE_DAY_LIMIT}`],
-    [`${Math.round(summary.globalIrradiation)} kWh/m²`, "sun on the ground per year"],
-    best
-      ? [
-          `${Math.round(best.perKwp)} kWh/kWp`,
-          `PV on the best roof face (${compassName(best.azimuth)} ${Math.round(best.tilt)}°)`,
-          true,
-        ]
-      : [
-          `${Math.round(summary.optimum.yield)} kWh/kWp`,
-          `PV at the best tilt (${compassName(summary.optimum.azimuth)} ${summary.optimum.tilt}°)`,
-          true,
-        ],
-  ]);
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  group(`Climate ${climate.firstYear} to ${climate.lastYear}`, false, () => {
-    for (let i = 0; i < 12; i += 3) {
-      paragraph(
-        summary.monthly
-          .slice(i, i + 3)
-          .map((t, j) => `${months[i + j]} ${t.toFixed(1)} °C`)
-          .join(" · "),
-      );
-    }
-    paragraph(
-      `A typical year: the mean of each hour of ${climate.firstYear} to ${climate.lastYear}, loaded on ${climate.downloaded}. The design temperature is the coldest mean of 48 hours in these years. The degree days count the days below ${DEGREE_DAY_LIMIT} °C against ${DEGREE_DAY_BASE} °C inside.`,
-      "note",
-    );
-    button("Remove the climate", () => doc.editBuilding((b) => (b.climate = null)), {
-      kind: "danger",
-      icon: "trash",
-    });
-  });
-  const credit = document.createElement("p");
-  credit.className = "note";
-  const link = document.createElement("a");
-  link.href = ATTRIBUTION_URL;
-  link.target = "_blank";
-  link.rel = "noopener";
-  link.textContent = ATTRIBUTION;
-  credit.append(link, " (CC BY 4.0).");
-  section.append(credit);
-}
-
-/** A button that puts the design temperature of the location into the envelope. */
-function designTemperatureButton(): void {
-  const climate = doc.building.climate;
-  if (!climate) return;
-  const value = climate.designTemperature;
-  if (doc.building.envelope.outside === value) {
-    paragraph("Outside is the design temperature of the location.", "note");
-    return;
-  }
-  button(`Use ${value.toFixed(1)} °C of the location`, () =>
-    doc.editBuilding((b) => (b.envelope.outside = value)),
-  );
-}
-
-/** Says where the PV yield comes from. */
-function pvSourceNote(): void {
-  paragraph(
-    doc.building.climate
-      ? "The yield comes from the climate of the location, without shade."
-      : "The yield is a general estimate for Central Europe. Load the climate of the location for a better value.",
-    "note",
-  );
-}
-
-function checkField(text: string, value: boolean, change: (value: boolean) => void): void {
-  const label = document.createElement("label");
-  label.className = "field check-field";
-  label.append(text);
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.checked = value;
-  input.addEventListener("change", () => change(input.checked));
-  label.append(input);
-  section.append(label);
-}
-
-/** A group that the user can open and close. The helpers append to it while it is open. */
-function group(title: string, open: boolean, fill: () => void): void {
-  const details = document.createElement("details");
-  details.className = "group";
-  details.open = open;
-  const summary = document.createElement("summary");
-  summary.textContent = title;
-  details.append(summary);
-  section.append(details);
-  const outer = section;
-  section = details;
-  fill();
-  section = outer;
-}
-
-/**
- * Edits a list of layers from the inside to the outside: the material and the thickness of each
- * layer. `change` gets a function that changes the layers in the new building.
- */
-function layerEditor(
-  layers: Layer[],
-  kind: "wall" | "roof" | "floor",
-  change: (edit: (layers: Layer[]) => void) => void,
-): void {
-  layers.forEach((layer, i) => {
-    const row = document.createElement("div");
-    row.className = "layer-row";
-    const select = document.createElement("select");
-    for (const m of MATERIALS) {
-      select.append(new Option(`${m.name} (λ ${m.lambda})`, m.id, false, m.id === layer.material));
-    }
-    select.addEventListener("change", () => change((list) => (list[i].material = select.value)));
-    const input = document.createElement("input");
-    input.type = "number";
-    input.step = "1";
-    input.min = "1";
-    input.value = String(Math.round(layer.thickness * 1000) / 10);
-    input.title = "Thickness in cm";
-    input.addEventListener("change", () => {
-      const cm = Number(input.value);
-      if (cm > 0) change((list) => (list[i].thickness = cm / 100));
-    });
-    const unit = document.createElement("span");
-    unit.textContent = "cm";
-    const remove = document.createElement("button");
-    remove.className = "icon-button";
-    remove.title = "Remove the layer";
-    remove.innerHTML = icon("close");
-    remove.addEventListener("click", () => change((list) => list.splice(i, 1)));
-    row.append(select, input, unit, remove);
-    section.append(row);
-  });
-  paragraph(
-    `From the inside to the outside. U = ${uValue(layers, kind).toFixed(2)} W/(m²K), ${(layersThickness(layers) * 100).toFixed(1)} cm.`,
-    "note",
-  );
-  button(
-    "Add a layer",
-    () => change((list) => list.push({ material: "mineral-wool", thickness: 0.1 })),
-    {
-      icon: "plus",
-    },
-  );
-}
-
-/** The heat loss of the building and its envelope: the layers, the openings, the climate. */
-/** The heat loss of the building at the design temperature. */
-function renderHeatLoss(): void {
-  const envelope = doc.building.envelope;
-  const summary = buildingHeatLoss(doc.building);
-  heading("Heat loss", "flame");
-  stats([
-    [`${(summary.total / 1000).toFixed(1)} kW`, "heat loss"],
-    [`${Math.round(summary.perArea)} W/m²`, "per heated area"],
-  ]);
-  paragraph(
-    `At ${envelope.outside} °C outside and ${envelope.inside} °C inside. An estimate, not a calculation by a standard. Click a room or a wall on the plan for its own values.`,
-    "note",
-  );
-}
-
-/** The layers of the envelope, the U-values of the openings, and the temperatures. */
-function renderEnvelopeInputs(): void {
-  const envelope = doc.building.envelope;
-  heading("Envelope", "layers");
-  const editEnvelope = (edit: (envelope: Envelope) => void) =>
-    doc.editBuilding((b) => edit(b.envelope));
-  group(`Outer walls · U ${uValue(envelope.wall, "wall").toFixed(2)}`, false, () =>
-    layerEditor(envelope.wall, "wall", (change) => editEnvelope((e) => change(e.wall))),
-  );
-  group(`Roof · U ${uValue(envelope.roof, "roof").toFixed(2)}`, false, () =>
-    layerEditor(envelope.roof, "roof", (change) => editEnvelope((e) => change(e.roof))),
-  );
-  group(`Floor on the ground · U ${uValue(envelope.floor, "floor").toFixed(2)}`, false, () =>
-    layerEditor(envelope.floor, "floor", (change) => editEnvelope((e) => change(e.floor))),
-  );
-  group(
-    `Slab to an unheated story · U ${uValue(envelope.ceiling, "floor").toFixed(2)}`,
-    false,
-    () =>
-      layerEditor(envelope.ceiling, "floor", (change) => editEnvelope((e) => change(e.ceiling))),
-  );
-  const stories = doc.building.stories;
-  const heated = stories.filter((s) => s.heated).length;
-  group(`Heated stories · ${heated} of ${stories.length}`, false, () => {
-    for (const story of [...stories].reverse()) {
-      checkField(story.name, story.heated, (value) =>
-        doc.editBuilding((b) => (findStory(b, story.id)!.heated = value)),
-      );
-    }
-    paragraph(
-      "An unheated story, for example a cold cellar or attic, loses no heat. The heated rooms next to it lose heat through the slab between them.",
-      "note",
-    );
-  });
-  group("Windows, doors, and climate", false, () => {
-    const set = (key: "windowU" | "doorU" | "outside" | "inside") => (value: number) =>
-      editEnvelope((e) => (e[key] = value));
-    numberField("Window U", envelope.windowU, set("windowU"), { min: 0.1, step: 0.1, unit: "" });
-    numberField("Door U", envelope.doorU, set("doorU"), { min: 0.1, step: 0.1, unit: "" });
-    numberField("Outside", envelope.outside, set("outside"), { min: -60, step: 1, unit: "°C" });
-    numberField("Inside", envelope.inside, set("inside"), { min: -60, step: 0.5, unit: "°C" });
-    designTemperatureButton();
-  });
-}
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-/** A number of kWh with a thin space between the thousands, for example "12 340 kWh". */
-const kwh = (value: number) =>
-  `${Math.round(value).toLocaleString("en").replace(/,/g, "\u2009")} kWh`;
-
-/** The heat source of the building and its efficiency, in the topic of the utilities. */
-function renderHeatingSystem(): void {
-  const heating = doc.building.envelope.heating;
-  const setHeating = (edit: (h: typeof heating) => void) =>
-    doc.editBuilding((b) => edit(b.envelope.heating));
-  selectField(
-    "Heating",
-    heating.kind,
-    Object.entries(HEATING_KINDS).map(([kind, k]) => [kind as typeof heating.kind, k.name]),
-    (kind) => doc.editBuilding((b) => (b.envelope.heating = defaultHeating(kind))),
-  );
-  const pump = heating.kind === "heat-pump";
-  numberField(
-    pump ? "Performance factor" : "Efficiency",
-    heating.efficiency,
-    (value) => value > 0 && setHeating((h) => (h.efficiency = value)),
-    { min: 0.1, step: pump ? 0.1 : 0.01, unit: "" },
-  );
-}
-
-/** The heat source of the building, from Utilities, and the price of its energy. */
-function renderHeatingInputs(): void {
-  const heating = doc.building.envelope.heating;
-  const info = HEATING_KINDS[heating.kind];
-  heading("Heating", "flame");
-  const setHeating = (edit: (h: typeof heating) => void) =>
-    doc.editBuilding((b) => edit(b.envelope.heating));
-  const pump = heating.kind === "heat-pump";
-  button(info.name, () => setTopic("utilities"), {
-    icon: "flame",
-    detail: `${pump ? "Performance factor" : "Efficiency"} ${heating.efficiency} · change it in Utilities`,
-  });
-  if (info.energy === "electricity") {
-    paragraph("The heating uses the price of electricity of the Electricity group.", "note");
-  } else {
-    numberField(`Price of ${info.energy}`, heating.price, (v) => setHeating((h) => (h.price = v)), {
-      step: 0.01,
-      unit: "€/kWh",
-    });
-  }
-
-  const water = doc.building.envelope.hotWater;
-  heading("Hot water", "drop");
-  const setWater = (edit: (w: typeof water) => void) =>
-    doc.editBuilding((b) => edit(b.envelope.hotWater));
-  numberField("People", water.people, (v) => setWater((w) => (w.people = Math.round(v))), {
-    step: 1,
-    unit: "",
-  });
-  numberField("Per person and day", water.liters, (v) => setWater((w) => (w.liters = v)), {
-    step: 5,
-    unit: "l",
-  });
-  selectField(
-    "Heater",
-    water.heater,
-    [
-      ["heating", info.name],
-      ["electric", "Direct electric"],
-    ],
-    (heater) => setWater((w) => (w.heater = heater)),
-  );
-  paragraph(
-    `Water from 10 °C to 55 °C, and ${Math.round(HOT_WATER_LOSS * 100)} % more for the losses of the storage and the pipes. 0 people leaves the hot water out.`,
-    "note",
-  );
-}
-
-/** The energy for heating per year: the demand, the cost, the CO₂, the class, and the months. */
-function renderHeatingResults(): void {
-  const building = doc.building;
-  const info = HEATING_KINDS[building.envelope.heating.kind];
-  heading("Heating per year", "gauge");
-  const energy = heatingEnergy(building);
-  if (!energy) {
-    paragraph(
-      building.climate
-        ? "Draw rooms to calculate the energy per year."
-        : "Load the climate in the Location group to calculate the energy per year.",
-      "note",
-    );
-    return;
-  }
-  const tiles: [string, string, boolean?][] = [
-    [kwh(energy.demand), "heat demand per year"],
-    [`${Math.round(energy.perArea)} kWh/m²`, "per heated area"],
-    [energy.efficiencyClass, "efficiency class"],
-    [kwh(energy.final), `${info.energy} for the heating`],
-  ];
-  if (energy.hotWaterFinal > 0) {
-    const water = energy.hotWaterElectric ? "electricity" : info.energy;
-    tiles.push([kwh(energy.hotWaterFinal), `${water} for the hot water`]);
-  }
-  tiles.push(
-    [`${Math.round(energy.cost).toLocaleString("en")} €`, "per year"],
-    [`${(energy.co2 / 1000).toFixed(1)} t`, "CO₂ per year"],
-  );
-  if (energy.electric > 0 && energy.pvCovered > 0) {
-    const share = Math.round((energy.pvCovered / energy.electric) * 100);
-    tiles.push([
-      `${share} %`,
-      "of the electricity from your PV, in the balance of each month",
-      true,
-    ]);
-  }
-  stats(tiles);
-  monthChart(energy.months.map((m) => m.demand));
-  paragraph(
-    `A monthly balance in the spirit of EN ISO 13790, with the stored climate: the heat loss of the heated rooms, the sun through the windows, and ${INTERNAL_GAINS} W/m² from people and devices. The cost and the CO₂ include the hot water. The class uses the heat demand on the scale of the Austrian energy certificate (OIB), but it is an estimate, not a certificate. The PV share is an upper limit, because PV in the day does not heat at night without a battery.`,
-    "note",
-  );
-}
-
-/** An amount of money, rounded to whole euros, with a thin space between the thousands. */
-const euro = (value: number) => `${Math.round(value).toLocaleString("en").replace(/,/g, " ")} €`;
-
-/** The electricity of the household, the battery, and the prices of electricity. */
-function renderElectricityInputs(): void {
-  const household = doc.building.household;
-  heading("Electricity", "bolt");
-  const set = (key: keyof typeof household) => (value: number) =>
-    doc.editBuilding((b) => (b.household[key] = value));
-  numberField("Household per year", household.electricity, set("electricity"), {
-    step: 100,
-    unit: "kWh",
-  });
-  numberField("Battery", household.battery, set("battery"), { step: 1, unit: "kWh" });
-  numberField("Price from the grid", household.price, set("price"), {
-    step: 0.01,
-    unit: "€/kWh",
-  });
-  numberField("Payment for feed-in", household.feedIn, set("feedIn"), {
-    step: 0.01,
-    unit: "€/kWh",
-  });
-  paragraph(
-    "The household electricity is without the heating and the hot water. The price from the grid is also the price of an electric heating.",
-    "note",
-  );
-}
-
-/** The hourly balance of electricity: PV, self-consumption, the grid, and the energy cost. */
-function renderBalance(): void {
-  const balance = energyBalance(doc.building);
-  heading("Electricity per year", "bolt");
-  if (!balance) {
-    paragraph("Load the climate in the Location group for the hourly balance.", "note");
-    return;
-  }
-  const percent = (value: number) => `${Math.round(value * 100)} %`;
-  const tiles: [string, string, boolean?][] = [
-    [kwh(balance.load), "electricity of the building"],
-    [kwh(balance.imported), "from the grid"],
-  ];
-  if (balance.pv > 0) {
-    tiles.push(
-      [kwh(balance.pv), "PV yield"],
-      [kwh(balance.exported), "to the grid"],
-      [percent(balance.selfConsumption), "of the PV used in the building"],
-      [percent(balance.selfSufficiency), "of the electricity from the PV"],
-    );
-  }
-  tiles.push([euro(balance.cost), "energy cost per year", true]);
-  stats(tiles);
-  const parts = [
-    `household ${kwh(balance.household)}`,
-    balance.heating > 0 ? `heating ${kwh(balance.heating)}` : "",
-    balance.hotWater > 0 ? `hot water ${kwh(balance.hotWater)}` : "",
-    balance.fromBattery > 0 ? `from the battery ${kwh(balance.fromBattery)}` : "",
-  ].filter(Boolean);
-  paragraph(
-    `${parts.join(" · ")}. An hourly balance of the typical year: the PV of each hour against a usual day of a household, the heating by the temperature of the hour, and the hot water from 6:00 to 22:00. The energy cost is the electricity from the grid, minus the feed-in, plus the fuel of a heating without electricity.`,
-    "note",
-  );
-  button("Compare renovations", () => setTopic("renovation"), { icon: "coins" });
-}
-
-/**
- * The renovation: the variants with their measures, their cost, and their economy against the
- * plan. Each variant is a copy of the envelope, the heating, the heated stories, the household,
- * and the PV.
- */
-function renderRenovationTopic(): void {
-  const building = doc.building;
-  heading("Renovation", "coins");
-  const plan = energyBalance(building);
-  if (!plan) {
-    paragraph(
-      "The renovation compares the energy cost per year, so it needs the climate. Load it in the Location group of Energy.",
-      "note",
-    );
-    button("Open Energy", () => setTopic("energy"), { icon: "gauge" });
-    return;
-  }
-  const heat = heatingEnergy(building);
-  stats([
-    [euro(plan.cost), "energy cost per year now"],
-    [`${(plan.co2 / 1000).toFixed(1)} t`, "CO₂ per year"],
-    heat
-      ? [`${Math.round(heat.perArea)} kWh/m² · ${heat.efficiencyClass}`, "heat demand"]
-      : ["–", "heat demand: draw rooms"],
-  ]);
-
-  const list = document.createElement("div");
-  list.className = "variants";
-  for (const variant of building.variants) list.append(variantCard(variant, plan));
-  section.append(list);
-
-  const add = document.createElement("select");
-  add.setAttribute("aria-label", "Add a variant");
-  add.append(new Option("Add a variant…", "", true, true), new Option("Copy of the plan", "copy"));
-  for (const measure of MEASURES.filter((m) => m.available(building))) {
-    add.append(new Option(measure.name, measure.id));
-  }
-  add.addEventListener("change", () => {
-    const measure = MEASURES.find((m) => m.id === add.value);
-    doc.editBuilding((b) =>
-      b.variants.push(measure ? measureVariant(b, measure) : variantOf(b, "Copy of the plan")),
-    );
-  });
-  field("New", add);
-  paragraph(
-    "A variant starts from the plan. Add measures to it, or put it into the plan with the check mark, change it in the other topics, and save it back with the disk. The cost is an estimate from usual prices in Austria, 2025, without the scaffold. Type the price of a real offer to replace it. The payback time ignores interest and changes of the prices.",
-    "note",
-  );
-}
-
-/** The card of one variant: its name, its actions, its measures, its cost, and its economy. */
-function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
-  const building = doc.building;
-  const card = document.createElement("div");
-  card.className = "variant";
-  const top = document.createElement("div");
-  top.className = "variant-top";
-  const name = document.createElement("input");
-  name.type = "text";
-  name.value = variant.name;
-  name.setAttribute("aria-label", "Name of the variant");
-  name.addEventListener("change", () => {
-    const value = name.value.trim();
-    if (value) editVariant(variant.id, (v) => (v.name = value));
-  });
-  const same = sameAsPlan(building, variant);
-  const action = (iconName: IconName, title: string, act: () => void, disabled = false) => {
-    const element = document.createElement("button");
-    element.className = "icon-button";
-    element.title = title;
-    element.setAttribute("aria-label", title);
-    element.innerHTML = icon(iconName);
-    element.disabled = disabled;
-    element.addEventListener("click", act);
-    return element;
-  };
-  top.append(
-    name,
-    action(
-      "check",
-      same ? "The plan has this variant" : "Use this variant in the plan",
-      () => {
-        doc.editBuilding((b) =>
-          applyVariant(
-            b,
-            b.variants.find((v) => v.id === variant.id)!,
-          ),
-        );
-        showStatus(`The plan now has the variant "${variant.name}". Undo goes back.`);
-      },
-      same,
-    ),
-    action(
-      "save",
-      "Save the plan into this variant",
-      () => editVariant(variant.id, (v, b) => updateVariant(v, b)),
-      same,
-    ),
-    action("trash", "Delete the variant", () =>
-      doc.editBuilding((b) => (b.variants = b.variants.filter((v) => v.id !== variant.id))),
-    ),
-  );
-  card.append(top);
-
-  const economy = variantEconomy(building, variant, plan);
-  const items = estimateItems(building, variant);
-  const estimate = items.reduce((sum, i) => sum + i.cost, 0);
-
-  // The cost and the subsidy: two small fields. An empty cost uses the estimate.
-  const money = document.createElement("div");
-  money.className = "variant-money";
-  const moneyField = (
-    label: string,
-    value: number | null,
-    placeholder: string,
-    change: (value: number | null) => void,
-  ) => {
-    const element = document.createElement("label");
-    element.append(label);
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.step = "100";
-    input.placeholder = placeholder;
-    input.value = value == null ? "" : String(Math.round(value));
-    input.addEventListener("change", () => {
-      const text = input.value.trim();
-      const parsed = Number(text);
-      if (text === "") change(null);
-      else if (Number.isFinite(parsed) && parsed >= 0) change(parsed);
-    });
-    element.append(input);
-    money.append(element);
-  };
-  moneyField("Cost €", variant.cost, `${Math.round(estimate)} (estimate)`, (v) =>
-    editVariant(variant.id, (x) => (x.cost = v)),
-  );
-  moneyField("Subsidy €", variant.subsidy || null, "0", (v) =>
-    editVariant(variant.id, (x) => (x.subsidy = v ?? 0)),
-  );
-  card.append(money);
-
-  const values = document.createElement("div");
-  values.className = "variant-values";
-  if (economy) {
-    const result = heatingEnergy(withVariant(building, variant));
-    const lines = [
-      `${euro(economy.balance.cost)} energy cost per year`,
-      result ? `${Math.round(result.perArea)} kWh/m² · ${result.efficiencyClass}` : "",
-      `${(economy.balance.co2 / 1000).toFixed(1)} t CO₂`,
-    ].filter(Boolean);
-    values.textContent = lines.join(" · ");
-    const verdict = document.createElement("div");
-    verdict.className = "variant-verdict";
-    const saving = document.createElement("span");
-    saving.className = economy.saving > 0.5 ? "better" : economy.saving < -0.5 ? "worse" : "";
-    saving.textContent =
-      Math.abs(economy.saving) < 0.5
-        ? "No saving"
-        : `${economy.saving > 0 ? "Saves" : "Costs"} ${euro(Math.abs(economy.saving))} per year`;
-    verdict.append(saving);
-    const payback =
-      economy.payback == null
-        ? ""
-        : economy.net <= 0
-          ? " · pays back at once"
-          : economy.payback > 50
-            ? " · pays back in more than 50 years"
-            : ` · pays back in ${economy.payback < 1 ? "less than 1" : Math.round(economy.payback)} years`;
-    const co2 =
-      Math.abs(economy.co2Saving) >= 50
-        ? ` · ${economy.co2Saving > 0 ? "−" : "+"}${(Math.abs(economy.co2Saving) / 1000).toFixed(1)} t CO₂`
-        : "";
-    verdict.append(`${payback}${co2}`);
-    card.append(values, verdict);
-  }
-
-  // The items of the estimate, and a list to add one more measure.
-  const details = document.createElement("details");
-  details.className = "variant-details";
-  const summary = document.createElement("summary");
-  summary.textContent =
-    items.length === 0 ? "No changes against the plan" : `Estimate · ${euro(estimate)}`;
-  details.append(summary);
-  for (const item of items) {
-    const row = document.createElement("div");
-    row.className = "variant-item";
-    const label = document.createElement("span");
-    label.textContent = item.name;
-    const cost = document.createElement("span");
-    cost.textContent = euro(item.cost);
-    row.append(label, cost);
-    details.append(row);
-  }
-  card.append(details);
-  const measures = measuresFor(building, variant);
-  if (measures.length > 0) {
-    const add = document.createElement("select");
-    add.className = "variant-add";
-    add.setAttribute("aria-label", "Add a measure to the variant");
-    add.append(new Option("Add a measure…", "", true, true));
-    for (const measure of measures) add.append(new Option(measure.name, measure.id));
-    add.addEventListener("change", () => {
-      const measure = MEASURES.find((m) => m.id === add.value);
-      if (measure) editVariant(variant.id, (v, b) => addMeasure(b, v, measure));
-    });
-    card.append(add);
-  }
-  return card;
-}
-
-/** Changes one variant of the building. */
-function editVariant(id: string, edit: (variant: Variant, building: Building) => void): void {
-  doc.editBuilding((b) => {
-    const variant = b.variants.find((v) => v.id === id);
-    if (variant) edit(variant, b);
-  });
-}
-
-/**
- * A small bar chart of the heat demand of each month. A column shows its value on hover, and
- * the largest month has its value as a label.
- */
-function monthChart(values: number[]): void {
-  const ns = "http://www.w3.org/2000/svg";
-  const width = 240;
-  const height = 96;
-  const top = 16;
-  const bottom = 16;
-  const slot = width / 12;
-  const bar = slot - 4;
-  const max = Math.max(...values, 1);
-  const peak = values.indexOf(Math.max(...values));
-  const chart = document.createElementNS(ns, "svg");
-  chart.setAttribute("class", "month-chart");
-  chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  chart.setAttribute("role", "img");
-  chart.setAttribute(
-    "aria-label",
-    `Heat demand per month: ${values.map((v, m) => `${MONTH_NAMES[m]} ${Math.round(v)} kWh`).join(", ")}`,
-  );
-  const add = (name: string, attributes: Record<string, string | number>, text?: string) => {
-    const element = document.createElementNS(ns, name);
-    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
-    if (text !== undefined) element.textContent = text;
-    chart.append(element);
-    return element;
-  };
-  const base = height - bottom;
-  add("line", { x1: 0, x2: width, y1: base, y2: base, class: "axis" });
-  values.forEach((value, m) => {
-    const x = m * slot + 2;
-    const h = (value / max) * (base - top);
-    // The column behind the bar is the target of the hover, larger than the bar.
-    const hit = add("rect", { x: m * slot, y: 0, width: slot, height, class: "hit" });
-    const title = document.createElementNS(ns, "title");
-    title.textContent = `${MONTH_NAMES[m]}: ${Math.round(value)} kWh`;
-    hit.append(title);
-    // The bar has round corners at the top only: a path from the baseline.
-    if (h > 0.5) {
-      const r = Math.min(4, h, bar / 2);
-      add("path", {
-        class: "bar",
-        d: `M${x} ${base}V${base - h + r}a${r} ${r} 0 0 1 ${r} ${-r}h${bar - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}V${base}Z`,
-      });
-    }
-    add("text", { x: x + bar / 2, y: height - 3, class: "month" }, MONTH_NAMES[m][0]);
-    if (m === peak && value > 0) {
-      // The label stays inside the chart, also over the first and the last bar.
-      const at = Math.min(width - 12, Math.max(12, x + bar / 2));
-      add("text", { x: at, y: base - h - 4, class: "value" }, `${Math.round(value)}`);
-    }
-  });
-  const caption = document.createElement("p");
-  caption.className = "chart-title";
-  caption.textContent = "Heat demand per month, kWh";
-  section.append(caption, chart);
-}
-
-/** The PV fields on the faces of the roof. */
-function renderPvPanel(): void {
-  const building = doc.building;
-  const faces = faceInfo(building);
-  if (faces.length === 0) return;
-  heading("Photovoltaic", "sparkle");
-  const total = pvSummary(building);
-  stats([
-    [`${total.peak.toFixed(1)} kWp`, `${total.count} panels`],
-    [`${Math.round(total.yield)} kWh`, "per year"],
-  ]);
-  pvSourceNote();
-  const compass = (azimuth: number) =>
-    ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(azimuth / 45) % 8];
-  building.pv.forEach((array, i) => {
-    const layout = pvLayout(building, array);
-    const face = faces.find((f) => f.roofId === array.roofId && f.index === array.face);
-    group(
-      `Field ${i + 1} · ${array.rack && face && face.tilt < FLAT_TILT ? "rack " : ""}${layout ? `${compass(layout.azimuth)} ${Math.round(layout.tilt)}°` : "no face"} · ${layout?.count ?? 0} panels`,
-      false,
-      () => {
-        const set = (edit: (a: PvArray) => void) =>
-          doc.editBuilding((b) => edit(b.pv.find((a) => a.id === array.id)!));
-        if (layout) {
-          paragraph(
-            `${layout.peak.toFixed(2)} kWp, about ${Math.round(layout.yield)} kWh per year.`,
-            "note",
-          );
-        }
-        selectField(
-          "Face",
-          `${array.roofId}:${array.face}`,
-          faces.map((f) => [
-            `${f.roofId}:${f.index}`,
-            `${f.roofName} · ${compass(f.azimuth)} · ${Math.round(f.tilt)}° · ${Math.round(f.area)} m²`,
-          ]),
-          (value) =>
-            set((a) => {
-              const [roofId, index] = value.split(":");
-              a.roofId = roofId;
-              a.face = Number(index);
-            }),
-        );
-        if (face && face.tilt < FLAT_TILT) {
-          const rack = array.rack;
-          selectField(
-            "Mounting",
-            !rack ? "flat" : rack.eastWest ? "east-west" : "one-way",
-            [
-              ["flat", "Flat on the roof"],
-              ["one-way", "Rack, one direction"],
-              ["east-west", "Rack, east-west"],
-            ],
-            (value) =>
-              set((a) => (a.rack = value === "flat" ? null : defaultRack(value === "east-west"))),
-          );
-          if (rack) {
-            numberField("Tilt", rack.tilt, (v) => set((a) => (a.rack!.tilt = Math.min(60, v))), {
-              step: 1,
-              unit: "°",
-            });
-            numberField(
-              rack.eastWest ? "First half faces" : "Faces",
-              rack.azimuth,
-              (v) => set((a) => (a.rack!.azimuth = ((v % 360) + 360) % 360)),
-              { min: -360, step: 5, unit: "° from N" },
-            );
-            paragraph(
-              rack.eastWest
-                ? "Two panels lean back to back: one half faces the direction, and the other half the opposite direction. 90° is east."
-                : "180° is south. The rows keep a distance, so that a row does not shade the next row at noon on 21 December.",
-              "note",
-            );
-          }
-        }
-        numberField("Panel power", array.panelPower, (v) => set((a) => (a.panelPower = v)), {
-          min: 50,
-          step: 5,
-          unit: "W",
-        });
-        selectField(
-          "Orientation",
-          array.portrait ? "portrait" : "landscape",
-          [
-            ["portrait", "Portrait"],
-            ["landscape", "Landscape"],
-          ],
-          (value) => set((a) => (a.portrait = value === "portrait")),
-        );
-        numberField("Margin", array.margin, (v) => set((a) => (a.margin = v)));
-        numberField(
-          "Most panels",
-          array.limit ?? 0,
-          (v) => set((a) => (a.limit = v > 0 ? v : null)),
-          {
-            step: 1,
-            unit: "",
-          },
-        );
-        button(
-          "Remove",
-          () => doc.editBuilding((b) => (b.pv = b.pv.filter((a) => a.id !== array.id))),
-          { kind: "danger", icon: "trash" },
-        );
-      },
-    );
-  });
-  if (newPvField(building)) {
-    button(
-      "Add a PV field",
-      () =>
-        doc.editBuilding((b) => {
-          const field = newPvField(b);
-          if (field) b.pv.push(field);
-        }),
-      { icon: "plus" },
-    );
-  }
-}
 
 // ----- Stories -----
 
@@ -2999,12 +290,15 @@ function renderStories(): void {
     const element = document.createElement("button");
     element.className = story.id === active ? "story active" : "story";
     const name = document.createElement("span");
-    name.textContent = story.name;
+    name.textContent = t(story.name);
     const level = document.createElement("small");
     const sign = story.elevation > 0 ? "+" : story.elevation < 0 ? "−" : "±";
-    level.textContent = `${sign}${Math.abs(story.elevation).toFixed(2)}`;
+    level.textContent = `${sign}${fmt(Math.abs(story.elevation), 2)}`;
     element.append(name, level);
-    element.title = `${story.name}: floor at ${story.elevation.toFixed(2)} m`;
+    element.title = t("{name}: floor at {elevation} m", {
+      name: t(story.name),
+      elevation: fmt(story.elevation, 2),
+    });
     element.addEventListener("click", () => {
       editor.select(null);
       doc.setActiveStory(story.id);
@@ -3022,8 +316,8 @@ function renderStories(): void {
   add.className = "add";
   add.dataset.menu = "";
   add.innerHTML = icon("plus");
-  add.append("Add story");
-  add.addEventListener("click", () => toggleMenu(add, $("#story-menu"), "above"));
+  add.append(t("Add story"));
+  add.addEventListener("click", () => toggleMenu(add, $("#story-menu")));
   list.append(add);
 }
 
@@ -3032,14 +326,16 @@ function addStory(kind: "top" | "attic" | "cellar"): void {
   let id = "";
   doc.editBuilding((b) => {
     const story = kind === "cellar" ? addCellar(b) : addStoryOnTop(b, kind === "attic");
+    // The model names the story in English; the plan keeps the name in the language of the app.
+    story.name = t(story.name);
     id = story.id;
   });
   editor.select(null);
   doc.setActiveStory(id);
   showStatus(
     kind === "cellar"
-      ? "Added a cellar. The walls of the story above show as dashed lines."
-      : "Added a story. The walls of the story below show as dashed lines.",
+      ? t("Added a cellar. The walls of the story above show as dashed lines.")
+      : t("Added a story. The walls of the story below show as dashed lines."),
   );
 }
 
@@ -3097,140 +393,7 @@ function fit3d(): void {
   view3d.fit(doc.building);
 }
 
-// ----- Building services -----
-
-/** The menu of the device types and the kinds of lines, grouped by system. */
-let servicesMenuSystem: ServiceSystem | null = null;
-
-/**
- * Opens the menu of the device types and the kinds of lines of one system under the button, or
- * closes it if it is open for the same system.
- */
-function openServicesMenu(system: ServiceSystem, anchor: HTMLElement): void {
-  const menu = $("#services-menu");
-  if (!menu.hidden && servicesMenuSystem === system) return closeMenus();
-  servicesMenuSystem = system;
-  menu.replaceChildren();
-  const title = (text: string) => {
-    const heading = document.createElement("h4");
-    heading.textContent = text;
-    menu.append(heading);
-  };
-  title("Devices");
-  for (const type of FIXTURE_TYPES.filter((t) => t.system === system)) {
-    const item = document.createElement("button");
-    item.append(fixturePicture(type.type), type.name);
-    item.addEventListener("click", () => {
-      closeMenus();
-      setTopic("utilities");
-      const ceiling = defaultWallHeight(doc.plan) - 0.05;
-      editor.startFixture(newFixture(type.type, { x: 0, y: 0 }, ceiling));
-      markTool("fixture");
-      showStatus(HINTS.fixture);
-      renderPanel();
-    });
-    menu.append(item);
-  }
-  title(system === "water" || system === "heating" ? "Pipes" : "Cables");
-  for (const kind of RUN_KINDS.filter((k) => k.system === system)) {
-    const item = document.createElement("button");
-    const swatch = document.createElement("span");
-    swatch.className = "swatch";
-    swatch.style.background = kind.dashed
-      ? `repeating-linear-gradient(90deg, ${kind.color} 0 6px, transparent 6px 10px)`
-      : kind.color;
-    item.append(swatch, kind.name);
-    item.addEventListener("click", () => {
-      closeMenus();
-      setTopic("utilities");
-      editor.startRun(kind.kind);
-      markTool("run");
-      showStatus(HINTS.run);
-      renderPanel();
-    });
-    menu.append(item);
-  }
-  closeMenus();
-  menu.hidden = false;
-  const rect = anchor.getBoundingClientRect();
-  // The menu goes under the button, or over it if there is no room below.
-  const below = rect.bottom + 6 + menu.offsetHeight < window.innerHeight;
-  menu.style.top = below
-    ? `${rect.bottom + 6}px`
-    : `${Math.max(8, rect.top - menu.offsetHeight - 6)}px`;
-  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-}
-
-/** A small SVG of the plan symbol of a device type. */
-function fixturePicture(type: string): SVGSVGElement {
-  const ns = "http://www.w3.org/2000/svg";
-  const fixture = newFixture(type, { x: 0, y: 0 }, 2.4);
-  const symbol = fixtureSymbol(fixture);
-  const all = [...symbol.shapes, ...symbol.lines, ...symbol.filled].flat();
-  const xs = all.map((p) => p.x);
-  const ys = all.map((p) => p.y);
-  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 0.2);
-  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
-  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("class", "symbol");
-  svg.setAttribute("viewBox", `${cx - size * 0.6} ${cy - size * 0.6} ${size * 1.2} ${size * 1.2}`);
-  const color = systemColor(fixture.system);
-  const add = (list: { x: number; y: number }[][], tag: string, fill: string) => {
-    for (const points of list) {
-      const element = document.createElementNS(ns, tag);
-      element.setAttribute("points", points.map((p) => `${p.x},${p.y}`).join(" "));
-      element.setAttribute("fill", fill);
-      element.setAttribute("stroke", fill === color ? "none" : color);
-      element.setAttribute("stroke-width", String(size * 0.06));
-      svg.append(element);
-    }
-  };
-  add(symbol.shapes, "polygon", "none");
-  add(symbol.lines, "polyline", "none");
-  add(symbol.filled, "polygon", color);
-  return svg;
-}
-
-/** The color of a U-value: green for good insulation, yellow, and red for poor insulation. */
-function uColor(u: number): string {
-  if (u <= 0.25) return "#2f9e44";
-  if (u <= 0.45) return "#f08c00";
-  return "#e03131";
-}
-
-/**
- * The insulation layer of the 2D editor: each outer wall in the color of its U-value, and the
- * heat loss of each room under its label.
- */
-function drawInsulation(group: SVGGElement, zoom: number): void {
-  const ns = "http://www.w3.org/2000/svg";
-  const story = doc.plan;
-  for (const wall of story.walls) {
-    if (!isOuterWall(story, wall)) continue;
-    const [a, b] = wallEnds(story, wall);
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", String(a.x));
-    line.setAttribute("y1", String(a.y));
-    line.setAttribute("x2", String(b.x));
-    line.setAttribute("y2", String(b.y));
-    line.setAttribute("stroke", uColor(uValue(wallLayers(doc.building, wall), "wall")));
-    line.setAttribute("stroke-width", String(wall.thickness * 0.6));
-    line.setAttribute("class", "insulation-wall");
-    group.append(line);
-  }
-  for (const room of findRooms(story)) {
-    const loss = roomHeatLoss(doc.building, story, room);
-    const text = document.createElementNS(ns, "text");
-    text.setAttribute("x", String(room.labelAt.x));
-    text.setAttribute("y", String(room.labelAt.y + 30 / zoom));
-    text.setAttribute("font-size", String(12 / zoom));
-    text.setAttribute("stroke-width", String(3 / zoom));
-    text.setAttribute("class", "heat-label");
-    text.textContent = story.heated ? `${Math.round(loss.total)} W` : "unheated";
-    group.append(text);
-  }
-}
+// ----- The map -----
 
 /** The credit of the map under the plan, and a hint if the map needs a location first. */
 function updateMapCredit(): void {
@@ -3251,7 +414,7 @@ function applyLayers(): void {
     const layer = input.dataset.layer as LayerName;
     editor.layers[layer] = input.checked;
     // The open topic keeps the choice of the user for the next time.
-    if (layer in topicLayers[topic]) topicLayers[topic][layer] = input.checked;
+    if (layer in topicLayers[app.topic]) topicLayers[app.topic][layer] = input.checked;
   }
   editor.setOverlay("insulation", editor.layers.insulation ? drawInsulation : null);
   editor.render();
@@ -3283,11 +446,12 @@ editor.onPlace = (piece) => {
   // After one piece, the editor is back in the select tool, unless Shift kept the furniture tool.
   markTool(editor.tool);
   if (editor.tool === "select")
-    showStatus(`Placed ${piece.name}. R turns it, and a drag moves it.`);
+    showStatus(t("Placed {name}. R turns it, and a drag moves it.", { name: t(piece.name) }));
 };
 
 /** The images of the models from above, for the 2D editor. Each model renders once. */
 const topViewsAsked = new Set<string>();
+
 function loadTopViews(): void {
   for (const model of doc.building.models) {
     if (topViewsAsked.has(model.id)) continue;
@@ -3300,594 +464,6 @@ function loadTopViews(): void {
 
 // ----- Files -----
 
-function updateTitle(): void {
-  if (!planOpen) return;
-  document.title = `${doc.dirty ? "• " : ""}${fileName} – Grundriss`;
-  $("#file-title").textContent = fileName;
-  $("#file-name").classList.toggle("dirty", doc.dirty);
-  $<HTMLButtonElement>("#undo").disabled = !doc.canUndo;
-  $<HTMLButtonElement>("#redo").disabled = !doc.canRedo;
-}
-
-// ----- Projects -----
-
-/** True if the browser can store projects. Until the check ends, the app assumes it cannot. */
-let storageOk = false;
-/** The project of the open plan in the browser, or null before its first save. */
-let projectId: string | null = null;
-let projectCreated = 0;
-/** The building of the last save to the browser. A save happens only for a new building. */
-let storedBuilding: Building | null = null;
-let autosaveTimer = 0;
-/** The time from a change to the save, in milliseconds. */
-const AUTOSAVE_DELAY = 800;
-
-const projectName = () => fileName.replace(/\.(grundriss|json)$/i, "") || "Plan";
-
-/** Saves the open plan to the browser soon, if it changed since the last save. */
-function scheduleAutosave(): void {
-  if (!storageOk || doc.inTransaction || doc.building === storedBuilding) return;
-  window.clearTimeout(autosaveTimer);
-  autosaveTimer = window.setTimeout(() => void storeProject(), AUTOSAVE_DELAY);
-}
-
-/**
- * Saves the open plan to the browser now. The function reads the plan before its first await, so
- * a load of another plan right after it does not change what it saves.
- */
-async function storeProject(): Promise<void> {
-  window.clearTimeout(autosaveTimer);
-  const building = doc.building;
-  if (!storageOk || building === storedBuilding) return;
-  if (!projectId) {
-    projectId = newProjectId();
-    projectCreated = Date.now();
-    void keepProjects();
-  }
-  const id = projectId;
-  storedBuilding = building;
-  try {
-    await saveProject({
-      id,
-      name: projectName(),
-      created: projectCreated,
-      updated: Date.now(),
-      preview: projectPreview(building),
-      data: serializeBuilding(building),
-    });
-  } catch (error) {
-    // The next change tries again.
-    if (storedBuilding === building) storedBuilding = null;
-    showStatus(
-      `The browser did not save the project: ${error instanceof Error ? error.message : error}. Save it to a file.`,
-      true,
-    );
-  }
-  if (!planOpen) renderHome();
-}
-
-/** A small SVG of the ground floor, without the background image, for the list of projects. */
-function projectPreview(building: Building): string {
-  const story = building.stories.find((s) => s.elevation >= -1e-6) ?? building.stories[0];
-  if (story.walls.length === 0) return "";
-  try {
-    return planToSvg(story, { ...storyExtras(building, story), background: false });
-  } catch {
-    return "";
-  }
-}
-
-/**
- * True if the open plan can go away. With the storage, the plan is in the browser, so the app
- * saves it and asks nothing. Without the storage, the user confirms the loss of the changes.
- */
-function confirmDiscard(): boolean {
-  if (storageOk) {
-    void storeProject();
-    return true;
-  }
-  return !doc.dirty || confirm("The plan has unsaved changes. Discard them?");
-}
-
-/**
- * Opens a plan. `project` is the project of the plan in the browser. Without it, the plan is new:
- * a plan from a file goes to the browser at once, and a new or an example plan after its first
- * change.
- */
-function load(
-  building: Building = emptyBuilding(),
-  name = "plan.grundriss",
-  handle: FileSystemFileHandle | null = null,
-  project: { id: string; created: number } | "from-file" | null = null,
-) {
-  setSuggestions(null);
-  // The points of a calibration belong to the old background.
-  calibration = null;
-  editor.clearCalibration();
-  doc.replace(building);
-  fileName = name;
-  fileHandle = handle;
-  projectId = project && project !== "from-file" ? project.id : null;
-  projectCreated = project && project !== "from-file" ? project.created : 0;
-  storedBuilding = project === "from-file" ? null : doc.building;
-  editor.select(null);
-  if (!planOpen || topic === "overview") fitPending = true;
-  else {
-    editor.fit();
-    fit3d();
-  }
-  updateTitle();
-  if (project === "from-file") void storeProject();
-}
-
-async function openFile(): Promise<void> {
-  if (!confirmDiscard()) return;
-  try {
-    const file = await openPlanFile();
-    if (!file) return;
-    load(readBuildingFile(file.bytes), file.name, file.handle, "from-file");
-    showStatus(`Opened ${file.name}.`);
-    enterPlan("structure");
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
-  }
-}
-
-async function openProject(id: string): Promise<void> {
-  if (id === projectId) return enterPlan("structure");
-  if (!confirmDiscard()) return;
-  try {
-    const project = await loadProject(id);
-    if (!project) throw new Error("The project is not in the browser any more.");
-    load(parseBuilding(project.data), `${project.name}.grundriss`, null, project);
-    showStatus(`Opened ${project.name}.`);
-    enterPlan("structure");
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
-    renderHome();
-  }
-}
-
-function newPlan(): void {
-  if (!confirmDiscard()) return;
-  load();
-  enterPlan("structure");
-}
-
-function openExample(): void {
-  if (!confirmDiscard()) return;
-  load(makeHouse(), "Example house.grundriss");
-  showStatus("Opened the example house. A change saves it as a project in the browser.");
-  enterPlan("structure");
-}
-
-const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-/** "5 minutes ago", "yesterday", or "3 weeks ago". */
-function ago(time: number): string {
-  const seconds = (time - Date.now()) / 1000;
-  const units: [Intl.RelativeTimeFormatUnit, number][] = [
-    ["year", 31536000],
-    ["month", 2592000],
-    ["week", 604800],
-    ["day", 86400],
-    ["hour", 3600],
-    ["minute", 60],
-  ];
-  for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) return relativeTime.format(Math.round(seconds / size), unit);
-  }
-  return "just now";
-}
-
-let homeRequest = 0;
-
-/** The home page: the tiles to start a plan, the plans in the browser, and the examples. */
-function renderHome(): void {
-  const note = $("#projects-note");
-  if (!storageOk) {
-    note.textContent =
-      "This browser does not store projects, for example in a private window. Save the plan to a file to keep it.";
-    note.classList.add("warning");
-    fillProjects(null);
-    return;
-  }
-  note.classList.remove("warning");
-  note.textContent =
-    "The projects stay in this browser on this device, and each change saves itself. Save to a file for a backup or to share a plan.";
-  // A newer call wins, so that a slow list does not replace a newer one.
-  const request = ++homeRequest;
-  void listProjects().then(
-    (projects) => request === homeRequest && fillProjects(projects),
-    (error) => {
-      if (request !== homeRequest) return;
-      note.textContent = `The browser cannot read the projects: ${error instanceof Error ? error.message : error}`;
-      note.classList.add("warning");
-    },
-  );
-}
-
-/** The example house in the list of the projects. It is not in the browser storage. */
-let examplePreview: string | null = null;
-const EXAMPLE_ID = "example";
-
-/**
- * Fills the home page: the tiles to start a plan, the plans in the browser, and the examples.
- * Without the storage (`projects` is null), the row of the plans in the browser does not show.
- */
-function fillProjects(projects: ProjectInfo[] | null): void {
-  const list = $("#project-list");
-  list.replaceChildren();
-  const row = (title: string | null, className = "") => {
-    const wrap = document.createElement("section");
-    wrap.className = "project-section";
-    if (title) {
-      const heading = document.createElement("h3");
-      heading.textContent = title;
-      wrap.append(heading);
-    }
-    const grid = document.createElement("div");
-    grid.className = `project-grid ${className}`.trim();
-    wrap.append(grid);
-    list.append(wrap);
-    return grid;
-  };
-  const startRow = row(null, "start-row");
-  const mine = projects ? row("Plans in this browser") : null;
-  const examples = row("Examples");
-  if (projects && projects.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "project-empty";
-    empty.textContent =
-      "No plans yet. A plan that you start or open shows here, and each change saves it.";
-    mine!.append(empty);
-  }
-  examplePreview ??= projectPreview(makeHouse());
-  const example: ProjectInfo = {
-    id: EXAMPLE_ID,
-    name: "Example house",
-    created: 0,
-    updated: 0,
-    preview: examplePreview,
-  };
-  // The first tiles start a plan: a new plan, or a plan from a file.
-  const start = (iconName: IconName, title: string, detail: string, action: () => void) => {
-    const tile = document.createElement("button");
-    tile.className = "project project-start";
-    const picture = document.createElement("span");
-    picture.className = "project-picture";
-    picture.innerHTML = icon(iconName);
-    const text = document.createElement("span");
-    text.className = "project-text";
-    const name = document.createElement("strong");
-    name.textContent = title;
-    const small = document.createElement("small");
-    small.textContent = detail;
-    text.append(name, small);
-    tile.append(picture, text);
-    tile.addEventListener("click", action);
-    startRow.append(tile);
-  };
-  start("plus", "New plan", "Draw the walls, or trace a scan or a photo.", newPlan);
-  start("open", "Open a file", "A .grundriss or a .json file.", () => void openFile());
-  for (const project of [...(projects ?? []), example]) {
-    const isExample = project === example;
-    const card = document.createElement("article");
-    card.className = "project";
-    const open = document.createElement("button");
-    open.className = "project-open";
-    open.title = `Open ${project.name}`;
-    const picture = document.createElement("div");
-    picture.className = "project-picture";
-    if (project.preview) {
-      const image = document.createElement("img");
-      image.alt = "";
-      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(project.preview)}`;
-      picture.append(image);
-    } else {
-      picture.innerHTML = icon("view2d");
-    }
-    const text = document.createElement("span");
-    text.className = "project-text";
-    const name = document.createElement("strong");
-    name.textContent = project.name;
-    const time = document.createElement("small");
-    time.textContent = isExample
-      ? "A house with two stories, a roof, PV, and utilities. A change saves a copy."
-      : `Changed ${ago(project.updated)}`;
-    text.append(name, time);
-    open.append(picture, text);
-    open.addEventListener("click", () =>
-      isExample ? openExample() : void openProject(project.id),
-    );
-    if (isExample) {
-      card.classList.add("example");
-      card.append(open);
-      examples.append(card);
-      continue;
-    }
-    const tools = document.createElement("div");
-    tools.className = "project-tools";
-    const tool = (iconName: IconName, title: string, action: () => void, danger = false) => {
-      const element = document.createElement("button");
-      element.className = `icon-button${danger ? " danger" : ""}`;
-      element.title = title;
-      element.setAttribute("aria-label", `${title}: ${project.name}`);
-      element.innerHTML = icon(iconName);
-      element.addEventListener("click", action);
-      tools.append(element);
-    };
-    tool("rename", "Rename", () => renameInPlace(card, project));
-    tool("copy", "Duplicate", () => void duplicateProject(project.id));
-    tool(
-      "trash",
-      "Delete",
-      () => {
-        if (!confirm(`Delete the project "${project.name}" from this browser?`)) return;
-        void deleteProject(project.id).then(() => {
-          // The open plan stays, and its next change saves it as a new project.
-          if (project.id === projectId) {
-            projectId = null;
-            storedBuilding = doc.building;
-          }
-          showStatus(`Deleted ${project.name}.`);
-          renderHome();
-        });
-      },
-      true,
-    );
-    card.append(open, tools);
-    mine!.append(card);
-  }
-}
-
-/** Puts a text field in place of the name of the project. Enter or a blur keeps the new name. */
-function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
-  const name = card.querySelector("strong")!;
-  const input = document.createElement("input");
-  input.className = "project-name";
-  input.value = project.name;
-  input.setAttribute("aria-label", "Name of the project");
-  let done = false;
-  const finish = (keep: boolean) => {
-    if (done) return;
-    done = true;
-    const value = input.value.trim();
-    if (!keep || !value || value === project.name) return renderHome();
-    if (project.id === projectId) {
-      const extension = /\.json$/i.test(fileName) ? ".json" : ".grundriss";
-      fileName = `${value}${extension}`;
-      updateTitle();
-    }
-    void renameProject(project.id, value).then(renderHome);
-  };
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") finish(true);
-    if (event.key === "Escape") finish(false);
-  });
-  input.addEventListener("blur", () => finish(true));
-  // The click on the card opens the project, so the field stops it.
-  input.addEventListener("click", (event) => event.stopPropagation());
-  name.replaceWith(input);
-  input.focus();
-  input.select();
-}
-
-async function duplicateProject(id: string): Promise<void> {
-  const project = await loadProject(id);
-  if (!project) return;
-  const now = Date.now();
-  await saveProject({
-    ...project,
-    id: newProjectId(),
-    name: `${project.name} (copy)`,
-    created: now,
-    updated: now,
-  });
-  renderHome();
-}
-
-/** Opens the topic of an item, makes its story active, and selects it. */
-function showItems(storyId: string, items: Item[], itemTopic: Topic): void {
-  setTopic(itemTopic);
-  doc.setActiveStory(storyId);
-  // A change of the story clears the selection in the next frame, unless it knows the story.
-  shownStoryId = doc.activeStoryId;
-  editor.select(items);
-}
-
-/** The tree of the contents of the open plan: the stories with their parts, and the building. */
-function renderContents(): void {
-  const root = $("#contents");
-  root.replaceChildren();
-  const building = doc.building;
-  const head = document.createElement("p");
-  head.className = "contents-title";
-  head.textContent = `${projectName()} · ${building.stories.length} ${building.stories.length === 1 ? "story" : "stories"}`;
-  root.append(head);
-
-  const node = (parent: HTMLElement, title: string, count: number | null, open = false) => {
-    const details = document.createElement("details");
-    details.open = open;
-    const summary = document.createElement("summary");
-    summary.textContent = title;
-    if (count !== null) {
-      const badge = document.createElement("span");
-      badge.className = "count";
-      badge.textContent = String(count);
-      summary.append(badge);
-    }
-    details.append(summary);
-    parent.append(details);
-    return details;
-  };
-  const leaf = (
-    parent: HTMLElement,
-    title: string,
-    detail: string,
-    action: (() => void) | null,
-    iconName?: IconName,
-  ) => {
-    const element = document.createElement(action ? "button" : "div");
-    element.className = "leaf";
-    if (iconName) element.innerHTML = icon(iconName);
-    const label = document.createElement("span");
-    label.textContent = title;
-    element.append(label);
-    if (detail) {
-      const small = document.createElement("small");
-      small.textContent = detail;
-      element.append(small);
-    }
-    if (action) element.addEventListener("click", action);
-    parent.append(element);
-  };
-
-  // The highest story first, as in the list of the stories.
-  const stories = [...building.stories].sort((a, b) => b.elevation - a.elevation);
-  for (const story of stories) {
-    const sign = story.elevation >= 0 ? "+" : "−";
-    const storyNode = node(
-      root,
-      `${story.name} (${sign}${Math.abs(story.elevation).toFixed(2)} m)`,
-      null,
-      story.id === doc.activeStoryId,
-    );
-    storyNode.classList.add("story-node");
-    const show = (items: Item[], itemTopic: Topic) => () => showItems(story.id, items, itemTopic);
-    const all = (kind: ItemKind, list: { id: string }[]) => list.map((x) => ({ kind, id: x.id }));
-    const rooms = findRooms(story);
-    if (rooms.length > 0) {
-      const group = node(storyNode, "Rooms", rooms.length);
-      for (const room of rooms) {
-        leaf(
-          group,
-          room.info?.name || "Room",
-          `${room.area.toFixed(2)} m²`,
-          show([{ kind: "room", id: room.key }], "structure"),
-          "view2d",
-        );
-      }
-    }
-    const counts: [string, Item[], IconName][] = [
-      ["Walls", all("wall", story.walls), "wall"],
-      [
-        "Doors",
-        all(
-          "opening",
-          story.openings.filter((o) => o.kind === "door"),
-        ),
-        "door",
-      ],
-      [
-        "Windows",
-        all(
-          "opening",
-          story.openings.filter((o) => o.kind === "window"),
-        ),
-        "window",
-      ],
-      ["Stairs", all("stair", story.stairs), "stair"],
-      ["Chimneys", all("chimney", story.chimneys), "chimney"],
-      ["Dimensions", all("dimension", story.dimensions), "dimension"],
-    ];
-    for (const [title, items, iconName] of counts) {
-      if (items.length > 0) {
-        leaf(storyNode, title, `${items.length}`, show(items, "structure"), iconName);
-      }
-    }
-    if (story.background) {
-      leaf(storyNode, "Background image", "", show([], "structure"), "image");
-    }
-    if (story.furniture.length > 0) {
-      const group = node(storyNode, "Furniture", story.furniture.length);
-      for (const piece of story.furniture) {
-        leaf(
-          group,
-          piece.name || "Piece",
-          "",
-          show([{ kind: "furniture", id: piece.id }], "interior"),
-          "sofa",
-        );
-      }
-    }
-    for (const { system, name } of SERVICE_SYSTEMS) {
-      const fixtures = story.fixtures.filter((f) => f.system === system);
-      const runs = story.runs.filter((r) => r.system === system);
-      if (fixtures.length + runs.length === 0) continue;
-      const parts = [
-        fixtures.length > 0
-          ? `${fixtures.length} ${fixtures.length === 1 ? "device" : "devices"}`
-          : "",
-        runs.length > 0 ? `${runs.length} ${runs.length === 1 ? "line" : "lines"}` : "",
-      ];
-      leaf(
-        storyNode,
-        name,
-        parts.filter(Boolean).join(", "),
-        show([...all("fixture", fixtures), ...all("run", runs)], "utilities"),
-        SYSTEM_ICONS[system],
-      );
-    }
-    if (storyNode.childElementCount === 1) {
-      leaf(storyNode, "Empty", "", null);
-    }
-  }
-
-  const buildingNode = node(root, "Building", null, true);
-  if (building.roofs.length > 0) {
-    const group = node(buildingNode, "Roofs", building.roofs.length);
-    for (const roof of building.roofs) {
-      const story = findStory(building, roof.storyId);
-      leaf(
-        group,
-        roof.name,
-        story ? `on ${story.name}` : "",
-        story ? () => showItems(story.id, [{ kind: "roof", id: roof.id }], "structure") : null,
-        "roof",
-      );
-    }
-  }
-  if (building.pv.length > 0) {
-    const total = pvSummary(building);
-    leaf(
-      buildingNode,
-      "Photovoltaic",
-      `${building.pv.length} ${building.pv.length === 1 ? "field" : "fields"}, ${total.peak.toFixed(1)} kWp`,
-      () => setTopic("utilities"),
-      "bolt",
-    );
-  }
-  if (building.models.length > 0) {
-    leaf(
-      buildingNode,
-      "3D models",
-      `${building.models.length}`,
-      () => setTopic("interior"),
-      "sofa",
-    );
-  }
-  leaf(
-    buildingNode,
-    "Location",
-    building.location
-      ? building.location.name ||
-          `${building.location.latitude.toFixed(2)}, ${building.location.longitude.toFixed(2)}`
-      : "not set",
-    () => setTopic("energy"),
-    "pin",
-  );
-  leaf(
-    buildingNode,
-    "Climate",
-    building.climate
-      ? `${building.climate.firstYear} to ${building.climate.lastYear}`
-      : "not loaded",
-    () => setTopic("energy"),
-    "gauge",
-  );
-}
-
 async function saveFile(saveAs: boolean): Promise<void> {
   try {
     const building = doc.building;
@@ -3898,18 +474,18 @@ async function saveFile(saveAs: boolean): Promise<void> {
               type: "application/zip",
             })
           : new Blob([serializeBuilding(building)], { type: "application/json" }),
-      saveAs ? null : fileHandle,
-      fileName,
+      saveAs ? null : app.fileHandle,
+      app.fileName,
     );
     if (!result) return;
-    fileName = result.name;
-    fileHandle = result.handle;
+    app.fileName = result.name;
+    app.fileHandle = result.handle;
     doc.markSaved();
     // The project in the browser takes the name of the file.
     if (projectId) void renameProject(projectId, projectName());
-    showStatus(`Saved ${fileName}.`);
+    showStatus(t("Saved {name}.", { name: app.fileName }));
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
+    showStatus(t(error instanceof Error ? error.message : String(error)), true);
   }
 }
 
@@ -3945,13 +521,48 @@ async function exportPlan(format: ExportFormat): Promise<void> {
   closeMenus();
   try {
     const data = await exportFile(doc.building, format);
-    const base = fileName.replace(/\.[^.]+$/, "");
+    const base = exportBase();
     const name = format === "svg" ? `${base}-${slug(doc.plan.name)}` : base;
     const blob = new Blob([data as BlobPart], { type: MIME[format] });
     const result = await saveBlob(blob, `${name}.${format}`, [EXPORT_TYPES[format]]);
-    if (result) showStatus(`Exported ${result.name}.`);
+    if (result) showStatus(t("Exported {name}.", { name: result.name }));
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
+    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+  }
+}
+
+/** The name of the open plan without its extension, for the names of the exports. */
+const exportBase = () => app.fileName.replace(/\.[^.]+$/, "");
+
+/** Saves the report as a PDF, or the quantities as CSV files in a ZIP file. */
+async function exportReport(kind: "pdf" | "csv"): Promise<void> {
+  closeMenus();
+  try {
+    if (kind === "pdf") {
+      const bytes = buildingReport(doc.building, {
+        title: t("Grundriss report"),
+        name: exportBase(),
+        date: new Date().toLocaleDateString(locale()),
+        number: (value, digits = 1) => fmt(value, digits),
+        t,
+      });
+      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+      const file = t("{name} report.pdf", { name: exportBase() });
+      const result = await saveBlob(blob, file, [EXPORT_TYPES.pdf]);
+      if (result) showStatus(t("Exported {name}.", { name: result.name }));
+    } else {
+      // A German spreadsheet expects ";" between the cells and a decimal comma.
+      const format = currentLanguage() === "de" ? CSV_DE : CSV_EN;
+      const bytes = takeoffZip(buildingTakeoff(doc.building), format, (text) => t(text));
+      const blob = new Blob([bytes as BlobPart], { type: "application/zip" });
+      const file = t("{name} quantities.zip", { name: exportBase() });
+      const result = await saveBlob(blob, file, [
+        { description: t("ZIP archive"), accept: { "application/zip": [".zip"] } },
+      ]);
+      if (result) showStatus(t("Exported {name}.", { name: result.name }));
+    }
+  } catch (error) {
+    showStatus(t(error instanceof Error ? error.message : String(error)), true);
   }
 }
 
@@ -3962,19 +573,11 @@ function closeMenus(): void {
 }
 
 /** Opens the menu under the button, or closes it if it is open. */
-function toggleMenu(
-  button: HTMLElement,
-  menu: HTMLElement,
-  place: "below" | "above" = "below",
-): void {
+function toggleMenu(button: HTMLElement, menu: HTMLElement): void {
   const open = menu.hidden;
   closeMenus();
   menu.hidden = !open;
-  if (!open) return;
-  const rect = button.getBoundingClientRect();
-  menu.style.top =
-    place === "below" ? `${rect.bottom + 6}px` : `${rect.top - menu.offsetHeight - 6}px`;
-  menu.style.left = `${Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)}px`;
+  if (open) placeMenu(menu, button);
 }
 
 document.addEventListener("pointerdown", (e) => {
@@ -4002,23 +605,33 @@ async function loadBackground(): Promise<void> {
     });
     editor.fit();
     setTool("calibrate");
+    if (image.reduced) {
+      showStatus(
+        t(
+          "The image is now {width} × {height} pixels, so that the plan stays fast. Click two points with a known distance.",
+          { width: image.width, height: image.height },
+        ),
+      );
+    }
   } catch {
-    showStatus("The browser cannot read this image.", true);
+    showStatus(t("The browser cannot read this image."), true);
   }
 }
 
 // ----- Wiring -----
-
-let shownStoryId = "";
 
 /**
  * During a drag, the 3D view and the panel update at most once in this time, in milliseconds.
  * They are the slow parts of an update, and a slow computer cannot do them in each frame.
  */
 const DRAG_INTERVAL = 120;
+
 let frameRequested = false;
+
 let slowPending = false;
+
 let lastSlow = 0;
+
 let slowTimer = 0;
 
 /** The slow parts of an update: the 3D view and the panel. */
@@ -4040,6 +653,8 @@ function afterChange(): void {
   updateTitle();
   renderStories();
   renderCompass();
+  // The tree of the overview shows the plan of now, for example after an undo.
+  if (app.topic === "overview" && app.planOpen) renderContents();
   window.clearTimeout(slowTimer);
   const wait = DRAG_INTERVAL - (performance.now() - lastSlow);
   if (!doc.inTransaction || wait <= 0) updateSlow();
@@ -4048,56 +663,121 @@ function afterChange(): void {
     slowTimer = window.setTimeout(() => slowPending && updateSlow(), wait);
   }
   // A change of the active story shows the whole new story.
-  if (doc.activeStoryId !== shownStoryId) {
-    shownStoryId = doc.activeStoryId;
+  if (doc.activeStoryId !== app.shownStoryId) {
+    app.shownStoryId = doc.activeStoryId;
     editor.select(null);
   }
 }
+
+// The modules of the panel reach the shell through these hooks.
+Object.assign(shell, {
+  setTool,
+  setTopic,
+  markTool,
+  closeMenus,
+  loadBackground,
+  setMapSource,
+  updateMapCredit,
+  fit3d,
+  enterPlan,
+  catalog,
+  renderPanel,
+});
 
 doc.subscribe(() => {
   if (frameRequested) return;
   frameRequested = true;
   requestAnimationFrame(afterChange);
 });
+
 setupCompass();
+
 $("#show-above").addEventListener("click", () => {
   showAbove = !showAbove;
   $("#show-above").classList.toggle("active", showAbove);
   update3d();
 });
+
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-add-story]")) {
   element.addEventListener("click", () =>
     addStory(element.dataset.addStory as "top" | "attic" | "cellar"),
   );
 }
-editor.onSelect = () => renderPanel();
+
+editor.onSelect = () => {
+  renderPanel();
+  selectionChanged();
+};
+
+setupCompact({
+  onCompact: () => {
+    updateSplitButton();
+    if (isCompact() && currentView === "split") setView("2d");
+  },
+  done: () => {
+    if (editor.tool === "run") editor.finishRun();
+    editor.cancel();
+    setTool("select");
+  },
+});
+
+// The "More" menu of a phone: the files, the layers, the export, and the help.
+$("#more-button").addEventListener("click", () => toggleMenu($("#more-button"), $("#more-menu")));
+const MORE: Record<string, () => void> = {
+  new: newPlan,
+  open: () => void openFile(),
+  save: () => void saveFile(false),
+  "save-as": () => void saveFile(true),
+  layers: () => toggleMenu($("#more-button"), $("#layers-menu")),
+  export: () => toggleMenu($("#more-button"), $("#export-menu")),
+  help: showShortcuts,
+};
+for (const element of document.querySelectorAll<HTMLButtonElement>("[data-more]")) {
+  element.addEventListener("click", () => {
+    closeMenus();
+    MORE[element.dataset.more!]();
+  });
+}
+
 editor.onCalibrate = (a, b) => {
-  calibration = { a, b };
+  app.calibration = { a, b };
   renderPanel();
 };
 
 $("#new").addEventListener("click", newPlan);
+
 $("#open").addEventListener("click", () => void openFile());
+
 $("#save").addEventListener("click", () => void saveFile(false));
+
 $("#save-as").addEventListener("click", () => void saveFile(true));
+
 $("#undo").addEventListener("click", () => doc.undo());
+
 $("#redo").addEventListener("click", () => doc.redo());
+
 $("#background").addEventListener("click", () => void loadBackground());
+
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-system]")) {
   element.addEventListener("click", () =>
     openServicesMenu(element.dataset.system as ServiceSystem, element),
   );
 }
+
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-tab]")) {
   element.addEventListener("click", () => setTopic(element.dataset.topicTab as Topic));
 }
-$("#brand").addEventListener("click", () => planOpen && showHome());
+
+$("#brand").addEventListener("click", () => app.planOpen && showHome());
+
 $("#layers-button").addEventListener("click", () =>
   toggleMenu($("#layers-button"), $("#layers-menu")),
 );
+
 for (const input of document.querySelectorAll<HTMLInputElement>("[data-layer]")) {
   input.addEventListener("change", applyLayers);
 }
+
 /** Shows the map of the source under the plan, or no map, and marks it in the Layers menu. */
 function setMapSource(source: MapSourceId | null): void {
   editor.mapSource = source;
@@ -4107,18 +787,33 @@ function setMapSource(source: MapSourceId | null): void {
   updateMapCredit();
   editor.render();
 }
+
 for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]")) {
   input.addEventListener("change", () => setMapSource((input.value || null) as MapSourceId | null));
 }
-editor.onRun = () => showStatus("Added the line. Draw the next line, or press Esc to stop.");
+
+editor.onRun = () => showStatus(t("Added the line. Draw the next line, or press Esc to stop."));
+
 $("#furniture").addEventListener("click", () => catalog.toggle());
+
 $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export-menu")));
+
+for (const element of document.querySelectorAll<HTMLButtonElement>("[data-report]")) {
+  element.addEventListener(
+    "click",
+    () => void exportReport(element.dataset.report as "pdf" | "csv"),
+  );
+}
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export]")) {
   element.addEventListener("click", () => void exportPlan(element.dataset.export as ExportFormat));
 }
+
 $("#empty-background").addEventListener("click", () => void loadBackground());
+
 $("#empty-wall").addEventListener("click", () => setTool("wall"));
+
 $("#empty-open").addEventListener("click", () => void openFile());
+
 $("#empty-example").addEventListener("click", openExample);
 
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")) {
@@ -4127,9 +822,11 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-fit]")
     fit3d();
   });
 }
+
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
   element.addEventListener("click", () => setTool(element.dataset.tool as Tool));
 }
+
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-view]")) {
   element.addEventListener("click", () => setView(element.dataset.view as "2d" | "split" | "3d"));
 }
@@ -4153,12 +850,30 @@ const ARROWS: Record<string, Point> = {
   arrowdown: { x: 0, y: 1 },
 };
 
+/** The fields where the keys type text, so the shortcuts do nothing there. */
+const TYPING =
+  "input:not([type=checkbox], [type=radio], [type=range], [type=color]), select, textarea";
+
 window.addEventListener("keydown", (e) => {
   const target = e.target as HTMLElement;
-  if (target.matches("input, select, textarea")) return;
   const key = e.key.toLowerCase();
+  const mod = e.ctrlKey || e.metaKey;
+  // Save and open work in a field too, so that the browser does not save the page.
+  if (mod && (key === "s" || key === "o") && app.planOpen && target.matches(TYPING)) {
+    e.preventDefault();
+    if (key === "s") void saveFile(e.shiftKey);
+    else void openFile();
+    return;
+  }
+  // The keys do nothing in a field and behind a dialog, for example the help of the shortcuts.
+  if (target.matches(TYPING) || document.querySelector("dialog[open]")) return;
+  if (e.key === "?") {
+    e.preventDefault();
+    showShortcuts();
+    return;
+  }
   // Without an open plan, only Ctrl+O works: it opens a file.
-  if (!planOpen) {
+  if (!app.planOpen) {
     if ((e.ctrlKey || e.metaKey) && key === "o") {
       e.preventDefault();
       void openFile();
@@ -4198,9 +913,9 @@ window.addEventListener("keydown", (e) => {
     closeMenus();
     if (editor.tool === "furniture" || editor.tool === "map") setTool("select");
     else if (catalog.isOpen) catalog.close();
-    else if (editor.tool === "calibrate" && calibration) {
+    else if (editor.tool === "calibrate" && app.calibration) {
       // The editor drops the two points, so the panel drops the real length.
-      calibration = null;
+      app.calibration = null;
       renderPanel();
     }
     editor.cancel();
@@ -4217,29 +932,32 @@ window.addEventListener("beforeunload", (e) => {
   if (storageOk) void storeProject();
   else if (doc.dirty) e.preventDefault();
 });
+
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") void storeProject();
 });
+
 doc.subscribe(scheduleAutosave);
-void projectsAvailable().then((ok) => {
-  storageOk = ok;
-  if (!planOpen) renderHome();
-});
+
+void startProjects();
 
 // ----- Installed app -----
 
 /** The prompt of the browser to install the app, while the browser offers it. */
 let installPrompt: (Event & { prompt(): Promise<void> }) | null = null;
+
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   installPrompt = event as typeof installPrompt;
   $("#install").hidden = false;
 });
+
 window.addEventListener("appinstalled", () => {
   installPrompt = null;
   $("#install").hidden = true;
-  showStatus("Installed Grundriss. It opens from your apps, also without the internet.");
+  showStatus(t("Installed Grundriss. It opens from your apps, also without the internet."));
 });
+
 $("#install").addEventListener("click", () => {
   void installPrompt?.prompt();
 });
@@ -4248,9 +966,11 @@ $("#install").addEventListener("click", () => {
 interface LaunchParams {
   files: FileSystemFileHandle[];
 }
+
 const launchQueue = (
   window as { launchQueue?: { setConsumer(f: (p: LaunchParams) => void): void } }
 ).launchQueue;
+
 launchQueue?.setConsumer(async ({ files }) => {
   const handle = files[0];
   if (!handle || !confirmDiscard()) return;
@@ -4258,20 +978,21 @@ launchQueue?.setConsumer(async ({ files }) => {
     const file = await handle.getFile();
     const bytes = new Uint8Array(await file.arrayBuffer());
     load(readBuildingFile(bytes), file.name, handle, "from-file");
-    showStatus(`Opened ${file.name}.`);
+    showStatus(t("Opened {name}.", { name: file.name }));
     enterPlan("structure");
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), true);
+    showStatus(t(error instanceof Error ? error.message : String(error)), true);
   }
 });
 
 // The service worker keeps the app in the cache, so it starts without the internet. The dev
 // server has no service worker, because it would keep old code.
+
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (hadController)
-      showStatus("A new version of Grundriss is ready. Reload the page to use it.");
+      showStatus(t("A new version of Grundriss is ready. Reload the page to use it."));
   });
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch(() => {
@@ -4281,12 +1002,16 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 }
 
 setTool("select");
+
 setView("split");
+
 load();
+
 showHome();
 
 // The dev server gives the document and the editor to the console, for tests by hand. The
 // production build does not contain this code.
+
 if (import.meta.env.DEV) {
   Object.assign(window, { grundriss: { doc, editor, view3d } });
 }

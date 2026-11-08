@@ -73,3 +73,54 @@ export const buildingQuantities = (building: Building) => ({
   runs: runQuantities(building.stories),
   fixtures: fixtureQuantities(building.stories),
 });
+
+export interface CircuitQuantity {
+  /** The name of the circuit, or "" for the devices without a circuit. */
+  circuit: string;
+  /** The devices of the circuit by type, and the length of its cables in m. */
+  fixtures: FixtureQuantity[];
+  cable: number;
+  /** The stories with devices of the circuit. */
+  stories: string[];
+}
+
+/**
+ * The circuits of the distribution board: the electric devices and the cables of each circuit,
+ * sorted by name with the numbers in order (F2 before F10). The devices without a circuit come
+ * last, with the circuit "".
+ */
+export function circuitQuantities(building: Building): CircuitQuantity[] {
+  const groups = new Map<
+    string,
+    { plans: Plan[]; stories: Set<string>; cable: number; fixtures: Plan["fixtures"] }
+  >();
+  const group = (name: string) => {
+    let g = groups.get(name);
+    if (!g) {
+      g = { plans: [], stories: new Set(), cable: 0, fixtures: [] };
+      groups.set(name, g);
+    }
+    return g;
+  };
+  for (const story of building.stories) {
+    for (const fixture of story.fixtures) {
+      if (fixture.system !== "electric") continue;
+      const g = group(fixture.circuit ?? "");
+      g.fixtures.push(fixture);
+      g.stories.add(story.name);
+    }
+    for (const run of story.runs) {
+      if (run.system !== "electric") continue;
+      group(run.circuit ?? "").cable += runTotalLength(story, run);
+    }
+  }
+  const order = new Intl.Collator("en", { numeric: true });
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : order.compare(a, b)))
+    .map(([circuit, g]) => ({
+      circuit,
+      fixtures: fixtureQuantities([{ fixtures: g.fixtures } as Plan]),
+      cable: g.cable,
+      stories: [...g.stories],
+    }));
+}

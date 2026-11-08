@@ -2,7 +2,7 @@
 // and heat loss are in src/model/energy.ts.
 
 import { defaultHeating } from "./heating";
-import type { Envelope, Household, Layer } from "./types";
+import type { Envelope, Finance, Household, Layer } from "./types";
 
 export interface Material {
   id: string;
@@ -47,10 +47,17 @@ export function defaultHousehold(): Household {
   return { electricity: 3500, battery: 0, price: 0.25, feedIn: 0.07 };
 }
 
+/** The usual economy: the prices of Austria, 3 % interest, and 2 % more for energy each year. */
+export function defaultFinance(): Finance {
+  return { region: "AT", interest: 0.03, priceIncrease: 0.02 };
+}
+
 /**
  * A usual new building in Central Europe: a brick wall with 16 cm EPS, a roof with 22 cm
  * mineral wool between rafters, a slab on the ground with 12 cm XPS, a slab to an unheated story
- * with 12 cm EPS, and triple glazing. Three people use 40 liters of hot water each per day.
+ * with 12 cm EPS, and triple glazing. The thermal bridges add 0.05 W/(m²K), which is the value
+ * of a careful design (EN ISO 13790). The windows give the ventilation, 0.5 per hour, and the
+ * building has an n50 of 3 per hour. Three people use 40 liters of hot water each per day.
  */
 export function defaultEnvelope(): Envelope {
   return {
@@ -79,6 +86,8 @@ export function defaultEnvelope(): Envelope {
     ],
     windowU: 0.9,
     doorU: 1.3,
+    thermalBridge: 0.05,
+    ventilation: { airChange: 0.5, heatRecovery: 0, n50: 3 },
     outside: -12,
     inside: 20,
     heating: defaultHeating("heat-pump"),

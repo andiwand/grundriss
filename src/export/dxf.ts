@@ -168,7 +168,7 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
     for (const room of rooms) {
       polygon(L.ROOMS, room.polygon);
       // Plain ASCII is easier to read than codes, so "m²" becomes "m2" and "·" becomes "-".
-      const lines = roomLabel(room).map((t) => t.replace(/²/g, "2").replace(/·/g, "-"));
+      const lines = roomLabel(room, plan).map((t) => t.replace(/²/g, "2").replace(/·/g, "-"));
       lines.forEach((t, i) => {
         const y = room.labelAt.y + (i - (lines.length - 1) / 2) * 0.3;
         text(L.TEXT, { x: room.labelAt.x, y }, t, 0.2);

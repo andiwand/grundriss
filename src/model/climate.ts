@@ -154,6 +154,12 @@ function decoded(climate: Climate): Decoded {
 /** The hourly series of the climate. */
 export const climateSeries = (climate: Climate): ClimateSeries => decoded(climate).series;
 
+/**
+ * The unit vector to the sun (east, north, up) in each hour, from `sunPath`, for the stored
+ * climate. The cache keeps it, so the same climate gives the same array.
+ */
+export const climateSun = (climate: Climate): Float64Array => decoded(climate).sun;
+
 // ----- The sun -----
 
 export interface SunPosition {
@@ -327,12 +333,18 @@ function diffuseAngleFactor(angle: number): number {
   return 1 - Math.exp((-1 / AR) * (c1 * x + c2 * x * x));
 }
 
-/** The yearly irradiation and the PV yield per kWp of a face, from the series and the sun path. */
+/**
+ * The yearly irradiation and the PV yield per kWp of a face, from the series and the sun path.
+ * `lit` is optional. It gives the part of the face that the sun reaches in each hour (0 to 1),
+ * for example from shade.ts. It scales the beam and the circumsolar part, because both come from
+ * the direction of the sun. The diffuse light of the sky and the light from the ground stay.
+ */
 export function faceYear(
   series: ClimateSeries,
   sun: Float64Array,
   tilt: number,
   azimuth: number,
+  lit?: ArrayLike<number>,
 ): FaceResult {
   const [nx, ny, nz] = normalOf(tilt, azimuth);
   const b = Math.max(tilt, 0.01) * RAD;
@@ -343,6 +355,7 @@ export function faceYear(
   const hourly = new Float32Array(HOURS);
   for (let h = 0; h < HOURS; h++) {
     const part = irradianceAt(series, sun, h, nx, ny, nz);
+    if (lit) part.beam *= lit[h];
     const total = part.beam + part.diffuse + part.ground;
     if (total <= 0) continue;
     irradiation += total;
@@ -487,7 +500,20 @@ export interface HourlyData {
 }
 
 /** The first day of each month in the year, from 0. */
+/** The first day of each month in the year, and the day after the year at the end. */
 const MONTH_START = MONTH_DAYS.reduce<number[]>((s, d, i) => [...s, s[i] + d], [0]);
+
+/** The first hour of each month (0 to 8759), and HOURS at the end. */
+export const MONTH_HOURS: readonly number[] = MONTH_START.map((day) => day * 24);
+
+/**
+ * The local solar time of the hour h of the series, in hours from 0 to 23: the hour of the middle
+ * of the hour that ends at h (see the series), moved by 1 h for each 15° of longitude east.
+ */
+export function localHour(h: number, longitude: number): number {
+  const time = h - 0.5 + longitude / 15;
+  return Math.floor(((time % 24) + 24) % 24);
+}
 
 /**
  * The index of a time "YYYY-MM-DDTHH:MM" in the typical year, or −1 for February 29 or a time

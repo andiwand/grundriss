@@ -93,25 +93,54 @@ export function chooseLayout(width: number, height: number): PageLayout {
 }
 
 /** The widths of the Helvetica glyphs in 1/1000 of the font size. Other glyphs use 556. */
-const WIDTHS: Record<string, number> = {
-  " ": 278,
-  ".": 278,
-  ",": 278,
-  ":": 278,
+/**
+ * The widths of the characters 32 to 126 of Helvetica and Helvetica-Bold, in 1/1000 of the font
+ * size (the AFM files of the standard fonts). A letter with an accent has the width of its base
+ * letter, and the other characters of WinAnsi have their own entry in EXTRA_WIDTHS.
+ */
+const REGULAR = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+const BOLD = [
+  278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+  611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+  278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+const EXTRA_WIDTHS: Record<string, number> = {
   "·": 278,
   "²": 333,
-  m: 833,
-  i: 222,
-  l: 222,
-  r: 333,
-  s: 500,
-  "(": 333,
-  ")": 333,
+  "³": 333,
+  "°": 400,
+  "€": 556,
+  "–": 556,
+  "—": 1000,
+  "…": 1000,
+  "×": 584,
+  ß: 611,
+  "„": 333,
+  "“": 333,
+  µ: 556,
 };
-const textWidth = (text: string, size: number) =>
-  ([...text].reduce((sum, c) => sum + (WIDTHS[c] ?? 556), 0) * size) / 1000;
 
-const n = (value: number) => String(Math.round(value * 100) / 100);
+/** The width of a text in points, in Helvetica or in Helvetica-Bold. */
+export function textWidth(text: string, size: number, bold = false): number {
+  const table = bold ? BOLD : REGULAR;
+  let sum = 0;
+  for (const c of text) {
+    const base = c.normalize("NFD")[0];
+    const code = base.codePointAt(0)!;
+    sum += EXTRA_WIDTHS[c] ?? (code >= 32 && code <= 126 ? table[code - 32] : 556);
+  }
+  return (sum * size) / 1000;
+}
+
+export const n = (value: number) => String(Math.round(value * 100) / 100);
 
 /** The characters at the codes 0x80 to 0x9F of WinAnsi. "\0" marks a code without a character. */
 const WIN_ANSI = "€\0‚ƒ„…†‡ˆ‰Š‹Œ\0Ž\0\0‘’“”•–—˜™š›œ\0žŸ";
@@ -120,7 +149,7 @@ const WIN_ANSI = "€\0‚ƒ„…†‡ˆ‰Š‹Œ\0Ž\0\0‘’“”•–�
  * Puts a text into a PDF string literal in WinAnsi, with one byte for each character. The font
  * has no glyph for other characters, so they become "?".
  */
-const literal = (text: string) => {
+export const literal = (text: string) => {
   const bytes = [...text].map((c) => {
     const code = c.codePointAt(0)!;
     if (code < 0x80 || (code >= 0xa0 && code <= 0xff)) return c;
@@ -164,11 +193,8 @@ export function planToPdf(plan: Plan, extras: StoryExtras = {}): Uint8Array {
   const box = storyBounds(plan, extras) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   const layout = chooseLayout(box.maxX - box.minX, box.maxY - box.minY);
   const title = `Grundriss · 1:${layout.denominator} · ${layout.paper}`;
-  return writePdfPages(
-    [pageContent(plan, extras, box, layout, title)],
-    layout.width,
-    layout.height,
-  );
+  const content = pageContent(plan, extras, box, layout, title);
+  return writePdf([{ content, width: layout.width, height: layout.height }]);
 }
 
 /**
@@ -177,6 +203,16 @@ export function planToPdf(plan: Plan, extras: StoryExtras = {}): Uint8Array {
  * plan. A story without objects gets no page, but the PDF has at least one page.
  */
 export function buildingToPdf(building: Building): Uint8Array {
+  const { contents, width, height } = planPages(building);
+  return writePdf(contents.map((content) => ({ content, width, height })));
+}
+
+/** The plan pages of the building: one for each story, all at one scale on one paper. */
+export function planPages(building: Building): {
+  contents: string[];
+  width: number;
+  height: number;
+} {
   const pages = building.stories
     .map((story) => ({ story, extras: storyExtras(building, story) }))
     .filter(({ story, extras }) => !isEmptyStory(story, extras));
@@ -204,7 +240,7 @@ export function buildingToPdf(building: Building): Uint8Array {
       `Grundriss · ${story.name} · 1:${layout.denominator} · ${layout.paper}`,
     ),
   );
-  return writePdfPages(contents, layout.width, layout.height);
+  return { contents, width: layout.width, height: layout.height };
 }
 
 /** The content stream of one page: the plan in the box, at the scale of the layout. */
@@ -312,7 +348,7 @@ function pageContent(
 
   ops.push("0.478 0.396 0.259 rg");
   for (const room of rooms) {
-    const lines = roomLabel(room);
+    const lines = roomLabel(room, plan);
     lines.forEach((t, i) => {
       // The y of the plan points down, so a later line has a larger y.
       // TEXT_SIZE is in points, so the division by k gives meters on the plan.
@@ -416,24 +452,33 @@ function pageContent(
   return ops.join("\n");
 }
 
+/** A page of a PDF: its content stream and its size in points. */
+export interface PdfPage {
+  content: string;
+  width: number;
+  height: number;
+}
+
 /**
- * Writes a PDF with one page for each content stream, all of the same size, and the font
- * Helvetica. Each character of the contents must be one byte (see `literal`).
+ * Writes a PDF with one page for each content stream, each with its own size, and the fonts
+ * Helvetica and Helvetica-Bold. Each character of the contents must be one byte (see `literal`).
  */
-export function writePdfPages(contents: string[], width: number, height: number): Uint8Array {
-  // Object 1 is the catalog, 2 the page tree, 3 the font. Each page has two objects after that:
-  // the page and its content stream.
-  const pageId = (i: number) => 4 + 2 * i;
+export function writePdf(pages: PdfPage[]): Uint8Array {
+  const contents = pages.map((p) => p.content);
+  // Object 1 is the catalog, 2 the page tree, 3 the font, and 4 the bold font. Each page has two
+  // objects after that: the page and its content stream.
+  const pageId = (i: number) => 5 + 2 * i;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Kids [${contents.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] ` +
       `/Count ${contents.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   ];
   contents.forEach((content, i) => {
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(width)} ${n(height)}] ` +
-        `/Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId(i) + 1} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(pages[i].width)} ${n(pages[i].height)}] ` +
+        `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageId(i) + 1} 0 R >>`,
       `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
     );
   });

@@ -14,7 +14,19 @@ export interface Vertex extends Point {
 }
 
 /** A straight wall between two vertices. The vertices are on the center line of the wall. */
+/**
+ * A note on an object of the plan: a text and photos, for example a defect, a year, or a
+ * material. A photo is an image as a data URL. The app makes a large photo smaller when it
+ * reads it (`PHOTO_LIMIT` in src/ui/notes.ts).
+ */
+export interface Note {
+  text: string;
+  photos: string[];
+}
+
 export interface Wall {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   a: Id;
   b: Id;
@@ -49,6 +61,8 @@ export type Swing = 1 | -1;
  * The offset is the distance from the vertex `a` of the wall to the center of the opening.
  */
 export interface Opening {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   wallId: Id;
   kind: OpeningKind;
@@ -133,6 +147,8 @@ export type StairKind = "straight" | "l" | "u";
  * back, next to the first flight.
  */
 export interface Stair {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   a: Point;
   b: Point;
@@ -148,6 +164,8 @@ export interface Stair {
  * these vertices, for example after a wall splits the room, the room that contains `at` gets it.
  */
 export interface RoomInfo {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   key: string;
   at: Point;
@@ -176,6 +194,10 @@ export type ServiceSystem = "water" | "heating" | "electric" | "comms";
  * A device on a wall has its back to the wall, like furniture: the local -y side.
  */
 export interface Fixture {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
+  /** The circuit of the distribution board, for example "F3", or nothing. */
+  circuit?: string;
   id: Id;
   system: ServiceSystem;
   type: string;
@@ -197,6 +219,10 @@ export interface Fixture {
  * points are on the plan. `kind` is a kind of `src/model/services.ts`, for example "cable" or "flow".
  */
 export interface Run {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
+  /** The circuit of the distribution board, for example "F3", or nothing. */
+  circuit?: string;
   id: Id;
   system: ServiceSystem;
   kind: string;
@@ -226,6 +252,39 @@ export interface HeatingSystem {
   kind: HeatingKind;
   efficiency: number;
   price: number;
+  /** For a heat pump: the source of the heat, the outside air or the ground. */
+  source: "air" | "ground";
+  /**
+   * For a heat pump: the flow temperature at the design temperature in °C, or null for the
+   * temperature that the radiators of the rooms need (`radiators.ts`).
+   */
+  flow: number | null;
+  /**
+   * For a heat pump: true if `efficiency` is a fixed seasonal performance factor. If false, the
+   * app calculates the performance of each hour from the flow and the source temperatures.
+   */
+  fixedEfficiency: boolean;
+}
+
+/**
+ * The ventilation of the building. `airChange` is the air change per hour of the ventilation.
+ * `heatRecovery` is the part of the heat that a ventilation system takes back (0 without a
+ * system). `n50` is the air change at 50 Pa of the airtightness test.
+ */
+export interface Ventilation {
+  airChange: number;
+  heatRecovery: number;
+  n50: number;
+}
+
+/**
+ * The settings of the economy of a renovation: the prices of the region, the interest per year,
+ * and the change of the energy prices per year, both as parts (0.03 is 3 %).
+ */
+export interface Finance {
+  region: "AT" | "DE";
+  interest: number;
+  priceIncrease: number;
 }
 
 /**
@@ -254,6 +313,9 @@ export interface Envelope {
   /** U-values in W/(m²K). */
   windowU: number;
   doorU: number;
+  /** The extra U-value of the thermal bridges on all areas of the envelope, in W/(m²K). */
+  thermalBridge: number;
+  ventilation: Ventilation;
   /** The design temperature outside and the usual temperature inside, in °C. */
   outside: number;
   inside: number;
@@ -334,6 +396,8 @@ export interface PvRack {
  * 0.8 m above the highest point of the roof, or above the top story if there is no roof.
  */
 export interface Chimney {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   x: number;
   y: number;
@@ -356,6 +420,8 @@ export type FurnitureSource = { kind: "generic"; type: string } | { kind: "model
  * for a wall cabinet.
  */
 export interface Furniture {
+  /** A note with a text and photos, or nothing. */
+  note?: Note;
   id: Id;
   source: FurnitureSource;
   name: string;
@@ -550,6 +616,8 @@ export interface Building {
   envelope: Envelope;
   /** The electricity of the household, the battery, and the prices of electricity. */
   household: Household;
+  /** The prices and the interest of the renovation. */
+  finance: Finance;
   /** The variants of the energy, to compare with the plan. */
   variants: Variant[];
   pv: PvArray[];

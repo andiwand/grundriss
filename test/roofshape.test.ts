@@ -545,3 +545,24 @@ describe("half-hip roofs", () => {
     for (const face of g.faces) expect(worldNormal(face.polygon).y).toBeGreaterThan(0);
   });
 });
+
+describe("steep half hips", () => {
+  it("ends the hip line at the eave of the face next to it, without a spike", () => {
+    const outline = rectangle(10, 6);
+    const sides = presetSides(outline, "gable", 35, 0.5).map((side) =>
+      side.kind === "gable"
+        ? { ...side, kind: "half-hip" as const, pitch: 80, gableHeight: 1.2 }
+        : side,
+    );
+    const g = roof(outline, sides);
+    const eave = 3 - 0.5 * tan(35);
+    for (const face of g.faces) {
+      for (const p of face.polygon) {
+        expect(p.z).toBeGreaterThanOrEqual(eave - 1e-6);
+        // No corner goes past the eave line of the long sides (y = −0.5 and y = 6.5).
+        expect(p.y).toBeGreaterThanOrEqual(-0.5 - 1e-6);
+        expect(p.y).toBeLessThanOrEqual(6.5 + 1e-6);
+      }
+    }
+  });
+});

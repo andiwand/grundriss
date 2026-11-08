@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Grundriss</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
@@ -82,6 +82,13 @@
         ></button>
       </div>
       <button
+        id="language"
+        class="ghost"
+        data-icon="globe"
+        title="Change the language"
+        data-no-translate
+      ></button>
+      <button
         id="install"
         class="ghost home-only"
         data-icon="install"
@@ -114,6 +121,14 @@
         <button class="icon-button" id="redo" data-icon="redo" title="Redo (Ctrl+Shift+Z)"></button>
       </div>
       <div class="divider plan-tools"></div>
+      <button
+        class="icon-button plan-tools compact-only"
+        id="more-button"
+        data-icon="more"
+        data-menu
+        title="More: files, layers, export, and help"
+        aria-label="More"
+      ></button>
       <div class="segmented plan-tools" id="views" role="group" aria-label="View">
         <button data-view="2d" data-icon="view2d" title="2D only">2D</button>
         <button data-view="split" data-icon="split" title="2D and 3D">Split</button>
@@ -239,6 +254,8 @@
           </button>
         </div>
         <div class="stories" id="stories" aria-label="Stories"></div>
+        <!-- A finger has no Esc and no Enter: this button ends the drawing tool. -->
+        <button class="tool-done primary" id="tool-done" data-icon="check" hidden>Done</button>
         <div class="catalog" id="catalog" hidden></div>
         <div class="compass" id="compass" title="North. Drag to turn it.">
           <svg viewBox="-24 -24 48 48" aria-hidden="true">
@@ -271,6 +288,10 @@
         ></button>
       </section>
       <aside id="panel"></aside>
+      <!-- On a phone, the panel is a sheet at the bottom, and this handle moves it. -->
+      <button class="sheet-handle" id="sheet-handle" aria-label="Show more or less of the panel">
+        <span></span>
+      </button>
       <!-- The start card lies over the 2D and the 3D pane. -->
       <div class="empty-state" id="empty-state" hidden>
         <h2>Start a floor plan</h2>
@@ -306,6 +327,19 @@
       </section>
     </main>
     <footer id="status"></footer>
+    <!-- On a phone, the topics move to this bar at the bottom (src/ui/compact.ts). -->
+    <nav class="bottom-bar plan-tools" id="bottom-bar" aria-label="Topic"></nav>
+    <div class="menu" id="more-menu" role="menu" hidden>
+      <button data-more="new" role="menuitem" data-icon="new"><span>New plan</span></button>
+      <button data-more="open" role="menuitem" data-icon="open"><span>Open a plan</span></button>
+      <button data-more="save" role="menuitem" data-icon="save"><span>Save</span></button>
+      <button data-more="save-as" role="menuitem" data-icon="saveAs"><span>Save as</span></button>
+      <button data-more="layers" role="menuitem" data-icon="layers"><span>Layers</span></button>
+      <button data-more="export" role="menuitem" data-icon="export"><span>Export</span></button>
+      <button data-more="help" role="menuitem" data-icon="help">
+        <span>Keyboard shortcuts</span>
+      </button>
+    </div>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>
       <div class="menu-label">This topic</div>
@@ -358,6 +392,12 @@
       </button>
       <button data-export="glb" role="menuitem">
         <span>glTF (.glb)</span><small>3D model</small>
+      </button>
+      <button data-report="pdf" role="menuitem">
+        <span>Report (PDF)</span><small>Areas, energy, renovation, and the plans</small>
+      </button>
+      <button data-report="csv" role="menuitem">
+        <span>Quantities (CSV)</span><small>Rooms, openings, envelope, materials, services</small>
       </button>
     </div>
     <script type="module" src="./src/main.ts"></script>

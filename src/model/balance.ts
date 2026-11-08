@@ -7,17 +7,17 @@
 //
 // - household: the electricity per year, split by DAY_PROFILE over the hours of the day (local
 //   solar time) and by a cosine over the year: SEASON more in winter, SEASON less in summer.
-// - heating: the electricity of the heating of each month (heating.ts), split over the hours of
-//   the month by the degree hours: inside temperature minus the temperature of the hour.
-// - hot water: the electricity of the hot water of each day, split evenly over 6:00 to 22:00.
+// - heating and hot water: the electricity of each hour from heating.ts. It splits the heat of
+//   each month by the degree hours, and the hot water over 6:00 to 22:00.
 //
-// The PV of each hour comes from the hourly yield of each face (climate.ts). The battery charges
+// The PV of each hour comes from the hourly yield of each face (climate.ts), times the hourly
+// factor of the shade of the building on the field (shade.ts). The battery charges
 // with the surplus of the PV and gives it back when the load is higher. Each way loses
 // 1 − BATTERY_EFFICIENCY. Its power is BATTERY_POWER times its capacity per hour.
 
-import { climateFace, climateSeries, HOURS, MONTH_DAYS } from "./climate";
+import { HOURS, localHour, MONTH_DAYS, MONTH_HOURS } from "./climate";
 import { HEATING_KINDS, heatingEnergy, heatingPrice, hotWaterDay } from "./heating";
-import { pvLayout } from "./pv";
+import { pvHourly } from "./pv";
 import type { Building } from "./types";
 
 /** The household electricity of each hour of a mean day, local time, relative to the mean. */
@@ -70,12 +70,6 @@ export interface EnergyBalance {
   co2: number;
 }
 
-/** The hour of the year (0 to 8759) where each month starts. */
-const MONTH_START = MONTH_DAYS.reduce<number[]>(
-  (starts, days, m) => [...starts, (starts[m] ?? 0) + days * 24],
-  [0],
-);
-
 /**
  * The hourly balance of electricity of the building, or null without a climate. A building
  * without rooms has only the household.
@@ -84,9 +78,6 @@ export function energyBalance(building: Building): EnergyBalance | null {
   const climate = building.climate;
   if (!climate) return null;
   const { household, envelope } = building;
-  const temperature = climateSeries(climate).temperature;
-  // The local solar time: the UTC hour moved by the longitude.
-  const offset = Math.round(climate.longitude / 15);
   const heating = heatingEnergy(building);
   const heatingElectric = HEATING_KINDS[envelope.heating.kind].energy === "electricity";
   const water = hotWaterDay(building);
@@ -97,7 +88,7 @@ export function energyBalance(building: Building): EnergyBalance | null {
   let seasonSum = 0;
   for (let h = 0; h < HOURS; h++) {
     const day = Math.floor(h / 24);
-    const local = (((h + offset) % 24) + 24) % 24;
+    const local = localHour(h, climate.longitude);
     const season = 1 + SEASON * Math.cos((2 * Math.PI * (day - 15)) / 365);
     load[h] = (DAY_PROFILE[local] / profileSum) * season;
     seasonSum += season;
@@ -106,44 +97,20 @@ export function energyBalance(building: Building): EnergyBalance | null {
   const daily = seasonSum / 24;
   for (let h = 0; h < HOURS; h++) load[h] *= household.electricity / daily;
 
+  // The heating and the hot water of each hour come from heating.ts. Only electricity counts.
   let heatingLoad = 0;
   let hotWaterLoad = 0;
   if (heating) {
-    heating.months.forEach((month, m) => {
-      const start = MONTH_START[m];
-      const end = MONTH_START[m + 1];
-      if (heatingElectric && month.final > 0) {
-        let sum = 0;
-        for (let h = start; h < end; h++) sum += Math.max(0, envelope.inside - temperature[h]);
-        for (let h = start; h < end; h++) {
-          const share =
-            sum > 0 ? Math.max(0, envelope.inside - temperature[h]) / sum : 1 / (end - start);
-          load[h] += month.final * share;
-        }
-        heatingLoad += month.final;
-      }
-      if (water.electric && month.hotWaterFinal > 0) {
-        // 16 hours of each day of the month, from 6:00 to 22:00 local time.
-        const share = month.hotWaterFinal / (((end - start) / 24) * 16);
-        for (let h = start; h < end; h++) {
-          const local = (((h + offset) % 24) + 24) % 24;
-          if (local >= 6 && local < 22) load[h] += share;
-        }
-        hotWaterLoad += month.hotWaterFinal;
-      }
-    });
+    for (let h = 0; h < HOURS; h++) {
+      if (heatingElectric) load[h] += heating.hourlyHeating[h];
+      if (water.electric) load[h] += heating.hourlyHotWater[h];
+    }
+    if (heatingElectric) heatingLoad = heating.final;
+    if (water.electric) hotWaterLoad = heating.hotWaterFinal;
   }
 
-  // The PV of each hour, from the hourly yield of each direction of each field.
-  const pv = new Float64Array(HOURS);
-  for (const array of building.pv) {
-    const layout = pvLayout(building, array);
-    if (!layout) continue;
-    for (const part of layout.parts) {
-      const hourly = climateFace(climate, part.tilt, part.azimuth).hourly;
-      for (let h = 0; h < HOURS; h++) pv[h] += part.peak * hourly[h];
-    }
-  }
+  // The PV of each hour, with the shade.
+  const pv = pvHourly(building) ?? new Float64Array(HOURS);
 
   // The battery, hour by hour. It starts empty.
   const capacity = Math.max(0, household.battery);
@@ -159,7 +126,7 @@ export function energyBalance(building: Building): EnergyBalance | null {
   }));
   let m = 0;
   for (let h = 0; h < HOURS; h++) {
-    while (h >= MONTH_START[m + 1]) m++;
+    while (h >= MONTH_HOURS[m + 1]) m++;
     const month = months[m];
     const net = pv[h] - load[h];
     let imported = 0;

@@ -19,6 +19,8 @@ import {
   type StairDrawing,
 } from "../model/drawing";
 import { withFurniture } from "../export/context";
+import { t } from "../i18n";
+import { fmt } from "../model/format";
 import {
   findFurniture,
   furnitureOutline,
@@ -94,6 +96,26 @@ import type {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const GRID_STEP = 0.05;
 const SNAP_PIXELS = 10;
+/** The snap distance of a finger in pixels. */
+const TOUCH_SNAP_PIXELS = 18;
+/** A finger looks for an object up to this distance in pixels. */
+const TOUCH_RADIUS = 16;
+/** A finger that moves less than this in pixels taps. */
+const TAP_PIXELS = 6;
+/** The tools that act on a tap of a finger, so that a pinch or a pan does not draw. */
+const TAP_TOOLS: Tool[] = [
+  "wall",
+  "door",
+  "window",
+  "dimension",
+  "stair",
+  "fixture",
+  "run",
+  "furniture",
+  "chimney",
+  "calibrate",
+  "rectify",
+];
 const MIN_ZOOM = 5;
 const MAX_ZOOM = 2000;
 /** The wall tool snaps the direction to a multiple of this angle, in degrees. */
@@ -131,7 +153,7 @@ interface Snap {
 }
 
 type Drag =
-  | { kind: "pan"; startScreen: Point; startOffset: Point }
+  | { kind: "pan"; startScreen: Point; startOffset: Point; tap?: Point }
   | { kind: "marquee"; start: Point; end: Point; base: Item[]; room: string | null }
   | { kind: "vertex"; id: Id; target: Snap | null }
   | { kind: "wall"; id: Id; startWorld: Point; origin: [Point, Point] }
@@ -175,6 +197,16 @@ export class Editor2D {
   private currentTool: Tool = "select";
   private items: Item[] = [];
   private drag: Drag | null = null;
+  /** The fingers on the plan, by pointer id, for the pinch with two fingers. */
+  private touches = new Map<number, Point>();
+  /** The pinch: the distance of the two fingers, the point of the plan between them, the zoom. */
+  private pinch: { distance: number; world: Point; zoom: number } | null = null;
+  /** True after a pinch until all fingers are up, so that the last finger does not draw. */
+  private pinchEnded = false;
+  /** The snap distance in pixels: larger for a finger than for a mouse. */
+  private snapPixels = SNAP_PIXELS;
+  /** The first touch of a finger with a drawing tool, until it is a tap, a pan, or a pinch. */
+  private pendingTap: PointerEvent | null = null;
   private chain: Snap | null = null;
   private cursor: Snap | null = null;
   /** The points of the dimension tool: the two ends, then the click that sets the offset. */
@@ -232,10 +264,20 @@ export class Editor2D {
       this.checkSelection();
       this.render();
     });
-    this.element.addEventListener("pointerdown", (e) => this.pointerDown(e));
-    this.element.addEventListener("pointermove", (e) => this.pointerMove(e));
-    this.element.addEventListener("pointerup", () => this.pointerUp());
-    this.element.addEventListener("pointercancel", () => this.pointerUp());
+    this.element.addEventListener("pointerdown", (e) => {
+      this.snapPixels = e.pointerType === "touch" ? TOUCH_SNAP_PIXELS : SNAP_PIXELS;
+      if (!this.touchDown(e)) this.pointerDown(e);
+    });
+    this.element.addEventListener("pointermove", (e) => {
+      this.snapPixels = e.pointerType === "touch" ? TOUCH_SNAP_PIXELS : SNAP_PIXELS;
+      if (!this.touchMove(e)) this.pointerMove(e);
+    });
+    this.element.addEventListener("pointerup", (e) => {
+      if (!this.touchUp(e)) this.pointerUp();
+    });
+    this.element.addEventListener("pointercancel", (e) => {
+      if (!this.touchUp(e)) this.pointerUp();
+    });
     this.element.addEventListener("pointerleave", () => {
       this.cursor = null;
       this.render();
@@ -610,18 +652,144 @@ export class Editor2D {
     return { kind: element.dataset.kind as ItemKind, id: element.dataset.id! };
   }
 
-  private startPan(e: PointerEvent): void {
+  private startPan(e: PointerEvent, tap?: Point): void {
     // The cursor shows a closed hand while the plan moves.
     this.element.classList.add("panning");
     this.drag = {
       kind: "pan",
       startScreen: { x: e.clientX, y: e.clientY },
       startOffset: { ...this.offset },
+      tap,
     };
   }
 
+  /**
+   * The object near a finger. A finger is less exact than a mouse, so a touch that hits nothing
+   * looks for an object up to TOUCH_RADIUS pixels around it.
+   */
+  private hitNear(e: PointerEvent): Item | null {
+    const direct = this.hit(e.target);
+    if (direct || e.pointerType !== "touch") return direct;
+    for (const radius of [TOUCH_RADIUS / 2, TOUCH_RADIUS]) {
+      for (let k = 0; k < 8; k++) {
+        const angle = (k * Math.PI) / 4;
+        const element = document.elementFromPoint(
+          e.clientX + Math.cos(angle) * radius,
+          e.clientY + Math.sin(angle) * radius,
+        );
+        if (element && this.element.contains(element)) {
+          const item = this.hit(element);
+          if (item) return item;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** The point of the element at a screen point. */
+  private local(p: Point): Point {
+    const rect = this.element.getBoundingClientRect();
+    return { x: p.x - rect.left, y: p.y - rect.top };
+  }
+
+  /**
+   * A finger goes down. A second finger starts a pinch: it stops the drag of the first finger,
+   * and the two fingers zoom and pan the view. Gives true if the pinch takes the event.
+   */
+  private touchDown(e: PointerEvent): boolean {
+    if (e.pointerType !== "touch") return false;
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.touches.size === 2) {
+      // A tap that waits does not happen: the two fingers zoom.
+      this.pendingTap = null;
+      // The drag of the first finger stops, and its change goes away.
+      if (this.drag && this.drag.kind !== "pan" && this.drag.kind !== "marquee") this.doc.cancel();
+      this.drag = null;
+      this.element.classList.remove("panning");
+      const [a, b] = [...this.touches.values()];
+      const middle = this.local({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      this.pinch = {
+        distance: Math.max(1, distance(a, b)),
+        world: {
+          x: (middle.x - this.offset.x) / this.zoom,
+          y: (middle.y - this.offset.y) / this.zoom,
+        },
+        zoom: this.zoom,
+      };
+      return true;
+    }
+    if (this.touches.size > 2 || this.pinchEnded) return true;
+    // A drawing tool acts on a tap, not on the first touch: a second finger can still come for
+    // a pinch, and a finger that moves pans the view.
+    if (TAP_TOOLS.includes(this.currentTool) && !this.spaceDown) {
+      this.pendingTap = e;
+      return true;
+    }
+    return false;
+  }
+
+  /** A finger moves. During a pinch, the view follows the two fingers. */
+  private touchMove(e: PointerEvent): boolean {
+    if (e.pointerType !== "touch" || !this.touches.has(e.pointerId)) return false;
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const tap = this.pendingTap;
+    if (tap) {
+      // A finger that moves more than a tap pans the view.
+      if (Math.hypot(e.clientX - tap.clientX, e.clientY - tap.clientY) < TAP_PIXELS) return true;
+      this.pendingTap = null;
+      this.startPan(tap);
+      return false;
+    }
+    if (this.pinch && this.touches.size >= 2) {
+      const [a, b] = [...this.touches.values()];
+      const middle = this.local({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      this.zoom = clamp(
+        (this.pinch.zoom * distance(a, b)) / this.pinch.distance,
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      // The point of the plan between the fingers stays between them.
+      this.offset = {
+        x: middle.x - this.pinch.world.x * this.zoom,
+        y: middle.y - this.pinch.world.y * this.zoom,
+      };
+      this.render();
+      return true;
+    }
+    return this.pinchEnded;
+  }
+
+  /** A finger goes up. After a pinch, the other fingers do nothing until they are up too. */
+  private touchUp(e: PointerEvent): boolean {
+    if (e.pointerType !== "touch") return false;
+    this.touches.delete(e.pointerId);
+    if (this.pinch) {
+      this.pinch = null;
+      this.pinchEnded = this.touches.size > 0;
+      return true;
+    }
+    if (this.pinchEnded) {
+      this.pinchEnded = this.touches.size > 0;
+      return true;
+    }
+    const tap = this.pendingTap;
+    if (tap) {
+      // The tap does the action of the tool now, at the point where the finger went down.
+      this.pendingTap = null;
+      this.pointerDown(tap);
+      this.pointerUp();
+      return true;
+    }
+    return false;
+  }
+
   private pointerDown(e: PointerEvent): void {
-    this.element.setPointerCapture(e.pointerId);
+    // A tap of a finger comes after the finger is up, so the pointer can be gone.
+    try {
+      this.element.setPointerCapture(e.pointerId);
+    } catch {
+      // Without the capture, the action of a tap still works.
+    }
     const world = this.toWorld(e);
     if (e.button === 1 || e.button === 2 || this.spaceDown || this.currentTool === "pan") {
       this.startPan(e);
@@ -753,11 +921,12 @@ export class Editor2D {
       this.drag = { kind: "roof-corner", roofId, index: i + 1 };
       return;
     }
-    const hit = this.hit(e.target);
+    const hit = this.hitNear(e);
     if (!hit) {
       if (e.pointerType === "touch") {
-        this.select(null);
-        this.startPan(e);
+        // A finger on the empty plan pans. A tap without a move selects the room under it, or
+        // nothing; a pan keeps the selection.
+        this.startPan(e, world);
         return;
       }
       const base = e.shiftKey ? this.items : [];
@@ -949,6 +1118,15 @@ export class Editor2D {
     const drag = this.drag;
     this.drag = null;
     this.element.classList.remove("panning");
+    if (drag?.kind === "pan" && drag.tap) {
+      const moved = Math.hypot(
+        this.offset.x - drag.startOffset.x,
+        this.offset.y - drag.startOffset.y,
+      );
+      const room = findRooms(this.doc.plan).find((r) => pointInPolygon(drag.tap!, r.polygon));
+      if (moved < TAP_PIXELS) this.select(room ? { kind: "room", id: room.key } : null);
+      return;
+    }
     if (!drag || drag.kind === "pan" || this.lostTransaction(drag)) return;
     if (drag.kind === "marquee") {
       const pixels = distance(drag.start, drag.end) * this.zoom;
@@ -1020,7 +1198,7 @@ export class Editor2D {
     free: boolean,
   ): { x: number; y: number; rotation: number } {
     if (free) return { x: at.x, y: at.y, rotation: piece.rotation };
-    const tolerance = Math.max(0.25, SNAP_PIXELS / this.zoom);
+    const tolerance = Math.max(0.25, this.snapPixels / this.zoom);
     const wall = snapToWall(piece, at, wallFaces(this.doc.plan), tolerance);
     if (wall) return wall;
     const p = snapToGrid(at, GRID_STEP);
@@ -1046,7 +1224,7 @@ export class Editor2D {
         name: "",
         source: { kind: "generic", type: "box" },
       } as Furniture;
-      const tolerance = Math.max(0.3, SNAP_PIXELS / this.zoom);
+      const tolerance = Math.max(0.3, this.snapPixels / this.zoom);
       const wall = snapToWall(box, at, wallFaces(this.doc.plan), tolerance);
       if (wall) return wall;
     }
@@ -1060,7 +1238,7 @@ export class Editor2D {
     keys: { altKey: boolean; shiftKey: boolean },
   ): { point: Point; fixtureId?: Id } {
     const system = runKind(this.runKindName).system;
-    const tolerance = (SNAP_PIXELS * 1.5) / this.zoom;
+    const tolerance = (this.snapPixels * 1.5) / this.zoom;
     let best: { point: Point; fixtureId?: Id } | null = null;
     let bestDistance = tolerance;
     for (const fixture of this.doc.plan.fixtures) {
@@ -1154,7 +1332,7 @@ export class Editor2D {
       return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, step) };
     }
 
-    const tolerance = SNAP_PIXELS / this.zoom;
+    const tolerance = this.snapPixels / this.zoom;
     let best: Snap | null = null;
     let bestDistance = tolerance;
     for (const vertex of plan.vertices) {
@@ -1282,7 +1460,7 @@ export class Editor2D {
 
   private placeOpening(kind: OpeningKind, world: Point): void {
     const plan = this.doc.plan;
-    const hit = nearestWall(plan, world, SNAP_PIXELS / this.zoom + 0.3);
+    const hit = nearestWall(plan, world, this.snapPixels / this.zoom + 0.3);
     if (!hit) return;
     let id: Id = "";
     this.doc.edit((plan) => {
@@ -1453,7 +1631,7 @@ export class Editor2D {
   private renderRoomLabels(plan: Plan): void {
     const group = svg("g", { class: "room-labels" }, this.content);
     for (const room of findRooms(plan)) {
-      const lines = roomLabel(room);
+      const lines = roomLabel(room, plan);
       lines.forEach((text, i) => {
         // The lines stack around the label point. The name is bold.
         const at = {
@@ -1703,7 +1881,7 @@ export class Editor2D {
       svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "part" }, element);
     }
     if (piece.source.kind === "model") {
-      this.label(element, { x: piece.x, y: piece.y }, piece.name, "piece-name");
+      this.label(element, { x: piece.x, y: piece.y }, t(piece.name), "piece-name");
     }
   }
 
@@ -1835,7 +2013,7 @@ export class Editor2D {
       const wall = findWall(plan, this.items[0].id);
       if (wall) {
         const [a, b] = wallEnds(plan, wall);
-        this.label(group, scale(add(a, b), 0.5), `${distance(a, b).toFixed(2)} m`, "dimension");
+        this.label(group, scale(add(a, b), 0.5), `${fmt(distance(a, b), 2)} m`, "dimension");
       }
     }
     if (this.drag?.kind === "marquee") {
@@ -1860,7 +2038,7 @@ export class Editor2D {
       if (this.chain) {
         const s = this.chain.point;
         svg("line", { x1: s.x, y1: s.y, x2: p.x, y2: p.y, class: "preview" }, group);
-        this.label(group, scale(add(s, p), 0.5), `${distance(s, p).toFixed(2)} m`, "dimension");
+        this.label(group, scale(add(s, p), 0.5), `${fmt(distance(s, p), 2)} m`, "dimension");
       }
     }
     if (this.currentTool === "dimension") {
@@ -1925,7 +2103,10 @@ export class Editor2D {
         this.label(
           group,
           scale(add(a, cursor.point), 0.5),
-          `${shape.count} steps · ${(shape.stepHeight * 100).toFixed(1)} cm`,
+          t("{count} steps · {height} cm", {
+            count: shape.count,
+            height: fmt(shape.stepHeight * 100, 1),
+          }),
           "dimension",
         );
       }

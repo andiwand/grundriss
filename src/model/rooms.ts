@@ -1,5 +1,6 @@
 // Rooms are not stored. They come from the closed cycles of the wall graph.
 
+import { fmt } from "./format";
 import { centroid, closestOnSegment, signedArea } from "./geometry";
 import type { Id, Plan, Point, RoomInfo } from "./types";
 
@@ -198,11 +199,12 @@ export function anchorRoomInfo(plan: Plan): void {
 }
 
 /** The lines of the label of a room: the name if it has one, the area, and a custom height. */
-export function roomLabel(room: Room): string[] {
+export function roomLabel(room: Room, plan?: Plan): string[] {
   const lines: string[] = [];
   if (room.info?.name) lines.push(room.info.name);
-  const area = `${room.area.toFixed(2)} m²`;
-  lines.push(room.info?.height != null ? `${area} · h ${room.info.height.toFixed(2)} m` : area);
+  // With the plan, the label shows the net area inside the walls, as a plan usually does.
+  const area = `${fmt(plan ? netRoomArea(plan, room) : room.area)} m²`;
+  lines.push(room.info?.height != null ? `${area} · h ${fmt(room.info.height)} m` : area);
   return lines;
 }
 
@@ -249,4 +251,47 @@ export function planOutline(plan: Plan): Point[] | null {
     else i++;
   }
   return polygon.length >= 3 ? polygon.reverse() : null;
+}
+
+/**
+ * The area of the room inside the faces of its walls, in m². The area of a room (`Room.area`)
+ * is on the center lines of the walls. Each side of the room moves inward by half the thickness
+ * of its wall.
+ */
+export function netRoomArea(story: Plan, room: Room): number {
+  const points = room.polygon;
+  const n = points.length;
+  if (n < 3) return room.area;
+  const sign = Math.sign(signedArea(points)) || 1;
+  const thickness = (i: number) => {
+    const a = room.vertexIds[i];
+    const b = room.vertexIds[(i + 1) % n];
+    const wall = story.walls.find((w) => (w.a === a && w.b === b) || (w.a === b && w.b === a));
+    return wall ? wall.thickness / 2 : 0;
+  };
+  // Each side as a line n · p = c, moved inward.
+  const lines = points.map((a, i) => {
+    const b = points[(i + 1) % n];
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const normal = { x: (-(b.y - a.y) / length) * sign, y: ((b.x - a.x) / length) * sign };
+    return { normal, c: normal.x * a.x + normal.y * a.y + thickness(i) };
+  });
+  const inner = points.map((p, i) => {
+    const l = lines[(i + n - 1) % n];
+    const r = lines[i];
+    const det = l.normal.x * r.normal.y - l.normal.y * r.normal.x;
+    if (Math.abs(det) < 1e-9) {
+      return {
+        x: p.x + r.normal.x * (r.c - (r.normal.x * p.x + r.normal.y * p.y)),
+        y: p.y + r.normal.y * (r.c - (r.normal.x * p.x + r.normal.y * p.y)),
+      };
+    }
+    return {
+      x: (l.c * r.normal.y - l.normal.y * r.c) / det,
+      y: (l.normal.x * r.c - l.c * r.normal.x) / det,
+    };
+  });
+  const area = Math.abs(signedArea(inner));
+  // A very thin room can turn over; then the area on the center lines is the better value.
+  return area > 0 && area <= room.area ? area : room.area;
 }

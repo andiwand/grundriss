@@ -59,17 +59,50 @@ shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top 
   heating and the hot water per year, and the hourly balance of electricity.
 - **Renovation**: variants of the building with measures, their cost, and their payback.
 
-Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic.
+Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic. **?** shows
+all keyboard shortcuts.
+
+The app is in English and in German, with the decimal comma in German. It follows the language
+of the browser; the language button in the top bar switches it.
+
+### Phone and tablet
+
+In a narrow window, the app shows the 2D plan or the 3D view alone. The topics are in a bar at
+the bottom, and **⋯** in the top bar has the files, the layers, the export, and the help. The
+panel is a sheet at the bottom: tap its handle for more or less, or drag it. A selection opens
+the sheet.
+
+- One finger draws with the active tool, moves an object, or pans the empty plan. A tap on a
+  room selects the room. A finger next to a thin object, for example a window, selects it.
+- Two fingers zoom and pan the 2D plan. In 3D, one finger turns the view, and two fingers zoom
+  and pan.
+- A drawing tool shows **Done**: it ends the tool, in place of Esc and Enter.
+
+### Notes and photos
+
+A wall, a door, a window, a device, a line, a piece of furniture, a stair, a chimney, and a room
+have **Notes and photos** in their panel: a text, for example a defect or a year, and photos. On
+a phone, **+ Photo** opens the camera or the gallery. A photo becomes at most 1600 pixels large,
+so that the plan stays small. The plan file keeps the notes.
 
 ### Projects in the browser
 
 The open plan saves itself in the browser after each change, as a project. The Projects page
 shows each project with a picture of its ground floor; a click opens it. The buttons on a tile
-change its name, make a copy, or delete it.
+change its name, make a copy, or delete it. A deleted project goes to the **Trash** for 30
+days, and **Restore** brings it back.
 
 The projects stay in this browser on this device. Clearing the data of the site deletes them.
-Safari deletes the data of a site after 7 days without a visit, unless the app is installed. So
-**Save** a plan to a file for a backup or to share it.
+Safari deletes the data of a site after 7 days without a visit, unless the app is installed. The
+page warns about this, and when the storage is almost full. **Back up all projects** saves all
+plans as one ZIP file, and **Restore a backup** reads it again. **Save** a plan to a file to
+share it.
+
+If a plan is open in two tabs, only the first tab saves it in the browser. The second tab says
+so in the status line.
+
+A large photo of a plan becomes smaller when it loads: at most 4000 pixels on its long side, as
+a JPEG. The undo keeps the last 200 steps.
 
 ### Install the app
 
@@ -149,6 +182,21 @@ The app also opens and saves a plan as one `.json` file. That file contains the 
 as a data URL.
 
 Chrome and Edge save to the same file again. Firefox and Safari download a new file each time.
+
+### Report and quantities
+
+**Export → Report (PDF)** gives one PDF: the areas of the rooms (net and WoFlV), the envelope with
+its layers and U-values, the doors and the windows by size, the heat loss and the heat pump
+readiness of each room, the energy per year, the summer, the variants of the renovation, the
+building services, and then the plans of the stories. Give it to an energy advisor, a bank, or a
+contractor.
+
+**Export → Quantities (CSV)** gives a ZIP file with CSV files: the rooms, the openings, the areas
+of the envelope, the materials of its layers (area and volume), and the building services. In
+German, the files use ";" and the decimal comma, as German spreadsheets expect.
+
+A device or a cable of electricity can have a **circuit**, for example F3. The distribution board
+in Utilities lists the devices and the cable length of each circuit.
 
 ### Assisted tracing
 
@@ -276,12 +324,41 @@ Walls with their own layers stay as in the plan.
 
 Each variant shows its energy cost per year, its heat demand and class, its CO₂, the saving per
 year against the plan, and the payback time. The **cost** is an estimate from usual prices in
-Austria, 2025, without the scaffold; the Estimate list shows its items. Type the price of a real
-offer to replace it, and the **subsidy** to take it off. The payback time is the cost after the
-subsidy divided by the saving per year, without interest and without a change of the prices.
+Austria or in Germany, 2025 (**Prices**), without the scaffold; the Estimate list shows its
+items. Type the price of a real offer to replace it, and the **subsidy** to take it off. For
+Germany, a button fills in an estimate of the federal subsidy (BEG EM, 2025: a heat pump 30 %,
+20 % more for a replaced oil or gas heating, 5 % more for a ground source; insulation and
+windows 15 %; without the bonus for the income and the iSFP). For Austria, the programs change
+too often for an estimate: see umweltfoerderung.at and the programs of your state. The payback
+time is the first year where the savings pay the cost after the subsidy. The saving of each
+year grows with **Energy prices**, and **Interest** discounts it.
 
 The check mark puts a variant into the plan, so you can change it in the other topics. The disk
 saves the plan back into the variant. Undo goes back.
+
+### Heat loss, heat pump, and summer
+
+The heat loss counts the thermal bridges (**ΔU** on all areas of the envelope), the air change,
+the airtightness **n50**, and the **heat recovery** of a ventilation system. Roof windows and the
+windows of dormers count as windows, with their sun. The room labels show the net area inside
+the walls. The energy per m² uses the gross floor area of the heated stories (BGF), and the WoFlV
+living area uses the net area.
+
+A heat pump has the source **outside air** or **ground**. The app calculates its performance in
+each hour from the flow temperature, which follows a heating curve, and the temperature of the
+source (Carnot × 0.40 for air, × 0.45 for ground). The design flow comes from the radiators, or
+you set it. A **fixed performance factor** is still possible. **Heat pump readiness** lists the
+flow temperature that the radiators of each room need for its heat loss: the power of a radiator
+is its power at 75/65/20 °C (EN 442), with the exponent 1.3, and floor heating gives 70 W/m² at
+35 °C. Up to 45 °C is good for a heat pump, and up to 55 °C is fair.
+
+**Summer** checks each room against overheating, hour by hour in June to August: the sun through
+its windows, people and devices, and windows that open when the outside is cooler. The verdict
+uses the degree hours over 27 °C (1200 K·h is the limit for homes in DIN 4108-2). **External
+blinds** show their effect.
+
+The PV yield counts the shade of the roofs, the dormers, and the chimneys, hour by hour. Trees,
+neighbors, and walls do not count.
 
 Without a climate, the PV yield is a general estimate for Central Europe.
 

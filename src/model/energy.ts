@@ -1,6 +1,6 @@
 // The heat loss of the rooms: a simple steady-state estimate in the spirit of EN 12831. It is not
-// a calculation by the standard. It ignores thermal bridges, the heat flow between rooms of
-// different temperatures, and the details of the ground. Use it to compare variants and to size
+// a calculation by the standard. The thermal bridges are one extra U-value on all areas. It
+// ignores the heat flow between rooms of different temperatures, and the details of the ground. Use it to compare variants and to size
 // radiators roughly, not for a permit.
 //
 // The loss of a room is the sum of its parts, each in watts:
@@ -19,12 +19,22 @@
 // the outside, so a temperature factor reduces this loss. The part of an outer wall of a heated
 // cellar that is in the ground loses less, by GROUND_FACTOR.
 
-import { ceilingArea, ceilingVolume, dormerAreas, roomCeiling, stripArea } from "./attic";
+import {
+  ceilingArea,
+  ceilingVolume,
+  dormerAreas,
+  roofGlass,
+  roomCeiling,
+  stripArea,
+} from "./attic";
 import { findStory, storyAbove, storyBelow } from "./building";
+import { intersectionArea } from "./geometry";
 import { material } from "./insulation";
 import { roofGeometries } from "./roof";
-import { findRooms, pointInPolygon, type Room } from "./rooms";
-import type { Building, Id, Layer, Story, Wall } from "./types";
+import { findRooms, netRoomArea, pointInPolygon, type Room } from "./rooms";
+import type { Building, Envelope, Id, Layer, Point, Story, Wall } from "./types";
+
+export { netRoomArea };
 
 /** The surface resistances in m²K/W: inside and outside. */
 export const SURFACE_RESISTANCE = {
@@ -90,10 +100,28 @@ export function wallLayers(building: Building, wall: Wall): Layer[] {
   return wall.layers ?? building.envelope.wall;
 }
 
-/** A window in an outer wall: its area in m² and the azimuth of its outside (0 is north). */
+/**
+ * A window: its area in m², the azimuth of its outside (0 is north), and its tilt in degrees
+ * (90 for a window in a wall, less for a roof window).
+ */
 export interface Glazing {
   area: number;
   azimuth: number;
+  tilt: number;
+}
+
+/** The air change per hour of the leaks of a building with the airtightness n50 (EN 12831). */
+export const LEAK_FACTOR = 0.07;
+
+/**
+ * The air change per hour that loses heat. Without a ventilation system, the windows give the
+ * air, and the leaks count only if they give more. With a system, the system takes back a part
+ * of the heat of its air, and the leaks add to it.
+ */
+export function effectiveAirChange(envelope: Envelope): number {
+  const { airChange, heatRecovery, n50 } = envelope.ventilation;
+  const leaks = n50 * LEAK_FACTOR;
+  return heatRecovery > 0 ? airChange * (1 - heatRecovery) + leaks : Math.max(airChange, leaks);
 }
 
 export interface RoomLoss {
@@ -107,6 +135,9 @@ export interface RoomLoss {
   /** The area of the outer walls without their openings, and the area of the roof, in m². */
   wallArea: number;
   roofArea: number;
+  /** The area inside the faces of the walls, and the gross floor area with the outer walls, in m². */
+  netArea: number;
+  grossArea: number;
   /** The inside temperature in °C. */
   temperature: number;
   /** The parts of the heat loss in W. */
@@ -117,7 +148,19 @@ export interface RoomLoss {
   floor: number;
   /** The loss through the slab to an unheated story above. */
   ceiling: number;
+  /** The loss of the thermal bridges. */
+  bridges: number;
   ventilation: number;
+  /** The heat transfer coefficient of the ventilation alone, in W/K. */
+  ventilationTransfer: number;
+  /** The net area of the outer walls for each set of layers. */
+  wallParts: WallPart[];
+  /**
+   * The area of the floor on the ground, and the area of the slabs that lose heat: to unheated
+   * rooms below or above, and to the outside air under the room, in m².
+   */
+  groundArea: number;
+  slabArea: number;
   /** The sum of the parts in W. */
   total: number;
   /** The heat transfer coefficient in W/K: the loss for 1 K between inside and outside. */
@@ -158,6 +201,28 @@ function underRoof(building: Building, story: Story, room: Room): boolean {
   });
 }
 
+/**
+ * The azimuth of a direction on the plan, in degrees from north, clockwise (0 to 360). The plan
+ * y points down, and north is `north` degrees clockwise from the top of the plan.
+ */
+export function azimuthOf(direction: { x: number; y: number }, north: number): number {
+  const plan = (Math.atan2(direction.x, -direction.y) * 180) / Math.PI;
+  return (((plan - north) % 360) + 360) % 360;
+}
+
+/** The net area of the outer walls with one set of layers: the envelope's, or a wall's own. */
+export interface WallPart {
+  layers: Layer[];
+  own: boolean;
+  area: number;
+}
+
+/** The area of the polygon that the rooms of the story cover, in m². */
+function covered(story: Story | undefined, polygon: Point[]): number {
+  if (!story) return 0;
+  return findRooms(story).reduce((sum, r) => sum + intersectionArea(polygon, r.polygon), 0);
+}
+
 /** The story if one of its rooms contains the point, or null. */
 function roomAt(story: Story | undefined, p: { x: number; y: number }): Story | null {
   if (!story) return null;
@@ -190,6 +255,17 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
   let windows = 0;
   let doors = 0;
   let wallArea = 0;
+  /** The area of the outer walls with their openings, for the thermal bridges. */
+  let envelopeArea = 0;
+  /** The area of half of the outer walls on the plan, for the gross floor area. */
+  let outerStrip = 0;
+  /** The net area of the outer walls for each set of layers: the envelope, or a wall's own. */
+  const wallParts: WallPart[] = [];
+  const addWallPart = (layers: Layer[], own: boolean, wallPart: number) => {
+    const part = wallParts.find((w) => w.layers === layers);
+    if (part) part.area += wallPart;
+    else wallParts.push({ layers, own, area: wallPart });
+  };
   const glazing: Glazing[] = [];
   const ids = room.vertexIds;
   const position = new Map(story.vertices.map((v) => [v.id, v]));
@@ -207,8 +283,7 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     let normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
     const middle = { x: (a.x + b.x) / 2 + normal.x * 0.01, y: (a.y + b.y) / 2 + normal.y * 0.01 };
     if (pointInPolygon(middle, room.polygon)) normal = { x: -normal.x, y: -normal.y };
-    const facing =
-      (((Math.atan2(normal.x, -normal.y) * 180) / Math.PI - building.north) % 360) + 360;
+    const facing = azimuthOf(normal, building.north);
     let openingArea = 0;
     for (const opening of story.openings) {
       if (opening.wallId !== wall.id) continue;
@@ -217,38 +292,63 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
       openingArea += one;
       if (opening.kind === "window") {
         windows += one * envelope.windowU;
-        glazing.push({ area: one, azimuth: facing % 360 });
+        glazing.push({ area: one, azimuth: facing, tilt: 90 });
       } else doors += one * envelope.doorU;
     }
-    const net = Math.max(0, strip(0, Math.hypot(b.x - a.x, b.y - a.y)) - openingArea);
+    const gross = strip(0, length);
+    const net = Math.max(0, gross - openingArea);
     wallArea += net;
-    walls += net * uValue(wallLayers(building, wall), "wall") * inGround;
+    envelopeArea += gross * inGround;
+    outerStrip += (length * wall.thickness) / 2;
+    const layers = wallLayers(building, wall);
+    walls += net * uValue(layers, "wall") * inGround;
+    addWallPart(layers, wall.layers != null, net);
   }
 
   // The roof loss goes to the highest room under the roof. The walls and the windows of the
-  // dormers over the room belong to it too.
+  // dormers over the room belong to it too. A roof window is a window, not a part of the roof.
   let roofArea = 0;
   if (underRoof(building, story, room)) {
     roofArea = ceilingArea(ceiling);
     const dormers = dormerAreas(building, story, room);
     wallArea += dormers.walls;
+    envelopeArea += dormers.walls + dormers.windows;
     walls += dormers.walls * uValue(envelope.wall, "wall");
-    windows += dormers.windows * envelope.windowU;
+    addWallPart(envelope.wall, false, dormers.walls);
+    for (const glass of roofGlass(building, story, room)) {
+      const tilt = (Math.acos(Math.min(1, Math.max(-1, glass.normal.z))) * 180) / Math.PI;
+      const azimuth = azimuthOf(glass.normal, building.north);
+      windows += glass.area * envelope.windowU;
+      glazing.push({ area: glass.area, azimuth, tilt });
+      // The area of a roof window was a part of the roof. A dormer window was not. The thermal
+      // bridges count the roof window, because it is a part of the envelope.
+      if (tilt < 80) {
+        roofArea = Math.max(0, roofArea - glass.area);
+        envelopeArea += glass.area;
+      }
+    }
+    envelopeArea += roofArea;
   }
   const roof = roofArea * uValue(envelope.roof, "roof");
-  // The floor is on the ground if no story is below. Above an unheated room, the slab loses heat
-  // to it. Above a heated room, it loses nothing.
+  // The floor is on the ground if no story is below. Else each part of the floor counts by what
+  // is under it: a heated room (no loss), an unheated room (the slab with CELLAR_FACTOR), or
+  // nothing, for example under a part that sticks out (the slab to the outside air).
   const below = storyBelow(building, story);
-  const under = roomAt(below, room.labelAt);
+  const under = covered(below, room.polygon);
+  const open = below ? Math.max(0, area - under) : 0;
+  const cold = below && !below.heated ? under : 0;
+  const floorU = uValue(envelope.ceiling, "floor");
   const floor = !below
     ? area * uValue(envelope.floor, "floor") * GROUND_FACTOR
-    : under && !under.heated
-      ? area * uValue(envelope.ceiling, "floor") * CELLAR_FACTOR
-      : 0;
-  // The slab to an unheated room above. The heat flows up, as through a roof.
-  const over = roofArea === 0 ? roomAt(storyAbove(building, story), room.labelAt) : null;
-  const slab = over && !over.heated ? area * uValue(envelope.ceiling, "roof") * ATTIC_FACTOR : 0;
-  const ventilation = AIR_HEAT * AIR_CHANGE * volume;
+    : cold * floorU * CELLAR_FACTOR + open * floorU;
+  // The slab to the unheated rooms above. The heat flows up, as through a roof.
+  const above = roofArea === 0 ? storyAbove(building, story) : undefined;
+  const coldAbove = above && !above.heated ? covered(above, room.polygon) : 0;
+  const slab = coldAbove * uValue(envelope.ceiling, "roof") * ATTIC_FACTOR;
+  envelopeArea += below ? cold * CELLAR_FACTOR + open : area * GROUND_FACTOR;
+  envelopeArea += coldAbove * ATTIC_FACTOR;
+  const bridges = envelopeArea * envelope.thermalBridge;
+  const ventilation = AIR_HEAT * effectiveAirChange(envelope) * volume;
 
   const heating = story.fixtures
     .filter((f) => f.system === "heating" && f.power != null && pointInPolygon(f, room.polygon))
@@ -258,13 +358,15 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     : null;
 
   // The parts above are in W/K. The loss in W is the part times the difference of temperature.
-  const transfer = walls + windows + doors + roof + floor + slab + ventilation;
+  const transfer = walls + windows + doors + roof + floor + slab + bridges + ventilation;
   return {
     area,
     height,
     volume,
     wallArea,
     roofArea,
+    netArea: netRoomArea(story, room),
+    grossArea: area + outerStrip,
     temperature,
     walls: walls * delta,
     windows: windows * delta,
@@ -272,7 +374,12 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     roof: roof * delta,
     floor: floor * delta,
     ceiling: slab * delta,
+    bridges: bridges * delta,
     ventilation: ventilation * delta,
+    ventilationTransfer: ventilation,
+    wallParts,
+    groundArea: below ? 0 : area,
+    slabArea: below ? cold + open + coldAbove : coldAbove,
     total: transfer * delta,
     transfer,
     glazing,
@@ -288,6 +395,12 @@ export interface BuildingLoss {
   /** The heated floor area in m², and the loss per area in W/m². */
   area: number;
   perArea: number;
+  /**
+   * The gross floor area of the heated stories with the outer walls (BGF), and the net floor
+   * area inside the walls, in m². The energy per m² uses the gross floor area, like the OIB.
+   */
+  grossArea: number;
+  netArea: number;
 }
 
 /** The heat loss of all rooms of the heated stories. */
@@ -308,5 +421,7 @@ export function buildingHeatLoss(building: Building): BuildingLoss {
   }
   const total = rooms.reduce((sum, r) => sum + r.total, 0);
   const area = rooms.reduce((sum, r) => sum + r.area, 0);
-  return { rooms, total, area, perArea: area > 0 ? total / area : 0 };
+  const grossArea = rooms.reduce((sum, r) => sum + r.grossArea, 0);
+  const netArea = rooms.reduce((sum, r) => sum + r.netArea, 0);
+  return { rooms, total, area, perArea: area > 0 ? total / area : 0, grossArea, netArea };
 }

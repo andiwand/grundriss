@@ -174,7 +174,7 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
       `dominant-baseline="middle">`,
   );
   for (const room of rooms) {
-    const lines = roomLabel(room);
+    const lines = roomLabel(room, plan);
     lines.forEach((text, i) => {
       // The lines stack around the label point, one line height apart.
       const y = room.labelAt.y + (i - (lines.length - 1) / 2) * font * 1.25;

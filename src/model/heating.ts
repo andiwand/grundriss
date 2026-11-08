@@ -1,17 +1,17 @@
 // The energy for heating and hot water per year: a monthly balance in the spirit of EN ISO 13790.
-// It is an estimate to compare variants, not an energy certificate. It ignores the cooling,
-// thermal bridges, and the details of the ground and the control.
+// It is an estimate to compare variants, not an energy certificate. It ignores the cooling and
+// the details of the ground and the control.
 //
 // For each month m and each room:
 //
 //   loss      Q_l = H × (θ_room − θ_m) × t_m                 H: heat transfer coefficient in W/K
 //   gains     Q_g = Q_solar + Q_internal
-//   solar     Q_solar = Σ A_window × SOLAR_FACTOR × I_m(azimuth of the window)
+//   solar     Q_solar = Σ A_window × SOLAR_FACTOR × I_m(tilt and azimuth of the window)
 //   internal  Q_internal = INTERNAL_GAINS × A_floor × t_m
 //   demand    Q_h = max(0, Q_l − η × Q_g)
 //
-// θ_m is the mean temperature of the month and I_m the irradiation on a vertical face in the
-// month, both from the stored climate. η is the utilization factor of the gains: a heavy
+// θ_m is the mean temperature of the month and I_m the irradiation on the face of the window in
+// the month, both from the stored climate. η is the utilization factor of the gains: a heavy
 // building stores more of the sun and uses more of it. The final energy is the demand plus the
 // losses of the distribution, divided by the efficiency of the heating.
 //
@@ -19,10 +19,30 @@
 // and the pipes lose HOT_WATER_LOSS more. The heating makes it with its efficiency, but a heat
 // pump has a lower performance factor for the higher temperature. A direct electric heater has
 // an efficiency of 1. The hot water does not change the heat demand and the class.
+//
+// The heat of each month goes to its hours by the degree hours: the inside temperature minus the
+// temperature of the hour. The hot water goes to the hours from 6:00 to 22:00. A heat pump
+// without a fixed performance factor has its own performance in each hour (`pumpCop`): a part
+// PUMP_QUALITY of the Carnot performance between the flow and the source. The flow follows a
+// heating curve from the design flow at the design temperature down to the room temperature. The
+// design flow is the flow of the heating, or the flow that the radiators need (`radiators.ts`).
+//
+// The energy per m² uses the gross floor area of the heated stories (BGF), like the OIB. The
+// class is still an estimate: the OIB uses a reference climate, and this model the climate of the
+// location.
 
-import { climateFaceMonths, climateSeries, MONTH_DAYS, monthlyMeans } from "./climate";
+import {
+  climateFaceMonths,
+  climateSeries,
+  HOURS,
+  localHour,
+  MONTH_DAYS,
+  MONTH_HOURS,
+  monthlyMeans,
+} from "./climate";
 import { buildingHeatLoss } from "./energy";
-import { pvLayout } from "./pv";
+import { designFlow, RADIATOR_EXPONENT, roomReadiness } from "./radiators";
+import { pvHourly } from "./pv";
 import type { Building, HeatingKind, HeatingSystem } from "./types";
 
 /** The internal gains of people and devices in a home, in W per m² of floor (ÖNORM B 8110-6). */
@@ -42,6 +62,36 @@ export const HOT_WATER_HEAT = (1.163 * 45) / 1000;
 export const HOT_WATER_LOSS = 0.4;
 /** A heat pump makes hot water with this part of its performance factor for the heating. */
 export const HOT_WATER_PUMP = 0.8;
+/** The real performance of a heat pump as a part of the Carnot performance. */
+export const PUMP_QUALITY = { air: 0.4, ground: 0.45 } as const;
+/** The temperature of the brine of a ground source heat pump, in °C. */
+export const GROUND_SOURCE = 5;
+/** The differences of temperature at the condenser and at the evaporator, in K. */
+const CONDENSER = 3;
+const EVAPORATOR = 5;
+/** The flow temperature of the hot water, and the flow without radiators, in °C. */
+export const HOT_WATER_FLOW = 55;
+export const DEFAULT_FLOW = 45;
+/** The lowest flow temperature of the heating curve, in °C. */
+const LOWEST_CURVE_FLOW = 25;
+
+/** The performance of a heat pump at a flow temperature and an outside temperature. */
+export function pumpCop(source: "air" | "ground", flow: number, outside: number): number {
+  const sink = flow + CONDENSER + 273.15;
+  const from = (source === "ground" ? GROUND_SOURCE : outside) - EVAPORATOR + 273.15;
+  const carnot = sink / Math.max(5, sink - from);
+  return Math.min(7, Math.max(1, PUMP_QUALITY[source] * carnot));
+}
+
+/**
+ * The flow temperature at an outside temperature: a heating curve from the design flow at the
+ * design temperature to the room temperature, with the exponent of the radiators. Floor heating
+ * has an exponent of about 1.1, so its curve is a little flatter; the model ignores that.
+ */
+export function curveFlow(design: number, outside: number, inside: number, designOutside: number) {
+  const share = Math.min(1, Math.max(0, (inside - outside) / Math.max(1, inside - designOutside)));
+  return Math.max(LOWEST_CURVE_FLOW, inside + (design - inside) * share ** (1 / RADIATOR_EXPONENT));
+}
 
 export interface HeatingKindInfo {
   name: string;
@@ -76,10 +126,17 @@ export const HEATING_KINDS: Record<HeatingKind, HeatingKindInfo> = {
   },
 };
 
-/** A heating of the kind with the usual values. */
+/** A heating of the kind with the usual values. A heat pump calculates its performance. */
 export function defaultHeating(kind: HeatingKind): HeatingSystem {
   const info = HEATING_KINDS[kind];
-  return { kind, efficiency: info.efficiency, price: info.price };
+  return {
+    kind,
+    efficiency: info.efficiency,
+    price: info.price,
+    source: "air",
+    flow: null,
+    fixedEfficiency: false,
+  };
 }
 
 /** The efficiency classes by the heat demand in kWh per m² and year (the scale of the OIB). */
@@ -126,7 +183,7 @@ export interface MonthEnergy {
 
 export interface HeatingEnergy {
   months: MonthEnergy[];
-  /** The heated floor area in m². */
+  /** The gross floor area of the heated stories (BGF) in m². */
   area: number;
   /** The heat demand per year in kWh, and per m². */
   demand: number;
@@ -144,6 +201,16 @@ export interface HeatingEnergy {
   co2: number;
   /** The final energy that uses electricity: the parts of the heating and the hot water. */
   electric: number;
+  /** The final energy of the heating and of the hot water in each hour of the year, in kWh. */
+  hourlyHeating: Float64Array;
+  hourlyHotWater: Float64Array;
+  /**
+   * For a heat pump: the seasonal performance factor (heat for the heating and the hot water
+   * divided by the electricity), the design flow, and where the flow comes from.
+   */
+  spf: number | null;
+  flow: number | null;
+  flowSource: "set" | "radiators" | "default" | null;
   /**
    * The electricity that the PV covers in the balance of each month, in kWh. The balance of the
    * month is an upper limit: PV in the day does not heat at night without a battery.
@@ -190,26 +257,31 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
   if (!climate) return null;
   const loss = buildingHeatLoss(building);
   if (loss.rooms.length === 0 || loss.area <= 0) return null;
-  const temperatures = monthlyMeans(climateSeries(climate).temperature);
+  const series = climateSeries(climate);
+  const temperatures = monthlyMeans(series.temperature);
   const heating = building.envelope.heating;
   const info = HEATING_KINDS[heating.kind];
   const pvMonths = pvMonthly(building);
   const water = hotWaterDay(building);
+  const area = loss.grossArea > 0 ? loss.grossArea : loss.area;
+  // A heat pump with a calculated performance needs the design flow.
+  const pump = heating.kind === "heat-pump";
+  const auto = pump && !heating.fixedEfficiency;
+  let flow: number | null = null;
+  let flowSource: HeatingEnergy["flowSource"] = null;
+  if (pump) {
+    const needed = designFlow(roomReadiness(building, loss));
+    flow = heating.flow ?? needed ?? DEFAULT_FLOW;
+    flowSource = heating.flow !== null ? "set" : needed !== null ? "radiators" : "default";
+  }
 
   // The whole building is one zone for the utilization: its time constant comes from all rooms.
   const transfer = loss.rooms.reduce((sum, r) => sum + r.transfer, 0);
-  const tau = transfer > 0 ? (HEAT_CAPACITY * loss.area) / transfer : 0;
-  // The sun on the windows of each direction, in kWh per m² of glass and month.
-  const sun = new Map<number, number[]>();
-  const sunOn = (azimuth: number) => {
-    const key = Math.round(azimuth);
-    let months = sun.get(key);
-    if (!months) {
-      months = climateFaceMonths(climate, 90, key);
-      sun.set(key, months);
-    }
-    return months;
-  };
+  const tau = transfer > 0 ? (HEAT_CAPACITY * area) / transfer : 0;
+  // The sun on a window in kWh per m² of glass and month. Whole degrees let the cache of
+  // climate.ts serve the windows with almost the same direction.
+  const sunOn = (azimuth: number, tilt: number) =>
+    climateFaceMonths(climate, Math.round(tilt), Math.round(azimuth));
 
   const months: MonthEnergy[] = MONTH_DAYS.map((days, m) => {
     const hours = days * 24;
@@ -218,24 +290,70 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
     for (const room of loss.rooms) {
       monthLoss += (room.transfer * Math.max(0, room.temperature - temperatures[m]) * hours) / 1000;
       for (const glass of room.glazing)
-        solar += glass.area * SOLAR_FACTOR * sunOn(glass.azimuth)[m];
+        solar += glass.area * SOLAR_FACTOR * sunOn(glass.azimuth, glass.tilt)[m];
     }
-    const internal = (INTERNAL_GAINS * loss.area * hours) / 1000;
+    const internal = (INTERNAL_GAINS * area * hours) / 1000;
     const gains = solar + internal;
     const used = monthLoss > 0 ? Math.min(gains, utilization(gains / monthLoss, tau) * gains) : 0;
     const demand = Math.max(0, monthLoss - used);
-    const final = (demand * (1 + DISTRIBUTION_LOSS)) / heating.efficiency;
+    // The hours below give the final energy of the heating and of the hot water.
     return {
       loss: monthLoss,
       solar,
       internal,
       used,
       demand,
-      final,
+      final: 0,
       pv: pvMonths[m],
       hotWater: water.heat * days,
-      hotWaterFinal: water.final * days,
+      hotWaterFinal: 0,
     };
+  });
+
+  // The hours: the heat of each month by the degree hours, and the hot water from 6 to 22.
+  const hourlyHeating = new Float64Array(HOURS);
+  const hourlyHotWater = new Float64Array(HOURS);
+  const inside = building.envelope.inside;
+  let start = 0;
+  let pumpHeat = 0;
+  months.forEach((month, m) => {
+    const end = start + MONTH_DAYS[m] * 24;
+    const heat = month.demand * (1 + DISTRIBUTION_LOSS);
+    let degrees = 0;
+    for (let h = start; h < end; h++) degrees += Math.max(0, inside - series.temperature[h]);
+    let final = 0;
+    let waterFinal = 0;
+    const waterHour = water.heat / 16;
+    for (let h = start; h < end; h++) {
+      const outside = series.temperature[h];
+      const part =
+        degrees > 0 ? (heat * Math.max(0, inside - outside)) / degrees : heat / (end - start);
+      const local = localHour(h, climate.longitude);
+      const water16 = local >= 6 && local < 22 ? waterHour : 0;
+      if (auto) {
+        const cop = pumpCop(
+          heating.source,
+          curveFlow(flow!, outside, inside, building.envelope.outside),
+          outside,
+        );
+        hourlyHeating[h] = part / cop;
+        // The hot water heater of the heating is the heat pump, unless it is electric.
+        hourlyHotWater[h] =
+          building.envelope.hotWater.heater === "electric"
+            ? water16
+            : water16 / pumpCop(heating.source, HOT_WATER_FLOW, outside);
+      } else {
+        hourlyHeating[h] = part / heating.efficiency;
+        hourlyHotWater[h] = (water16 * water.final) / Math.max(water.heat, 1e-9);
+      }
+      final += hourlyHeating[h];
+      waterFinal += hourlyHotWater[h];
+    }
+    pumpHeat +=
+      heat + (building.envelope.hotWater.heater === "electric" ? 0 : water.heat * MONTH_DAYS[m]);
+    month.final = final;
+    month.hotWaterFinal = waterFinal;
+    start = end;
   });
 
   const sum = (key: keyof MonthEnergy) => months.reduce((total, m) => total + m[key], 0);
@@ -247,10 +365,11 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
   const electricOf = (m: MonthEnergy) =>
     (heatingElectric ? m.final : 0) + (water.electric ? m.hotWaterFinal : 0);
   const pvCovered = months.reduce((total, m) => total + Math.min(electricOf(m), m.pv), 0);
-  const perArea = demand / loss.area;
+  const perArea = demand / area;
+  const pumpFinal = final + (building.envelope.hotWater.heater === "electric" ? 0 : hotWaterFinal);
   return {
     months,
-    area: loss.area,
+    area,
     demand,
     perArea,
     efficiencyClass: efficiencyClass(perArea),
@@ -262,28 +381,21 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
     co2: final * info.co2 + hotWaterFinal * water.co2,
     electric: months.reduce((total, m) => total + electricOf(m), 0),
     pvCovered,
+    hourlyHeating,
+    hourlyHotWater,
+    spf: pump && pumpFinal > 0 ? pumpHeat / pumpFinal : null,
+    flow,
+    flowSource,
   };
 }
 
-/**
- * The PV yield of the building in each month, in kWh: the yearly yield of each field, split by
- * the sun on its face in each month.
- */
+/** The PV yield of the building in each month, in kWh: the sum of its hours, with the shade. */
 function pvMonthly(building: Building): number[] {
-  const result = new Array<number>(12).fill(0);
-  const climate = building.climate;
-  if (!climate) return result;
-  for (const array of building.pv) {
-    const layout = pvLayout(building, array);
-    if (!layout) continue;
-    // Each direction of the field has its own months. An east-west rack has two.
-    for (const part of layout.parts) {
-      const months = climateFaceMonths(climate, part.tilt, part.azimuth);
-      const total = months.reduce((sum, v) => sum + v, 0);
-      if (total <= 0 || layout.peak <= 0) continue;
-      const share = (layout.yield * part.peak) / layout.peak;
-      months.forEach((v, m) => (result[m] += (share * v) / total));
-    }
-  }
-  return result;
+  const hourly = pvHourly(building);
+  return MONTH_DAYS.map((_, m) => {
+    if (!hourly) return 0;
+    let sum = 0;
+    for (let h = MONTH_HOURS[m]; h < MONTH_HOURS[m + 1]; h++) sum += hourly[h];
+    return sum;
+  });
 }

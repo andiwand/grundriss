@@ -10,9 +10,10 @@
     "build": "tsc --noEmit && vite build -c vite.site.config.ts && vite build --outDir dist/app --emptyOutDir false",
     "preview": "vite preview --outDir dist",
     "test": "vitest run",
-    "format": "prettier --write src test site *.ts *.json *.md index.html",
-    "format:check": "prettier --check src test site *.ts *.json *.md index.html",
-    "dev:site": "vite -c vite.site.config.ts"
+    "format": "prettier --write src test site *.ts e2e *.json *.md index.html",
+    "format:check": "prettier --check src test site *.ts e2e *.json *.md index.html",
+    "dev:site": "vite -c vite.site.config.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@techstark/opencv-js": "^5.0.0-release.1",
@@ -21,6 +22,7 @@
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/three": "^0.187.0",
     "prettier": "^3.9.10",
     "typescript": "^5.9.3",

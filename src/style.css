@@ -2541,3 +2541,517 @@ body.overview #layers-button {
   color: var(--ink-2);
   font-size: 12px;
 }
+
+/* The trash of the projects: one line for each project, with its actions. */
+.trash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.trash-item span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tables of the panel, for example the readiness of the rooms. */
+#panel .table-box {
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+#panel .panel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+#panel .panel-table th {
+  color: var(--ink-3);
+  font-weight: 500;
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+#panel .panel-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+#panel .panel-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.badge.good {
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+  color: var(--good);
+}
+
+.badge.fair {
+  background: color-mix(in srgb, #e8a33d 20%, transparent);
+  color: #b26b00;
+}
+
+.badge.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+#panel .variant-subsidy {
+  height: auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: normal;
+}
+
+/* The notes of the objects: a text and photos. */
+#panel .note-text {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  resize: vertical;
+}
+
+#panel .note-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+#panel .note-photo {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+#panel .note-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  cursor: zoom-in;
+}
+
+#panel .note-photo .icon-button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+
+#panel .note-add {
+  width: 72px;
+  height: 72px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.photo-dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: 96vw;
+  max-height: 96vh;
+}
+
+.photo-dialog::backdrop {
+  background: rgb(0 0 0 / 0.8);
+}
+
+.photo-dialog img {
+  display: block;
+  max-width: 96vw;
+  max-height: 96vh;
+  object-fit: contain;
+}
+
+/* The help of the keyboard shortcuts. */
+.shortcuts-dialog {
+  max-width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.shortcuts-dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.shortcuts-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.shortcuts-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px 24px;
+}
+
+.shortcuts-dialog h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.shortcuts-dialog dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.shortcuts-dialog dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.shortcuts-dialog kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+  text-align: center;
+}
+
+.shortcuts-dialog > button {
+  margin-top: 16px;
+}
+
+.project-warning {
+  margin: -4px 0 10px;
+  color: #b26b00;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ----- Phone and touch ----- */
+
+/* The elements of the phone layout do not show on a large screen. */
+.bottom-bar,
+.sheet-handle,
+.compact-only {
+  display: none;
+}
+
+.tool-done {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+/* A finger needs larger targets: about 40 px instead of 32 px. */
+@media (pointer: coarse) {
+  .palette button {
+    height: 40px;
+    min-width: 40px;
+  }
+
+  .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  #panel button,
+  #panel select,
+  #panel .input input {
+    min-height: 38px;
+  }
+
+  #panel .check-field input {
+    width: 22px;
+    height: 22px;
+  }
+
+  .stories .story {
+    height: 38px;
+  }
+
+  .menu button {
+    min-height: 44px;
+  }
+}
+
+body.compact {
+  /* A long text, for example in the status line, must not make the page wider than the phone. */
+  grid-template-columns: minmax(0, 1fr);
+  --bottom-bar: calc(58px + env(safe-area-inset-bottom));
+  /* The sheet of the panel starts above the status line and the bar at the bottom. */
+  --sheet-bottom: calc(var(--bottom-bar) + 20px);
+  grid-template-rows: auto 1fr auto auto;
+}
+
+body.compact .topbar {
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px 8px;
+  padding-top: max(4px, env(safe-area-inset-top));
+}
+
+/* The top bar of a phone: back, the name, undo and redo, the view, and "More". */
+body.compact .topbar > .group:not(:has(#undo)),
+body.compact #layers-button,
+body.compact #export,
+body.compact .topbar .divider,
+body.compact [data-view="split"] {
+  display: none;
+}
+
+body.compact:not(.no-plan) .compact-only {
+  display: inline-flex;
+}
+
+body.compact .file-name {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+
+body.compact .topbar .spacer {
+  display: none;
+}
+
+body.compact #views button {
+  padding: 0 8px;
+  font-size: 0;
+  gap: 0;
+}
+
+/* The topics in the bar at the bottom: an icon with a small label. */
+body.compact:not(.no-plan) .bottom-bar {
+  display: flex;
+  grid-row: 4;
+  height: var(--bottom-bar);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  z-index: 30;
+}
+
+body.compact .bottom-bar .topics {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+body.compact .bottom-bar .topics button {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  font-size: 10px;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+body.compact .bottom-bar .topics button span {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.compact .bottom-bar .topics button.active {
+  color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* One view at a time, from edge to edge. */
+body.compact #area,
+body.compact.wide #area.view-2d,
+body.compact.wide #area.view-3d {
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding: 0;
+}
+
+body.compact #plan-2d,
+body.compact #plan-3d,
+body.compact.wide #area.view-3d #plan-3d {
+  grid-area: 1 / 1;
+}
+
+body.compact #area.view-2d #plan-3d,
+body.compact #area.view-3d #plan-2d {
+  display: none;
+}
+
+body.compact .pane {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* The panel is a sheet over the view, above the bar at the bottom. */
+body.compact #panel,
+body.compact.wide #area #panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--sheet-bottom);
+  z-index: 20;
+  height: var(--sheet-height, 72px);
+  margin: 0;
+  padding: 26px 14px 14px;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -6px 24px rgb(16 24 40 / 0.14);
+  transition: height 180ms ease;
+}
+
+body.compact.no-plan #panel {
+  display: none;
+}
+
+body.compact:not(.no-plan) .sheet-handle {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--sheet-bottom) + var(--sheet-height, 72px) - 26px);
+  z-index: 21;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 26px;
+  border: none;
+  background: transparent;
+  touch-action: none;
+  transition: bottom 180ms ease;
+}
+
+body.compact .sheet-handle span {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line-strong);
+}
+
+body.compact.overview .sheet-handle,
+body.compact.overview #panel {
+  display: none;
+}
+
+/* The status line of a phone: one short line above the sheet. */
+body.compact #status {
+  grid-row: 3;
+  min-width: 0;
+  height: 20px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  padding: 2px 10px;
+}
+
+/* The palette stays at the top of the view, and the stories below it, collapsed. */
+body.compact .palette {
+  top: 8px;
+  max-width: calc(100% - 16px);
+}
+
+body.compact .stories {
+  top: 60px;
+  bottom: auto;
+  left: 8px;
+  width: auto;
+  min-width: 132px;
+}
+
+body.compact .stories:not(.open) > :not(.active) {
+  display: none;
+}
+
+body.compact .compass {
+  top: 60px;
+}
+
+/* The "Done" button stays above the sheet of the panel. */
+body.compact .tool-done {
+  position: fixed;
+  bottom: calc(var(--sheet-bottom) + var(--sheet-height, 72px) + 12px);
+}
+
+body.compact .menu {
+  max-width: calc(100vw - 16px);
+}
+
+body.compact #language {
+  padding: 0 8px;
+  font-size: 0;
+  gap: 0;
+}
+
+body.compact.sheet-drag #panel,
+body.compact.sheet-drag .sheet-handle {
+  transition: none;
+}

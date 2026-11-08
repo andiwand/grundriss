@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PlanDocument } from "../src/model/history";
+import { copyTree, HISTORY_LIMIT, PlanDocument } from "../src/model/history";
 import { addVertex, getVertex } from "../src/model/plan";
 
 describe("PlanDocument", () => {
@@ -87,5 +87,49 @@ describe("PlanDocument", () => {
     doc.undo();
     expect(doc.plan.vertices).toHaveLength(0);
     expect(doc.canUndo).toBe(false);
+  });
+});
+
+describe("history: limit, copies, and the end of a drag", () => {
+  it("keeps at most HISTORY_LIMIT entries", () => {
+    const doc = new PlanDocument();
+    for (let i = 0; i < HISTORY_LIMIT + 20; i++) doc.editBuilding((b) => (b.north = i));
+    let undos = 0;
+    while (doc.canUndo) {
+      doc.undo();
+      undos++;
+    }
+    expect(undos).toBe(HISTORY_LIMIT);
+    expect(doc.building.north).toBe(19);
+  });
+
+  it("copies the objects but keeps the same content", () => {
+    const original = { a: [1, { b: "x".repeat(1000) }], c: null, d: true };
+    const copy = copyTree(original);
+    expect(copy).toEqual(original);
+    expect(copy).not.toBe(original);
+    expect(copy.a).not.toBe(original.a);
+    expect(copy.a[1]).not.toBe(original.a[1]);
+  });
+
+  it("finds no change after a drag back to the start, also with a large image", () => {
+    const doc = new PlanDocument();
+    doc.editBuilding((b) => {
+      b.stories[0].background = {
+        image: `data:image/png;base64,${"A".repeat(100000)}`,
+        width: 10,
+        height: 10,
+        x: 0,
+        y: 0,
+        scale: 1,
+        opacity: 0.5,
+      };
+    });
+    const before = doc.building;
+    doc.begin();
+    doc.updateBuilding((b) => (b.stories[0].background!.x = 5));
+    doc.updateBuilding((b) => (b.stories[0].background!.x = 0));
+    doc.commit();
+    expect(doc.building).toBe(before);
   });
 });

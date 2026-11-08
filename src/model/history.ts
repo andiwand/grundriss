@@ -4,12 +4,34 @@
 // change the copy. The old building goes on the undo stack without changes. A building has a
 // few thousand objects at most, so a copy is cheap, and an undo can never be wrong.
 //
+// The copy shares the strings with the original. A string cannot change, so this is safe. The
+// large data of a plan is in strings: the image of the background, the models, and the climate.
+// So the snapshots of the history do not copy this data. The history keeps at most HISTORY_LIMIT
+// entries.
+//
 // The 2D editor works on one story at a time: the active story. `plan` gives it, and `edit` and
 // `update` change it. The choice of the active story is not part of the history.
 
 import { emptyBuilding, findStory } from "./building";
 import { normalize } from "./plan";
 import type { Building, Id, Story } from "./types";
+
+/** The most entries of the undo history. */
+export const HISTORY_LIMIT = 200;
+
+/**
+ * A deep copy of plain data: objects and arrays are new, and the strings, the numbers, and the
+ * other values stay the same. The copy shares each string with the original.
+ */
+export function copyTree<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(copyTree) as T;
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) result[key] = copyTree(item);
+    return result as T;
+  }
+  return value;
+}
 
 export class PlanDocument {
   building: Building;
@@ -78,7 +100,7 @@ export class PlanDocument {
   begin(): void {
     if (this.before !== null) return;
     this.before = this.building;
-    this.building = structuredClone(this.building);
+    this.building = copyTree(this.building);
     this.changed = false;
     this.compare = true;
   }
@@ -106,6 +128,7 @@ export class PlanDocument {
     }
     if (this.changed) {
       this.undoStack.push(this.before);
+      if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
       this.redoStack = [];
     } else {
       this.building = this.before;
@@ -197,12 +220,18 @@ export class PlanDocument {
   }
 }
 
+/** A long string, for example an image, counts by its length and its ends in a comparison. */
+const LONG_STRING = 256;
+
 /**
- * True if two buildings have the same content. Only the ids of the models count, because their
- * data can be large, and no transaction changes the data of a model.
+ * True if two buildings have the same content. A long string counts by its length and its ends,
+ * because it can be large. Only the end of a drag uses this comparison, and a drag does not
+ * change an image or a model, so the ends are enough.
  */
 function sameBuilding(a: Building, b: Building): boolean {
-  const content = ({ models, ...rest }: Building) =>
-    JSON.stringify([rest, models.map((m) => m.id)]);
-  return content(a) === content(b);
+  const short = (_key: string, value: unknown) =>
+    typeof value === "string" && value.length > LONG_STRING
+      ? `${value.length}:${value.slice(0, 64)}:${value.slice(-64)}`
+      : value;
+  return JSON.stringify(a, short) === JSON.stringify(b, short);
 }

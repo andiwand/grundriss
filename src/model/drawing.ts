@@ -2,6 +2,7 @@
 // dimension lines. The 2D editor and the exports draw the same shapes, so they come from here.
 // This module has no DOM and no Three.js.
 
+import { fmt } from "./format";
 import { add, distance, perpendicular, scale, sub } from "./geometry";
 import { chimneyOutline, stairShape, type StairShape } from "./building";
 import { findWall, wallEnds, wallExtents } from "./plan";
@@ -136,7 +137,7 @@ export function dimensionShape(dimension: Dimension): DimensionShape {
     textAt: scale(add(p, q), 0.5),
     normal,
     angle,
-    text: `${length.toFixed(2)} m`,
+    text: `${fmt(length)} m`,
     length,
   };
 }

@@ -4,6 +4,52 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Files: a plan file has version 3. It has values that older versions of the app do not know
+  (water and communication, the half hip, unheated stories), so an older app says that it cannot
+  read the file, and does not read it wrong. The app reads the versions 1, 2, and 3.
+- Phone and tablet: in a narrow window, the app shows one view at a time, the topics are in a
+  bar at the bottom, the files, layers, export, and help are in the "More" menu, and the panel
+  is a sheet at the bottom: tap or drag its handle for more or less. A selection opens it. Two
+  fingers zoom and pan the 2D plan; a finger next to an object selects it; a tap on a room
+  selects the room. Drawing tools have a "Done" button in place of Esc and Enter. On a touch
+  screen, the buttons are larger.
+- German: the app has a German interface, with decimal commas. It follows the language of the
+  browser, and the language button in the top bar switches it.
+- Notes and photos: a wall, a door, a window, a device, a line, a piece of furniture, a stair,
+  a chimney, and a room can have a note with photos. On a phone, the photo button opens the
+  camera.
+- Electricity: a device or a cable can have a circuit. The distribution board in Utilities lists
+  the devices and the cable length of each circuit.
+- Report: Export → Report (PDF) gives the areas, the envelope, the heat loss and the heat pump
+  readiness of each room, the energy per year, the summer, the renovation, the building
+  services, and the plans. Export → Quantities (CSV) gives the rooms, the openings, the areas of
+  the envelope, the materials of its layers, and the services, as CSV files in a ZIP file.
+- Heat pump: the app calculates the performance of each hour from the flow and the source
+  temperature (air or ground). The flow comes from the radiators of the rooms, or you set it. A
+  fixed seasonal performance factor is still possible. The panel shows the seasonal factor.
+- Heat pump readiness: Energy lists the flow temperature that the radiators of each room need
+  (their power at 75/65/20 °C), with good up to 45 °C and fair up to 55 °C. The room panel shows
+  it too.
+- Summer: Energy has a check of each room against overheating, with and without external blinds.
+- PV shade: the yield of a PV field counts the shade of the roofs, the dormers, and the chimneys.
+- Envelope: thermal bridges (ΔU), the air change, the airtightness n50, and the heat recovery of a
+  ventilation system. Roof windows and dormer windows count as windows with their sun.
+- Areas: the room labels show the net area inside the walls. The energy per m² uses the gross
+  floor area (BGF), and the WoFlV living area uses the net area. The class says that it is an
+  estimate.
+- Renovation: prices for Austria or Germany, the interest, and the change of the energy prices
+  per year. The payback time counts them. For Germany, a button fills in an estimate of the BEG
+  subsidy.
+- Projects: a deleted project goes to the trash for 30 days. "Back up all projects" saves one ZIP
+  file, and "Restore a backup" reads it. The page warns if the browser can delete the plans or if
+  the storage is almost full. A plan that is open in another tab is not saved a second time.
+- A large photo of a plan becomes smaller when it loads (at most 4000 pixels), so that the plan,
+  the browser storage, and the undo stay fast. The undo keeps the last 200 steps.
+- Keyboard shortcuts: "?" shows a list of them.
+- Website: a German version at `/de/`, with a language switch; a German browser gets it at
+  once. A new section shows who the app is for, and new chapters show the heat pump readiness,
+  the renovation with cost and subsidy, and the visit on site with notes and photos. The texts
+  cover the report, the quantities, the offline app, and the note that the values are estimates.
 - Renovation: a new topic after Energy. It compares variants of the building with the plan. A
   variant starts from the plan with a measure (insulation, triple glazing, a heat pump, PV, a
   battery, a heated or unheated cellar), and more measures can go into it. Each variant shows an
@@ -14,12 +60,10 @@ The changes that a user notices.
   electricity, the battery, the price from the grid, and the payment for the feed-in. The
   balance shows the PV used in the building, the part of the electricity from the PV, the grid,
   and the energy cost per year. An electric heating now uses the price from the grid.
-
 - PV on flat roofs: a field on a flat roof can stand on a rack, in one direction or east-west,
   with its own tilt and direction. The rows of a rack in one direction keep the distance for the
   winter sun. The yield, the PV share of the energy, and the 3D view use the tilted panels. A new
   field on a flat roof gets a rack to the south with 15°.
-
 - Roofs: a new kind of side, the half hip. Its gable wall goes up to a height, and a small hip
   face closes the top. The hip lines go on to the overhang, so the faces meet without a gap. The
   roof panel and the add buttons have a **Half hip** preset.
@@ -28,11 +72,7 @@ The changes that a user notices.
 - Energy: heated and unheated stories. A new cellar is unheated. The heated rooms next to an
   unheated story lose heat through the new slab layers of the envelope. The walls of a heated
   cellar lose less in the ground.
-- Energy: variants. The Variants group compares the plan with variants, for example more
-  insulation or a heat pump, and shows the difference of the cost. A variant can go into the
-  plan, and the plan can go into a variant. The plan file keeps the variants.
 - Build: the GitHub workflow uses the actions that run on Node.js 24, and builds with Node.js 24.
-
 - 2D: when the 2D pane changes its size, for example from split to 2D only, the point at the
   center of the view stays at the center.
 - Energy: the topic shows one view, 2D or 3D, and a wide panel for the calculations. The edge
@@ -60,7 +100,7 @@ The changes that a user notices.
 - Panel: a button with a long text grows to its lines. Before, the text came out of the button.
 - Top bar: in a narrow window, the buttons first show only their icons, and then the bar grows to
   a second row. The page does not scroll to the side.
-- Topics: the top bar has five topics: Overview, Structure, Utilities, Interior, and Energy. Each
+- Topics: the top bar has six topics: Overview, Structure, Utilities, Interior, Energy, and Renovation. Each
   topic shows its own tools in the palette, its own panel when nothing is selected, and its own
   layers. The background, the scale, and the tracing are in Structure, and the map under the plan
   is in the Location group of Energy. Select, Pan, and Measure are in all topics. A shortcut of a tool opens its topic. A
@@ -98,7 +138,6 @@ The changes that a user notices.
   the attic near the ridge, the hall has a wardrobe, the bathtub stands inside the house, the beds stand against the walls, and
   the attic has more furniture (a sofa, a desk in the kids room, nightstands, a wardrobe, and a
   toilet).
-
 - 3D: when only one story shows, the roofs of that story show only if it is the top story. So
   the roof of a low wing does not hide the rooms of a lower story. "All stories" shows all roofs.
 - The start card has an "Open a plan" button.
@@ -118,10 +157,8 @@ The changes that a user notices.
   is one step of the undo.
 - The Layers menu can hide the background image of the 2D plan. The image stays in the plan.
 - 3D: the floor of a story over a cellar or another story does not flicker any more.
-
 - 2D: a Pan tool (P) moves the view with a drag. The Select tool has the normal arrow, because
   it selects. The cursor is an open hand while you hold Space, and a closed hand during a pan.
-
 - The location of the building: the panel without a selection has a "Location" group with a
   place search and the latitude and the longitude. "Load climate" downloads the hourly weather of
   the last 10 complete years from Open-Meteo and stores a typical year in the plan (about 40 kB),
@@ -130,20 +167,16 @@ The changes that a user notices.
   position for each hour and the irradiance on the face, with the losses of a real system. The
   panel shows the mean temperature, the heating degree days, the design temperature, and the PV
   yield of the best roof face. The Energy panel can use the design temperature for the outside.
-
 - The start card lies in the middle of the 2D and the 3D view, and it can open an example house:
   two stories, a roof with a dormer, furniture, services, and PV.
-
 - 2D: a two-finger scroll on a trackpad pans the plan, and a pinch zooms. A mouse wheel still
   zooms.
 - 3D: a left drag turns the view around the point of the building under the cursor, with a
   small blue mark at that point. The wheel zooms to the point under the cursor.
-
 - Faster on slow computers: after a change, the app updates the views once in the next frame.
   During a drag, the 3D view and the panel update about 8 times per second, and at once after
   the drag. The 3D view uses at most twice the pixel density of a normal screen. The website
   draws its 3D picture only when it changes.
-
 - A website for Grundriss: a scroll story that builds one house with the engine of the app, from
   the scan to the solar panels. GitHub Pages serves the website at the root and the app at
   `/app/`. The README has the logo, a list of the features, and pictures.
@@ -152,7 +185,6 @@ The changes that a user notices.
   on one piece.
 - In 3D, a wall piece over a door or a window under the roof slope no longer shows above the
   roof.
-
 - Roofs: a building can have several roofs, each on its own outline. "Add roof" takes the
   outline of the walls of the active story, with the presets gable, hip, shed, and flat. Each
   side of the outline is an eave or a gable, with its own pitch and overhang, so a roof can be a
@@ -207,7 +239,6 @@ The changes that a user notices.
   - The panel of a selection of more objects counts all kinds, for example furniture and
     devices, and shows only the kinds in the selection.
   - The rows of a group in the panel have the same space of 8 px between them.
-
 - Building services (E): devices for electricity (sockets, switches, lights, network sockets,
   smoke detectors, the distribution board) and heating (radiators, boilers, heat pumps, the
   manifold of a floor heating). A device for a wall snaps to the wall. Lines for cables and
@@ -219,11 +250,9 @@ The changes that a user notices.
 - Photovoltaic: fields of panels on the faces of the roof, with the peak power and an estimate of
   the yield per year. The 3D view shows the panels.
 - The panel shows the lengths of the cables and pipes and the number of devices.
-
 - Recognize plan: a neural network in the browser finds the walls, the doors, and the windows
   of the background. They show as suggestions to accept or reject. The network learned only from
   plans that Grundriss generates, so its license is the license of the app.
-
 - Furniture (I): a catalog with four sources. Generic pieces with free sizes and plan symbols,
   the Kenney Furniture Kit (CC0, part of the app), realistic models from Poly Haven (CC0,
   downloaded on demand), and the import of your own glTF or GLB files. Near a wall, a piece
@@ -231,7 +260,6 @@ The changes that a user notices.
   the size, the height above the floor, and the rotation.
 - The 2D editor shows a model as an image from above. The exports draw the furniture, and a
   package contains the downloaded and imported models and a list of credits.
-
 - Stories: a building has more than one story, with cellars under the ground and an attic.
   The list at the bottom left of the 2D editor selects the active story and adds stories. The
   2D editor shows the walls of the story below as dashed lines.
@@ -250,7 +278,6 @@ The changes that a user notices.
 - The PDF has one page for each story, and the DXF has layers for each story. The exports show
   stairs, chimneys, and a north arrow.
 - The file format has version 2. The app reads files of version 1 as a building with one story.
-
 - The first version: load a scan of a plan as the background and set its scale, draw walls,
   put doors and windows in them, move and delete them, undo and redo, see the rooms with their
   areas, see the plan in 3D, and open and save plans as JSON files.

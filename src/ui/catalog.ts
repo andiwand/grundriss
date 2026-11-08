@@ -6,6 +6,7 @@
 import { importModelFile } from "../furniture/import";
 import { kenneyModel, loadKenneyCatalog, type KenneyItem } from "../furniture/kenney";
 import { downloadModel, listFurniture, type PolyHavenItem } from "../furniture/polyhaven";
+import { t } from "../i18n";
 import { icon } from "../icons";
 import {
   CATEGORY_NAMES,
@@ -25,7 +26,7 @@ const TABS: [Tab, string][] = [
   ["plan", "Imported"],
 ];
 
-export interface CatalogHost {
+interface CatalogHost {
   building(): Building;
   /** Adds a model to the building, if the building does not have it. */
   addModel(model: Model): void;
@@ -78,10 +79,10 @@ export class Catalog {
     root.replaceChildren();
 
     const header = document.createElement("header");
-    header.append("Furniture");
+    header.append(t("Furniture"));
     const close = document.createElement("button");
     close.className = "icon-button";
-    close.title = "Close (Esc)";
+    close.title = t("Close (Esc)");
     close.innerHTML = icon("close");
     close.addEventListener("click", () => this.close());
     header.append(close);
@@ -90,7 +91,7 @@ export class Catalog {
     tabs.className = "tabs";
     for (const [tab, name] of TABS) {
       const button = document.createElement("button");
-      button.textContent = name;
+      button.textContent = t(name);
       button.classList.toggle("active", tab === this.tab);
       button.addEventListener("click", () => {
         this.tab = tab;
@@ -104,7 +105,7 @@ export class Catalog {
     search.className = "search";
     const input = document.createElement("input");
     input.type = "search";
-    input.placeholder = "Search";
+    input.placeholder = t("Search");
     input.value = this.query;
     input.addEventListener("input", () => {
       this.query = input.value;
@@ -135,14 +136,20 @@ export class Catalog {
   // ----- The tabs -----
 
   private renderGeneric(body: HTMLElement): void {
+    // The search finds a piece by its name in the language of the app, and in English.
     const shown = GENERIC_TYPES.filter((type) =>
-      this.matches(type.name, CATEGORY_NAMES[type.category]),
+      this.matches(
+        t(type.name),
+        type.name,
+        t(CATEGORY_NAMES[type.category]),
+        CATEGORY_NAMES[type.category],
+      ),
     );
     bySection(body, shown, (cards, type) => {
       const template = newFurniture({ kind: "generic", type: type.type }, { x: 0, y: 0 });
       card(
         cards,
-        type.name,
+        t(type.name),
         `${size(type.width)} × ${size(type.depth)}`,
         symbolPicture(template),
         () => this.host.place(template),
@@ -181,14 +188,14 @@ export class Catalog {
       this.loadList(
         "kenney",
         body,
-        "Loading the Kenney kit…",
+        t("Loading the Kenney kit…"),
         loadKenneyCatalog,
         (items) => (this.kenney = items),
       );
       return;
     }
     const shown = this.kenney.filter((item) =>
-      this.matches(item.name, CATEGORY_NAMES[item.category]),
+      this.matches(item.name, t(CATEGORY_NAMES[item.category]), CATEGORY_NAMES[item.category]),
     );
     bySection(body, shown, (cards, item) => {
       card(
@@ -209,7 +216,7 @@ export class Catalog {
         },
       );
     });
-    note(body, "Kenney Furniture Kit, CC0 1.0 (kenney.nl).");
+    note(body, t("Kenney Furniture Kit, CC0 1.0 (kenney.nl)."));
   }
 
   private renderPolyHaven(body: HTMLElement): void {
@@ -217,14 +224,19 @@ export class Catalog {
       this.loadList(
         "polyhaven",
         body,
-        "Loading the furniture of Poly Haven… The app asks polyhaven.com for the list.",
+        t("Loading the furniture of Poly Haven… The app asks polyhaven.com for the list."),
         listFurniture,
         (items) => (this.polyHaven = items),
       );
       return;
     }
     const shown = this.polyHaven.filter((item) =>
-      this.matches(item.name, CATEGORY_NAMES[item.category], ...item.categories),
+      this.matches(
+        item.name,
+        t(CATEGORY_NAMES[item.category]),
+        CATEGORY_NAMES[item.category],
+        ...item.categories,
+      ),
     );
     bySection(body, shown, (cards, item) => {
       const element = card(
@@ -239,7 +251,9 @@ export class Catalog {
     });
     note(
       body,
-      "Realistic models from polyhaven.com, CC0 1.0. A click downloads the model with 1k textures (a few MB). The plan file then contains it.",
+      t(
+        "Realistic models from polyhaven.com, CC0 1.0. A click downloads the model with 1k textures (a few MB). The plan file then contains it.",
+      ),
     );
   }
 
@@ -257,11 +271,11 @@ export class Catalog {
     }
     this.busy.add(item.id);
     this.markBusy(item.id, true);
-    this.host.status(`Downloading ${item.name} from Poly Haven…`);
+    this.host.status(t("Downloading {name} from Poly Haven…", { name: item.name }));
     try {
       const model = await downloadModel(item);
       this.host.addModel(model);
-      this.host.status(`Downloaded ${item.name}. Click on the plan to place it.`);
+      this.host.status(t("Downloaded {name}. Click on the plan to place it.", { name: item.name }));
       this.host.place(
         newFurniture({ kind: "model", modelId: model.id }, { x: 0, y: 0 }, model),
         model,
@@ -287,7 +301,7 @@ export class Catalog {
     const button = document.createElement("button");
     button.className = "primary";
     button.innerHTML = icon("upload");
-    button.append("Import a model (.glb, .gltf)");
+    button.append(t("Import a model (.glb, .gltf)"));
     button.addEventListener("click", () => void this.importFile());
     actions.append(button);
     body.append(actions);
@@ -296,13 +310,13 @@ export class Catalog {
     if (models.length === 0) {
       note(
         body,
-        "The plan has no models yet. Import a model, or use one from Kenney or Poly Haven.",
+        t("The plan has no models yet. Import a model, or use one from Kenney or Poly Haven."),
       );
       return;
     }
-    const cards = section(body, "Models in this plan");
+    const cards = section(body, t("Models in this plan"));
     for (const model of models) {
-      const origin = { import: "Imported", kenney: "Kenney", polyhaven: "Poly Haven" }[
+      const origin = { import: t("Imported"), kenney: "Kenney", polyhaven: "Poly Haven" }[
         model.origin
       ];
       card(cards, model.name, origin, symbolPicture(null), () =>
@@ -324,11 +338,11 @@ export class Catalog {
       input.click();
     });
     if (!file) return;
-    this.host.status(`Reading ${file.name}…`);
+    this.host.status(t("Reading {name}…", { name: file.name }));
     try {
       const model = await importModelFile(file);
       this.host.addModel(model);
-      this.host.status(`Imported ${file.name}. Click on the plan to place it.`);
+      this.host.status(t("Imported {name}. Click on the plan to place it.", { name: file.name }));
       this.render();
       this.host.place(
         newFurniture({ kind: "model", modelId: model.id }, { x: 0, y: 0 }, model),
@@ -340,7 +354,8 @@ export class Catalog {
   }
 
   private fail(error: unknown): void {
-    this.error = error instanceof Error ? error.message : String(error);
+    // The messages of the model have a translation in the dictionary.
+    this.error = t(error instanceof Error ? error.message : String(error));
     this.host.status(this.error, true);
     this.render();
   }
@@ -372,13 +387,13 @@ function bySection<T extends { category: Category }>(
   fill: (cards: HTMLElement, item: T) => void,
 ): void {
   if (items.length === 0) {
-    note(body, "Nothing matches the search.");
+    note(body, t("Nothing matches the search."));
     return;
   }
   for (const category of Object.keys(CATEGORY_NAMES) as Category[]) {
     const inCategory = items.filter((item) => item.category === category);
     if (inCategory.length === 0) continue;
-    const cards = section(body, CATEGORY_NAMES[category]);
+    const cards = section(body, t(CATEGORY_NAMES[category]));
     for (const item of inCategory) fill(cards, item);
   }
 }

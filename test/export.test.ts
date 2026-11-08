@@ -42,7 +42,8 @@ describe("SVG export", () => {
     expect(svg.startsWith("<svg xmlns=")).toBe(true);
     expect(svg.trim().endsWith("</svg>")).toBe(true);
     expect(svg.match(/<polygon/g)!.length).toBe(1 + 4 + 2);
-    expect(svg).toContain("12.00 m²");
+    // The label shows the net area inside the walls of 20 cm: 3.8 × 2.8 m.
+    expect(svg).toContain("10.64 m²");
     expect(svg).toContain("4.00 m");
     expect(svg).toContain(" A 0.9 0.9 0 0 0 ");
     expect(svg).not.toContain("<image");
@@ -78,14 +79,15 @@ describe("PDF export", () => {
     const startxref = Number(/startxref\n(\d+)\n/.exec(text)![1]);
     expect(text.slice(startxref, startxref + 4)).toBe("xref");
     const entries = [...text.matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => Number(m[1]));
-    expect(entries).toHaveLength(5);
+    // The catalog, the page tree, two fonts, the page, and its content.
+    expect(entries).toHaveLength(6);
     entries.forEach((offset, i) => {
       expect(text.slice(offset).startsWith(`${i + 1} 0 obj`)).toBe(true);
     });
     const length = Number(/\/Length (\d+) >>\nstream\n/.exec(text)![1]);
     const start = text.indexOf("stream\n") + "stream\n".length;
     expect(text.slice(start + length, start + length + 10)).toBe("\nendstream");
-    expect(text).toContain("(12.00 m²) Tj");
+    expect(text).toContain("(10.64 m²) Tj");
     expect(text).toContain("1:25 · A4");
   });
 });
@@ -101,7 +103,7 @@ describe("DXF export", () => {
       expect(dxf).toContain(`0\nLAYER\n2\n${layer}\n`);
     }
     expect(dxf).toContain("0\nARC\n8\nOPENINGS\n");
-    expect(dxf).toContain("12.00 m2");
+    expect(dxf).toContain("10.64 m2");
     // The corner at plan y = 3 is at DXF y = -3.
     expect(dxf).toContain("\n20\n-3\n");
     // The door swings into the room (plan y > 0, DXF y < 0): the arc goes from -90 to 0 degrees.

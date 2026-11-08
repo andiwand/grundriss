@@ -12,17 +12,20 @@
 // 0.83, and north gives about 0.58. A flat field gives the same in each direction.
 //
 // When the building has a stored climate (`Building.climate`), the yield comes from the hourly
-// radiation of the location instead (`pvYieldPerKwp` in climate.ts). Real values also depend on
-// the shade and the products, and the app ignores the shade.
+// radiation of the location instead (`pvYieldPerKwp` in climate.ts). The shade of the parts of
+// the building (roofs, dormers, and chimneys) reduces the yield by the factor of shade.ts. Real
+// values also depend on trees, neighbors, and the products, and the app ignores them.
 //
 // On a flat face, a field can stand on a rack (`PvArray.rack`): the panels get their own tilt
 // and direction. The rows of a rack that faces one way keep a distance, so that a row does not
 // shade the next row at noon on 21 December. An east-west rack puts two panels back to back, and
 // the pairs keep only a small distance for maintenance.
 
-import { pvYieldPerKwp } from "./climate";
+import { area3 } from "./attic";
+import { climateFace, HOURS, pvYieldPerKwp } from "./climate";
 import { findRoof, roofGeometries, roofGeometryOf, type Vec3 } from "./roof";
 import { newId } from "./plan";
+import { panelShade, type FieldShade } from "./shade";
 import type { Building, Id, PvArray, PvRack } from "./types";
 
 /** The yield of 1 kWp on a south face with a tilt of 35°, in kWh per year. */
@@ -65,8 +68,12 @@ export interface PvLayout {
   parts: { tilt: number; azimuth: number; peak: number }[];
   /** The area of the panels in m². */
   area: number;
-  /** The estimate of the yield in kWh per year. */
+  /** The estimate of the yield in kWh per year, with the shade of the building. */
   yield: number;
+  /** The estimate of the yield in kWh per year without shade. */
+  unshadedYield: number;
+  /** The shade of the building on the panels (shade.ts). */
+  shade: FieldShade;
 }
 
 const sub3 = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
@@ -105,14 +112,6 @@ function faceNormal(face: Vec3[]): Vec3 {
     nz += (px - qx) * (py + qy);
   }
   return unit3({ x: nx, y: nz, z: ny });
-}
-
-/** The area of a flat polygon in 3D. */
-function area3(face: Vec3[]): number {
-  let sum: Vec3 = { x: 0, y: 0, z: 0 };
-  for (let i = 0; i < face.length; i++)
-    sum = add3(sum, cross3(face[i], face[(i + 1) % face.length]));
-  return Math.hypot(sum.x, sum.y, sum.z) / 2;
 }
 
 export interface FaceInfo {
@@ -217,8 +216,43 @@ function inset(polygon: { s: number; t: number }[], p: { s: number; t: number })
   return inside ? nearest : -nearest;
 }
 
+/** The panels of a field without the yield and the shade. */
+interface PanelLayout {
+  panels: Quad[];
+  /** The index in `parts` of each panel. */
+  partOf: number[];
+  parts: { tilt: number; azimuth: number; peak: number }[];
+  tilt: number;
+  azimuth: number;
+  area: number;
+}
+
 /** The layout of the panels of a field, or null if its face does not exist or points down. */
 export function pvLayout(building: Building, array: PvArray): PvLayout | null {
+  const layout = panelLayout(building, array);
+  if (!layout) return null;
+  const { panels, parts, partOf } = layout;
+  const shade = panelShade(building, panels, parts, partOf);
+  const perPart = parts.map((p) => p.peak * specificYield(building, p.tilt, p.azimuth));
+  return {
+    panels,
+    count: panels.length,
+    peak: (panels.length * array.panelPower) / 1000,
+    tilt: layout.tilt,
+    azimuth: layout.azimuth,
+    parts,
+    area: layout.area,
+    yield: perPart.reduce((sum, y, i) => sum + y * (shade.parts[i]?.factor ?? 1), 0),
+    unshadedYield: perPart.reduce((sum, y) => sum + y, 0),
+    shade,
+  };
+}
+
+/** The shade of the building on a field, or null if the field has no layout. */
+export const fieldShade = (building: Building, array: PvArray): FieldShade | null =>
+  pvLayout(building, array)?.shade ?? null;
+
+function panelLayout(building: Building, array: PvArray): PanelLayout | null {
   const roof = findRoof(building, array.roofId);
   if (!roof || roof.outline.length < 3) return null;
   const geometry = roofGeometryOf(building, roof);
@@ -347,7 +381,6 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
   const panels = chosen.map((p) => counterclockwise(p.quad));
 
   const count = panels.length;
-  const peak = (count * array.panelPower) / 1000;
   const backs = chosen.filter((p) => p.back).length;
   const parts = [{ tilt, azimuth, peak: ((count - backs) * array.panelPower) / 1000 }];
   if (backs > 0) {
@@ -355,13 +388,11 @@ export function pvLayout(building: Building, array: PvArray): PvLayout | null {
   }
   return {
     panels,
-    count,
-    peak,
+    partOf: chosen.map((p) => (p.back ? 1 : 0)),
+    parts,
     tilt,
     azimuth,
-    parts,
     area: count * pw * ph,
-    yield: parts.reduce((sum, p) => sum + p.peak * specificYield(building, p.tilt, p.azimuth), 0),
   };
 }
 
@@ -424,11 +455,32 @@ export function newPvField(building: Building): PvArray | null {
   };
 }
 
+/**
+ * The PV yield of the building in each hour of the typical year, in kWh, with the shade: each
+ * direction of each field with its hourly yield per kWp. Null without a climate.
+ */
+export function pvHourly(building: Building): Float64Array | null {
+  const climate = building.climate;
+  if (!climate) return null;
+  const pv = new Float64Array(HOURS);
+  for (const array of building.pv) {
+    const layout = pvLayout(building, array);
+    if (!layout) continue;
+    layout.parts.forEach((part, i) => {
+      const hourly = climateFace(climate, part.tilt, part.azimuth).hourly;
+      const shade = layout.shade.parts[i]?.hourly;
+      for (let h = 0; h < HOURS; h++) pv[h] += part.peak * hourly[h] * (shade ? shade[h] : 1);
+    });
+  }
+  return pv;
+}
+
 /** All panels of the building, for the 3D view. */
 export function pvPanels(building: Building): { array: Id; corners: Quad }[] {
   const result: { array: Id; corners: Quad }[] = [];
   for (const array of building.pv) {
-    for (const corners of pvLayout(building, array)?.panels ?? []) {
+    // The 3D view needs only the panels, so it does not wait for the shade.
+    for (const corners of panelLayout(building, array)?.panels ?? []) {
       result.push({ array: array.id, corners });
     }
   }

@@ -3,3 +3,8 @@
 /scripts/recognition/.venv/
 /scripts/recognition/checkpoints/
 /scripts/recognition/__pycache__/
+
+# The build and the results of the browser tests.
+.e2e-build/
+test-results/
+playwright-report/

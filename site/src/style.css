@@ -1,5 +1,6 @@
-/* The website of Grundriss. The stage is fixed behind the page. The sky, the paper, and the 3D
-   house change with the chapter (body[data-chapter]) and the scroll progress (--p, 0 to 1). */
+/* The website of Grundriss. The stage is fixed behind the page. The sky, the paper, the tablet,
+   and the 3D house change with the chapter (body[data-chapter]) and the scroll progress (--p, 0 to
+   1). The current chapter has the class "current". */
 
 @property --sky-top {
   syntax: "<color>";
@@ -58,7 +59,8 @@ a {
 
 /* ----- The sky of each chapter ----- */
 
-body[data-chapter="hero"] {
+body[data-chapter="hero"],
+body[data-chapter="uses"] {
   --sky-top: #1d2b63;
   --sky-mid: #7a8fe0;
   --sky-bottom: #f7c79c;
@@ -90,10 +92,25 @@ body[data-chapter="services"] {
   --sky-mid: #1b2552;
   --sky-bottom: #2b2f5e;
 }
-body[data-chapter="energy"] {
+body[data-chapter="heat"] {
+  --sky-top: #f2c9a8;
+  --sky-mid: #f8e3d2;
+  --sky-bottom: #fbf2ea;
+}
+body[data-chapter="sun"] {
   --sky-top: #34478f;
   --sky-mid: #e59a6e;
   --sky-bottom: #ffd8a6;
+}
+body[data-chapter="renovate"] {
+  --sky-top: #6f9be8;
+  --sky-mid: #cfe0f7;
+  --sky-bottom: #eef3e6;
+}
+body[data-chapter="visit"] {
+  --sky-top: #c9d6c4;
+  --sky-mid: #e8eee2;
+  --sky-bottom: #f5f6ef;
 }
 body[data-chapter="export"] {
   --sky-top: #0b2d74;
@@ -149,13 +166,19 @@ body[data-chapter="finale"] {
 
 /* On a wide screen, the picture sits right of the cards. */
 @media (min-width: 900px) {
-  body:not([data-chapter="hero"]):not([data-chapter="finale"]) #three {
+  body:not([data-chapter="hero"]):not([data-chapter="uses"]):not([data-chapter="finale"]) #three {
     transform: translateX(14vw);
   }
 }
 
 body[data-chapter="hero"] #three {
   transform: translateY(16vh);
+}
+
+/* Behind the use cases, the house turns on, dim and small. */
+body[data-chapter="uses"] #three {
+  transform: translateY(24vh) scale(0.85);
+  opacity: 0.4;
 }
 
 body[data-chapter="finale"] #three {
@@ -166,6 +189,8 @@ body[data-chapter="finale"] #three {
 body[data-chapter="scan"] #three,
 body[data-chapter="plan"] #three,
 body[data-chapter="services"] #three,
+body[data-chapter="heat"] #three,
+body[data-chapter="visit"] #three,
 body[data-chapter="export"] #three {
   opacity: 0;
 }
@@ -206,7 +231,8 @@ body[data-chapter="scan"] #paper {
   transform: translate(-50%, -50%) rotate(-2.5deg);
 }
 body[data-chapter="plan"] #paper,
-body[data-chapter="services"] #paper {
+body[data-chapter="services"] #paper,
+body[data-chapter="heat"] #paper {
   opacity: 1;
   transform: translate(-50%, -50%) rotate(0deg);
   background-color: #ffffff;
@@ -220,15 +246,14 @@ body[data-chapter="services"] #paper {
   transition: opacity 0.7s ease;
 }
 
-#paper .sketch {
-  opacity: 0;
-}
+#paper .sketch,
 #paper .plan {
   opacity: 0;
 }
 body[data-chapter="scan"] #paper .sketch,
-body[data-chapter="plan"] #paper .plan,
-body[data-chapter="services"] #paper .plan {
+body[data-chapter="plan"] #paper .main,
+body[data-chapter="services"] #paper .main,
+body[data-chapter="heat"] #paper .heatmap {
   opacity: 1;
 }
 
@@ -289,6 +314,233 @@ body[data-chapter="plan"] .plan #services {
   opacity: 0;
 }
 
+/* The readiness map: each room in the color of the flow temperature that its radiators need. The
+   colors come in with the scroll. */
+:root {
+  --ready-good: #39b37a;
+  --ready-fair: #f2b33d;
+  --ready-poor: #e8604f;
+  --ready-none: #d8dce5;
+}
+.heatmap #rooms polygon {
+  transition: fill 0.6s ease;
+}
+.heatmap #rooms .ready-good {
+  fill: color-mix(in srgb, var(--ready-good) clamp(0%, var(--p) * 140%, 72%), #f1f2f5);
+}
+.heatmap #rooms .ready-fair {
+  fill: color-mix(in srgb, var(--ready-fair) clamp(0%, var(--p) * 140%, 72%), #f1f2f5);
+}
+.heatmap #rooms .ready-poor {
+  fill: color-mix(in srgb, var(--ready-poor) clamp(0%, var(--p) * 140%, 72%), #f1f2f5);
+}
+.heatmap #rooms .ready-none {
+  fill: var(--ready-none);
+}
+.heatmap #services,
+.heatmap #furniture,
+.heatmap #dimensions {
+  opacity: 0;
+}
+#paper .legend {
+  position: absolute;
+  left: 3%;
+  bottom: 3%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 14px -6px rgba(40, 30, 10, 0.35);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+body[data-chapter="heat"] #paper .legend {
+  opacity: 1;
+}
+.legend strong {
+  width: 100%;
+  font-size: 12px;
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.legend .ready-good {
+  background: var(--ready-good);
+}
+.legend .ready-fair {
+  background: var(--ready-fair);
+}
+.legend .ready-poor {
+  background: var(--ready-poor);
+}
+.legend .ready-none {
+  background: var(--ready-none);
+}
+
+/* ----- The tablet of the visit: the plan with numbered notes ----- */
+
+#device {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(50vw, 780px);
+  aspect-ratio: 4 / 3;
+  padding: 18px;
+  border-radius: 34px;
+  background: linear-gradient(145deg, #2a2f3d, #12151d);
+  box-shadow:
+    0 50px 90px -40px rgba(20, 30, 20, 0.6),
+    0 14px 30px -14px rgba(20, 30, 20, 0.45),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transform: translate(-50%, -42%) rotate(3deg) scale(0.92);
+  transition:
+    opacity 0.8s ease,
+    transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 900px) {
+  #device {
+    left: 62%;
+  }
+}
+body[data-chapter="visit"] #device {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(-1deg);
+}
+#device .screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+}
+#device .screen svg {
+  position: absolute;
+  inset: 4% 34% 4% 3%;
+  width: 63%;
+  height: 92%;
+}
+#device .pin circle {
+  fill: #e8604f;
+  stroke: #fff;
+  stroke-width: 0.08;
+}
+#device .pin text {
+  fill: #fff;
+  font-size: 0.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  font-family: var(--font);
+}
+#device .pin {
+  opacity: clamp(0, (var(--p) * 3 - var(--i) * 0.6), 1);
+}
+#device .notes {
+  position: absolute;
+  top: 6%;
+  right: 3%;
+  width: 30%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#device .notes li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+  background: #f4f5f8;
+  border: 1px solid rgba(20, 26, 43, 0.06);
+  opacity: clamp(0, (var(--p) * 3 - var(--i) * 0.6), 1);
+  transform: translateY(calc((1 - clamp(0, (var(--p) * 3 - var(--i) * 0.6), 1)) * 10px));
+}
+#device .notes b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  color: #fff;
+  background: #e8604f;
+}
+
+/* ----- The comparison of the variants ----- */
+
+#compare {
+  position: absolute;
+  right: max(24px, 4vw);
+  bottom: 6vh;
+  display: grid;
+  gap: 8px;
+  width: min(440px, 40vw);
+  padding: 16px 18px;
+  border-radius: 18px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 24px 50px -28px rgba(10, 20, 60, 0.5);
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+body[data-chapter="renovate"] #compare {
+  opacity: 1;
+  transform: none;
+}
+#compare strong {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+#compare .bar {
+  display: grid;
+  grid-template-columns: 9.5em 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+#compare .bar span {
+  color: var(--muted);
+}
+#compare .bar i {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5b8cff, var(--brand-2));
+  transform-origin: left;
+  transform: scaleX(calc(var(--w) * clamp(0, var(--p) * 3 - var(--i) * 0.25, 1)));
+}
+#compare .bar:first-of-type i {
+  background: #9aa3b5;
+}
+#compare .bar b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
 /* The services glow over a quiet plan, and the current flows along the lines. */
 body[data-chapter="services"] .plan #rooms,
 body[data-chapter="services"] .plan #room-labels,
@@ -336,7 +588,7 @@ body[data-chapter="export"] #blueprint {
   /* White lines on the blue: the inverted plan, added to the blue. */
   filter: invert(1) grayscale(1) contrast(1.6);
   mix-blend-mode: screen;
-  transform: translate(-50%, -54%) scale(calc(0.94 + var(--p) * 0.06));
+  transform: translate(-50%, -56%) scale(calc(0.9 + var(--p) * 0.06));
 }
 @media (min-width: 900px) {
   #blueprint svg {
@@ -346,12 +598,12 @@ body[data-chapter="export"] #blueprint {
 #blueprint .chips {
   position: absolute;
   left: 50%;
-  bottom: 9vh;
+  bottom: 3.5vh;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  width: min(90vw, 760px);
+  gap: 8px;
+  width: min(90vw, 900px);
   transform: translateX(-50%);
 }
 @media (min-width: 900px) {
@@ -360,10 +612,10 @@ body[data-chapter="export"] #blueprint {
   }
 }
 #blueprint .chips span {
-  padding: 9px 16px;
+  padding: 7px 13px;
   border-radius: 999px;
   color: #dfe9ff;
-  font-size: 14px;
+  font-size: 13px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(8px);
@@ -392,6 +644,12 @@ body[data-chapter="export"] #blueprint .chips span {
 }
 #blueprint .chips span:nth-child(5) {
   transition-delay: 0.32s;
+}
+#blueprint .chips span:nth-child(6) {
+  transition-delay: 0.4s;
+}
+#blueprint .chips span:nth-child(7) {
+  transition-delay: 0.48s;
 }
 
 /* ----- The top bar ----- */
@@ -424,7 +682,10 @@ body:is(
     [data-chapter="walls"],
     [data-chapter="stories"],
     [data-chapter="roof"],
-    [data-chapter="furnish"]
+    [data-chapter="furnish"],
+    [data-chapter="heat"],
+    [data-chapter="renovate"],
+    [data-chapter="visit"]
   )
   .topbar {
   background: rgba(255, 255, 255, 0.72);
@@ -454,6 +715,32 @@ body:is(
 }
 .topbar-links > a:not(.button):hover {
   opacity: 1;
+}
+
+/* The language switch: EN and DE, the current one filled. */
+.langs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+.langs a {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  opacity: 0.75;
+}
+.langs a:hover {
+  opacity: 1;
+}
+.langs a[aria-current="page"] {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 18%, transparent);
 }
 
 /* ----- Buttons ----- */
@@ -647,15 +934,7 @@ main {
     opacity 0.6s ease,
     transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-body[data-chapter="scan"] [data-chapter="scan"] .card,
-body[data-chapter="plan"] [data-chapter="plan"] .card,
-body[data-chapter="walls"] [data-chapter="walls"] .card,
-body[data-chapter="stories"] [data-chapter="stories"] .card,
-body[data-chapter="roof"] [data-chapter="roof"] .card,
-body[data-chapter="furnish"] [data-chapter="furnish"] .card,
-body[data-chapter="services"] [data-chapter="services"] .card,
-body[data-chapter="energy"] [data-chapter="energy"] .card,
-body[data-chapter="export"] [data-chapter="export"] .card {
+.chapter.current .card {
   opacity: 1;
   transform: none;
 }
@@ -701,6 +980,13 @@ body[data-chapter="finale"] .card {
   font-size: 16px;
   line-height: 1.6;
   color: var(--muted);
+}
+.card p.note {
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 3px solid var(--gold);
+  font-size: 13.5px;
+  line-height: 1.45;
 }
 
 .readout {
@@ -778,7 +1064,7 @@ body[data-chapter="export"] [data-chapter="export"] .card {
   opacity: 0;
   transition: opacity 0.6s ease;
 }
-body:not([data-chapter="hero"]):not([data-chapter="finale"]) #rail {
+body:not([data-chapter="hero"]):not([data-chapter="uses"]):not([data-chapter="finale"]) #rail {
   opacity: 1;
 }
 #rail button {
@@ -811,6 +1097,104 @@ body:not([data-chapter="hero"]):not([data-chapter="finale"]) #rail {
 #rail .icon {
   width: 18px;
   height: 18px;
+}
+/* Twelve chapters need a smaller rail on a low screen. */
+@media (max-height: 720px) {
+  #rail {
+    gap: 4px;
+    padding: 6px;
+  }
+  #rail button {
+    width: 30px;
+    height: 30px;
+  }
+  #rail .icon {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+/* ----- The use cases ----- */
+
+.uses {
+  position: relative;
+  padding: 14vh 24px 18vh;
+  color: #fff;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(10, 14, 40, 0.45) 18%,
+    rgba(10, 14, 40, 0.55) 82%,
+    transparent 100%
+  );
+}
+.uses-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  text-align: center;
+}
+.uses .kicker {
+  justify-content: center;
+  color: #ffd28a;
+}
+.uses h2 {
+  margin: 14px 0 0;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+.use-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 14px;
+  margin-top: 44px;
+  text-align: left;
+}
+.use {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 22px 18px;
+  border-radius: 18px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px);
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+.use:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.14);
+}
+.use h3 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+.use p {
+  margin: 0;
+  flex: 1;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #cdd3e8;
+}
+.use-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9db8ff;
+}
+.use-link .number {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
 }
 
 /* ----- The finale ----- */
@@ -897,6 +1281,9 @@ footer {
 footer a {
   text-decoration: none;
 }
+footer .langs {
+  color: #c5cbe0;
+}
 
 /* ----- Small screens: the card goes to the bottom, the picture stays above it. ----- */
 
@@ -923,14 +1310,33 @@ footer a {
   }
   #paper {
     width: 92vw;
-    top: 27%;
+    top: 30%;
   }
   #blueprint svg {
     width: 92vw;
     top: 34%;
   }
-  #blueprint .chips {
+  #blueprint .chips,
+  #compare {
     display: none;
+  }
+  #device {
+    width: 94vw;
+    top: 31%;
+    padding: 10px;
+    border-radius: 22px;
+  }
+  #device .screen svg {
+    inset: 3% 3% 3% 3%;
+    width: 94%;
+    height: 94%;
+  }
+  #device .notes {
+    display: none;
+  }
+  #paper .legend {
+    font-size: 11px;
+    gap: 4px 10px;
   }
   #rail {
     display: none;
@@ -938,7 +1344,10 @@ footer a {
   .topbar-links > a:not(.button) {
     display: none;
   }
-  body:not([data-chapter="hero"]):not([data-chapter="finale"]) #three {
+  .topbar-links {
+    gap: 10px;
+  }
+  body:not([data-chapter="hero"]):not([data-chapter="uses"]):not([data-chapter="finale"]) #three {
     transform: translateY(-24vh);
   }
 }

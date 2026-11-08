@@ -8,7 +8,7 @@ import {
   writePackage,
 } from "../src/io/package";
 import { addStoryOnTop, emptyBuilding } from "../src/model/building";
-import { serializeBuilding } from "../src/model/file";
+import { FILE_VERSION, serializeBuilding } from "../src/model/file";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
 import type { Building, Climate } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
@@ -55,7 +55,7 @@ describe("package format", () => {
     );
     expect(files[`backgrounds/${ground.id}.png`]).toEqual(decodeDataUrl(PNG).bytes);
     const json = JSON.parse(new TextDecoder().decode(files["plan.json"]));
-    expect(json.version).toBe(2);
+    expect(json.version).toBe(FILE_VERSION);
     expect(json.stories[1].background.image).toBe(`backgrounds/${upper.id}.jpg`);
   });
 

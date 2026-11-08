@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addCellar } from "../src/model/building";
 import { makeHouse } from "../src/model/example";
+import { defaultHeating } from "../src/model/heating";
 import { parseBuilding, serializeBuilding } from "../src/model/file";
 import { heatingEnergy } from "../src/model/heating";
 import type { Building, Climate } from "../src/model/types";
@@ -54,7 +55,7 @@ describe("variants", () => {
     const gas = measureVariant(
       {
         ...building,
-        envelope: { ...building.envelope, heating: { kind: "gas", efficiency: 0.95, price: 0.11 } },
+        envelope: { ...building.envelope, heating: defaultHeating("gas") },
       },
       preset("heat-pump"),
     );

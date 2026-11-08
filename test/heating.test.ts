@@ -11,6 +11,8 @@ import {
   HOT_WATER_HEAT,
   HOT_WATER_LOSS,
   HOT_WATER_PUMP,
+  curveFlow,
+  pumpCop,
   utilization,
 } from "../src/model/heating";
 import type { Building, Climate } from "../src/model/types";
@@ -76,7 +78,8 @@ describe("heating energy per year", () => {
   });
 
   it("gives the final energy, the cost, and the CO2 of the heating", () => {
-    const pump = heatingEnergy(house())!;
+    const fixed = (b: Building) => (b.envelope.heating.fixedEfficiency = true);
+    const pump = heatingEnergy(house(fixed))!;
     const heating = defaultHeating("heat-pump");
     expect(pump.final).toBeCloseTo((pump.demand * (1 + DISTRIBUTION_LOSS)) / heating.efficiency);
     // The heat pump makes the hot water too, so the cost and the CO₂ include it.
@@ -97,7 +100,12 @@ describe("heating energy per year", () => {
 
   it("reads the heating from a file, and a default for an old file", () => {
     const building = emptyBuilding();
-    building.envelope.heating = { kind: "wood", efficiency: 0.8, price: 0.06 };
+    building.envelope.heating = {
+      ...defaultHeating("wood"),
+      efficiency: 0.8,
+      price: 0.06,
+      fixedEfficiency: true,
+    };
     expect(parseBuilding(serializeBuilding(building)).envelope.heating).toEqual(
       building.envelope.heating,
     );
@@ -113,8 +121,12 @@ describe("heating energy per year", () => {
 
 describe("hot water", () => {
   it("adds the hot water of the people to the final energy, but not to the heat demand", () => {
-    const none = heatingEnergy(house((b) => (b.envelope.hotWater.people = 0)))!;
-    const four = heatingEnergy(house((b) => (b.envelope.hotWater.people = 4)))!;
+    const set = (people: number) => (b: Building) => {
+      b.envelope.hotWater.people = people;
+      b.envelope.heating.fixedEfficiency = true;
+    };
+    const none = heatingEnergy(house(set(0)))!;
+    const four = heatingEnergy(house(set(4)))!;
     expect(none.hotWater).toBe(0);
     expect(four.demand).toBeCloseTo(none.demand);
     expect(four.efficiencyClass).toBe(none.efficiencyClass);
@@ -151,5 +163,48 @@ describe("hot water", () => {
     const old = parseBuilding(JSON.stringify(data));
     expect(old.envelope.hotWater).toEqual(emptyBuilding().envelope.hotWater);
     expect(old.envelope.ceiling).toEqual(emptyBuilding().envelope.ceiling);
+  });
+});
+
+describe("heat pump with a calculated performance", () => {
+  it("has a higher performance with a low flow and a warm source", () => {
+    expect(pumpCop("air", 35, 7)).toBeGreaterThan(pumpCop("air", 55, 7));
+    expect(pumpCop("air", 35, 7)).toBeGreaterThan(pumpCop("air", 35, -10));
+    expect(pumpCop("ground", 35, -10)).toBeGreaterThan(pumpCop("air", 35, -10));
+    // Plausible values: an air heat pump at 35 °C and 7 °C outside gives about 3 to 4.5.
+    expect(pumpCop("air", 35, 7)).toBeGreaterThan(3);
+    expect(pumpCop("air", 35, 7)).toBeLessThan(4.5);
+  });
+
+  it("follows the heating curve from the design flow down to the room", () => {
+    expect(curveFlow(55, -12, 20, -12)).toBeCloseTo(55);
+    expect(curveFlow(55, 20, 20, -12)).toBe(25);
+    const middle = curveFlow(55, 4, 20, -12);
+    expect(middle).toBeGreaterThan(30);
+    expect(middle).toBeLessThan(55);
+  });
+
+  it("needs more electricity with a high flow, and gives a plausible SPF", () => {
+    const low = heatingEnergy(house((b) => (b.envelope.heating.flow = 35)))!;
+    const high = heatingEnergy(house((b) => (b.envelope.heating.flow = 60)))!;
+    expect(low.flowSource).toBe("set");
+    expect(high.final).toBeGreaterThan(low.final);
+    expect(low.spf!).toBeGreaterThan(2.5);
+    expect(low.spf!).toBeLessThan(5.5);
+    expect(high.spf!).toBeLessThan(low.spf!);
+    // The hours add up to the months.
+    const hours = low.hourlyHeating.reduce((s, v) => s + v, 0);
+    expect(hours).toBeCloseTo(low.final, 3);
+  });
+
+  it("takes the flow from the radiators, or a default without them", () => {
+    const energy = heatingEnergy(house())!;
+    expect(["radiators", "default"]).toContain(energy.flowSource);
+    expect(energy.flow).toBeGreaterThanOrEqual(28);
+  });
+
+  it("uses the gross floor area for the energy per m²", () => {
+    const energy = heatingEnergy(house())!;
+    expect(energy.perArea).toBeCloseTo(energy.demand / energy.area);
   });
 });

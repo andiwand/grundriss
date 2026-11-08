@@ -13,7 +13,7 @@
 import { defaultWallHeight, wallTop } from "./building";
 import { clipHalfPlane, distance, intersectPolygons, moments, signedArea } from "./geometry";
 import { clearHeight, coveringRoofs, planeOf, roofPatches, type RoofPlane } from "./roof";
-import { findRooms, pointInPolygon, type Room } from "./rooms";
+import { findRooms, netRoomArea, pointInPolygon, type Room } from "./rooms";
 import type { Vec3 } from "./roofshape";
 import type { Building, Point, Story } from "./types";
 
@@ -144,7 +144,15 @@ export function livingArea(building: Building, story: Story, room: Room): Living
   const ceiling = roomCeiling(building, story, room);
   const full = areaWithHeight(ceiling, WOFLV.full);
   const one = areaWithHeight(ceiling, WOFLV.half);
-  return { floor: ceiling.area, living: full + 0.5 * (one - full), full, half: one - full };
+  // The WoFlV measures inside the walls. The ceiling is on the center lines of the walls, so all
+  // areas take the part of the net area.
+  const net = room.area > 0 ? netRoomArea(story, room) / room.area : 1;
+  return {
+    floor: ceiling.area * net,
+    living: (full + 0.5 * (one - full)) * net,
+    full: full * net,
+    half: (one - full) * net,
+  };
 }
 
 /** The step between two samples along a wall, in meters. */
@@ -182,8 +190,8 @@ export function stripArea(
   return (sum * (to - from)) / steps;
 }
 
-/** The area of a flat polygon in 3D. */
-function area3(polygon: Vec3[]): number {
+/** The area of a flat polygon in 3D, in m². */
+export function area3(polygon: Vec3[]): number {
   let x = 0;
   let y = 0;
   let z = 0;
@@ -195,6 +203,67 @@ function area3(polygon: Vec3[]): number {
     z += p.x * q.y - p.y * q.x;
   }
   return Math.hypot(x, y, z) / 2;
+}
+
+/**
+ * A window in the roof over a room: a window in the front wall of a dormer, or a roof window in a
+ * face. `normal` is its unit normal to the outside, in plan coordinates (x, y, z up).
+ */
+export interface RoofGlass {
+  area: number;
+  normal: Vec3;
+}
+
+/** The unit normal of a flat polygon in plan coordinates, by Newell's method. */
+function planNormal(polygon: Vec3[]): Vec3 {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    x += (a.y - b.y) * (a.z + b.z);
+    y += (a.z - b.z) * (a.x + b.x);
+    z += (a.x - b.x) * (a.y + b.y);
+  }
+  const length = Math.hypot(x, y, z) || 1;
+  return { x: x / length, y: y / length, z: z / length };
+}
+
+/** The middle of a polygon on the plan. */
+const middleOf = (polygon: Vec3[]): Point => {
+  const n = polygon.length || 1;
+  return polygon.reduce((s, p) => ({ x: s.x + p.x / n, y: s.y + p.y / n }), { x: 0, y: 0 });
+};
+
+/**
+ * The windows in the roof over the room: the windows of its dormers and its roof windows. The
+ * normal of each points to the outside. A roof window points up, and a dormer window points away
+ * from the dormer.
+ */
+export function roofGlass(building: Building, story: Story, room: Room): RoofGlass[] {
+  const result: RoofGlass[] = [];
+  for (const { geometry } of coveringRoofs(building, story)) {
+    for (const dormer of geometry.dormers) {
+      if (dormer.window.length < 3 || dormer.hole.length === 0) continue;
+      if (!pointInPolygon(middleOf(dormer.hole), room.polygon)) continue;
+      let normal = planNormal(dormer.window);
+      // The window faces away from the middle of the dormer.
+      const window = middleOf(dormer.window);
+      const hole = middleOf(dormer.hole);
+      if (normal.x * (window.x - hole.x) + normal.y * (window.y - hole.y) < 0) {
+        normal = { x: -normal.x, y: -normal.y, z: -normal.z };
+      }
+      result.push({ area: area3(dormer.window), normal });
+    }
+    for (const window of geometry.windows) {
+      if (window.quad.length < 3 || !pointInPolygon(middleOf(window.quad), room.polygon)) continue;
+      let normal = planNormal(window.quad);
+      if (normal.z < 0) normal = { x: -normal.x, y: -normal.y, z: -normal.z };
+      result.push({ area: area3(window.quad), normal });
+    }
+  }
+  return result;
 }
 
 /**
@@ -210,12 +279,8 @@ export function dormerAreas(
   let windows = 0;
   for (const { geometry } of coveringRoofs(building, story)) {
     for (const dormer of geometry.dormers) {
-      const n = dormer.hole.length;
-      const middle = dormer.hole.reduce((s, p) => ({ x: s.x + p.x / n, y: s.y + p.y / n }), {
-        x: 0,
-        y: 0,
-      });
-      if (n === 0 || !pointInPolygon(middle, room.polygon)) continue;
+      if (dormer.hole.length === 0 || !pointInPolygon(middleOf(dormer.hole), room.polygon))
+        continue;
       const window = dormer.window.length >= 3 ? area3(dormer.window) : 0;
       walls += Math.max(0, dormer.walls.reduce((s, w) => s + area3(w), 0) - window);
       windows += window;

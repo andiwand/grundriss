@@ -333,3 +333,18 @@ describe("location and climate", () => {
     expect(() => parseBuilding(JSON.stringify(data))).toThrow(/climate.*"temperature"/);
   });
 });
+
+describe("versions", () => {
+  it("writes version 3, and reads a file of version 2 with the defaults", () => {
+    const building = emptyBuilding();
+    const data = JSON.parse(serializeBuilding(building));
+    expect(data.version).toBe(3);
+    data.version = 2;
+    delete data.household;
+    delete data.variants;
+    for (const story of data.stories) delete story.heated;
+    const read = parseBuilding(JSON.stringify(data));
+    expect(read.stories[0].heated).toBe(true);
+    expect(read.variants).toEqual([]);
+  });
+});

@@ -155,10 +155,23 @@ export function savePlanFile(
   return save(makeBlob, suggestedName, types, handle);
 }
 
-/** Reads an image file as a data URL and gives its size in pixels. */
+/** An image larger than this on its long side becomes smaller when the app reads it, in pixels. */
+export const IMAGE_LIMIT = 4000;
+/** An image file larger than this gets a new encoding as JPEG, also if it is small enough, in bytes. */
+export const IMAGE_BYTES = 3_000_000;
+/** The quality of the JPEG of a reduced image. */
+const JPEG_QUALITY = 0.88;
+
+/**
+ * Reads an image file as a data URL and gives its size in pixels. A large image becomes smaller:
+ * its long side goes down to IMAGE_LIMIT, and it gets a JPEG encoding. The plan keeps the image
+ * in the file, in the browser, and in each step of the undo history, so a photo of a phone with
+ * 20 MB would make all of them slow. `reduced` is true if the image changed.
+ */
 export async function readImage(
   file: File,
-): Promise<{ dataUrl: string; width: number; height: number }> {
+  limit = IMAGE_LIMIT,
+): Promise<{ dataUrl: string; width: number; height: number; reduced: boolean }> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -172,5 +185,23 @@ export async function readImage(
   if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
     throw new Error("The image has no size in pixels. Use a PNG or a JPEG file.");
   }
-  return { dataUrl, width: image.naturalWidth, height: image.naturalHeight };
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  const factor = Math.min(1, limit / Math.max(width, height));
+  if (factor >= 1 && file.size <= IMAGE_BYTES) return { dataUrl, width, height, reduced: false };
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * factor);
+  canvas.height = Math.round(height * factor);
+  const context = canvas.getContext("2d");
+  if (!context) return { dataUrl, width, height, reduced: false };
+  // A JPEG has no transparency, so a white ground goes under the image.
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const reduced = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+  // A small image with few colors can be smaller as it was.
+  if (factor >= 1 && reduced.length >= dataUrl.length) {
+    return { dataUrl, width, height, reduced: false };
+  }
+  return { dataUrl: reduced, width: canvas.width, height: canvas.height, reduced: true };
 }

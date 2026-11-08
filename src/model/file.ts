@@ -7,8 +7,11 @@
 //
 // `location` and `climate` are such fields: a file without them gets null for both.
 //
-// Version 2 has stories, a roof, and the north direction. Version 1 had one floor plan at the
-// top level. parseBuilding reads it as a building with one story.
+// Version 3 has values that version 2 does not know: the systems "water" and "comms", the roof
+// side "half-hip", and unheated stories. An app of version 2 would read them wrong without a
+// message, so these files have a new version. A file of version 2 is a file of version 3 with
+// the defaults. Version 2 has stories, a roof, and the north direction. Version 1 had one floor
+// plan at the top level. parseBuilding reads it as a building with one story.
 
 import type {
   Background,
@@ -20,6 +23,7 @@ import type {
   Envelope,
   HeatingKind,
   HeatingSystem,
+  Finance,
   HotWater,
   Household,
   Fixture,
@@ -27,6 +31,7 @@ import type {
   Layer,
   Location,
   Model,
+  Note,
   Opening,
   Plan,
   Point,
@@ -42,17 +47,19 @@ import type {
   Vertex,
   Wall,
   Variant,
+  Ventilation,
 } from "./types";
 
 import { decodeSeries, SERIES_NAMES } from "./climate";
 import { defaultHeating, HEATING_KINDS } from "./heating";
+import { copyTree } from "./history";
 import { DEFAULT_COLORS, isColor } from "./colors";
-import { defaultEnvelope, defaultHousehold } from "./insulation";
+import { defaultEnvelope, defaultFinance, defaultHousehold } from "./insulation";
 import { storyBox } from "./roof";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
 
 export const FILE_FORMAT = "grundriss";
-export const FILE_VERSION = 2;
+export const FILE_VERSION = 3;
 
 export function serializeBuilding(building: Building): string {
   return JSON.stringify({ format: FILE_FORMAT, version: FILE_VERSION, ...building }, null, 2);
@@ -119,13 +126,14 @@ export function parseBuilding(text: string): Building {
       models: [],
       envelope: defaultEnvelope(),
       household: defaultHousehold(),
+      finance: defaultFinance(),
       variants: [],
       pv: [],
       location: null,
       climate: null,
     };
   }
-  if (data.version !== FILE_VERSION) {
+  if (data.version !== 2 && data.version !== FILE_VERSION) {
     throw new Error(
       `The file has version ${String(data.version)}. This app reads versions 1 to ${FILE_VERSION}.`,
     );
@@ -221,8 +229,12 @@ export function parseBuilding(text: string): Building {
         ? v.unheated.filter((id): id is string => typeof id === "string" && storyIds.has(id))
         : [],
       // A variant before the renovation has the household and the PV of the plan.
-      household: v.household == null ? household : parseHousehold(v.household, envelope),
-      pv: v.pv == null ? pv : list(v, "pv").map((d, j) => parsePv(d, `${where}, PV field ${j}`)),
+      // A copy, so that the variant does not share the objects of the plan.
+      household: v.household == null ? copyTree(household) : parseHousehold(v.household, envelope),
+      pv:
+        v.pv == null
+          ? copyTree(pv)
+          : list(v, "pv").map((d, j) => parsePv(d, `${where}, PV field ${j}`)),
       cost: v.cost == null ? null : Math.max(0, number(v, "cost", where)),
       subsidy: Math.max(0, finite(v.subsidy, 0)),
     };
@@ -238,6 +250,7 @@ export function parseBuilding(text: string): Building {
     models,
     envelope,
     household,
+    finance: parseFinance(data.finance),
     variants,
     pv,
     location,
@@ -434,6 +447,8 @@ function parseEnvelope(data: unknown): Envelope {
     ceiling: data.ceiling == null ? defaults.ceiling : layers(data, "ceiling", "the ceiling"),
     windowU: finite(data.windowU, defaults.windowU),
     doorU: finite(data.doorU, defaults.doorU),
+    thermalBridge: Math.max(0, finite(data.thermalBridge, defaults.thermalBridge)),
+    ventilation: parseVentilation(data.ventilation),
     outside: finite(data.outside, defaults.outside),
     inside: finite(data.inside, defaults.inside),
     heating: parseHeating(data.heating),
@@ -490,10 +505,44 @@ function parseHeating(data: unknown): HeatingSystem {
   const defaults = defaultHeating(data.kind as HeatingKind);
   const efficiency = finite(data.efficiency, defaults.efficiency);
   const price = finite(data.price, defaults.price);
+  const flow = finite(data.flow, null);
+  // A heat pump of a file before the calculated performance keeps a factor that the user typed.
+  const fixed =
+    typeof data.fixedEfficiency === "boolean"
+      ? data.fixedEfficiency
+      : Math.abs(efficiency - defaults.efficiency) > 1e-9;
   return {
     kind: defaults.kind,
     efficiency: efficiency > 0 ? efficiency : defaults.efficiency,
     price: Math.max(0, price),
+    source: data.source === "ground" ? "ground" : "air",
+    flow: flow === null ? null : Math.min(80, Math.max(25, flow)),
+    fixedEfficiency: fixed,
+  };
+}
+
+/** Reads the ventilation. A file without it gets the default ventilation. */
+function parseVentilation(data: unknown): Ventilation {
+  const defaults = defaultEnvelope().ventilation;
+  if (!isObject(data)) return defaults;
+  return {
+    airChange: Math.max(0, finite(data.airChange, defaults.airChange)),
+    heatRecovery: Math.min(0.95, Math.max(0, finite(data.heatRecovery, defaults.heatRecovery))),
+    n50: Math.max(0, finite(data.n50, defaults.n50)),
+  };
+}
+
+/** Reads the economy. A file without it gets the default economy. */
+function parseFinance(data: unknown): Finance {
+  const defaults = defaultFinance();
+  if (!isObject(data)) return defaults;
+  return {
+    region: data.region === "DE" ? "DE" : "AT",
+    interest: Math.min(0.5, Math.max(-0.1, finite(data.interest, defaults.interest))),
+    priceIncrease: Math.min(
+      0.5,
+      Math.max(-0.5, finite(data.priceIncrease, defaults.priceIncrease)),
+    ),
   };
 }
 
@@ -669,6 +718,30 @@ function parsePlanData(data: Data, prefix: string): Plan {
     };
   }
 
+  // The notes of the objects: each list keeps the order of the file, so the index finds them.
+  const notes = <T extends { note?: Note }>(key: string, parsed: T[]) =>
+    list(data, key).forEach((raw, i) => {
+      const note = parseNote(raw.note);
+      if (note && parsed[i]) parsed[i].note = note;
+    });
+  notes("walls", walls);
+  notes("openings", openings);
+  notes("stairs", stairs);
+  notes("chimneys", chimneys);
+  notes("rooms", rooms);
+  notes("furniture", furniture);
+  notes("fixtures", fixtures);
+  notes("runs", runs);
+  // The circuits of the devices and of the lines of electricity.
+  const circuits = (key: string, parsed: { circuit?: string }[]) =>
+    list(data, key).forEach((raw, i) => {
+      if (typeof raw.circuit === "string" && raw.circuit.trim() && parsed[i]) {
+        parsed[i].circuit = raw.circuit.trim();
+      }
+    });
+  circuits("fixtures", fixtures);
+  circuits("runs", runs);
+
   return {
     vertices,
     walls,
@@ -682,4 +755,14 @@ function parsePlanData(data: Data, prefix: string): Plan {
     runs,
     background,
   };
+}
+
+/** Reads a note. A note without a text and without photos is no note. */
+function parseNote(data: unknown): Note | undefined {
+  if (!isObject(data)) return undefined;
+  const text = typeof data.text === "string" ? data.text : "";
+  const photos = Array.isArray(data.photos)
+    ? data.photos.filter((p): p is string => typeof p === "string" && p.startsWith("data:image/"))
+    : [];
+  return text.trim() || photos.length > 0 ? { text, photos } : undefined;
 }

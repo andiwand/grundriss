@@ -20,7 +20,7 @@ import {
   triangulate,
 } from "../src/model/geometry";
 import { clearHeight, newRoof, planeOf, roofCeiling } from "../src/model/roof";
-import { editRoomInfo, findRooms } from "../src/model/rooms";
+import { editRoomInfo, findRooms, netRoomArea } from "../src/model/rooms";
 import type { Building, Dormer, Point, Story } from "../src/model/types";
 import { wallsAround } from "./houses";
 
@@ -247,7 +247,9 @@ describe("the ceiling of an attic room", () => {
     const ceiling = roomCeiling(building, story, findRooms(story)[0]);
     expect(ceilingArea(ceiling)).toBeCloseTo(80);
     expect(ceilingVolume(ceiling)).toBeCloseTo(80 * 2.5);
-    expect(livingArea(building, story, findRooms(story)[0]).living).toBeCloseTo(80);
+    // The WoFlV measures inside the walls: the net area, not the area on the center lines.
+    const room = findRooms(story)[0];
+    expect(livingArea(building, story, room).living).toBeCloseTo(netRoomArea(story, room));
   });
 });
 
@@ -262,19 +264,23 @@ describe("living area by the WoFlV", () => {
     const full = 10 * (8.2 - 2 * d2);
     const half = 2 * 10 * (d2 - d1);
     const area = livingArea(building, attic, room);
+    // All areas take the part of the net area inside the walls.
+    const net = netRoomArea(attic, room) / room.area;
     expect(eave).toBeLessThan(1);
-    expect(area.floor).toBeCloseTo(80);
-    expect(area.full).toBeCloseTo(full);
-    expect(area.half).toBeCloseTo(half);
-    expect(area.living).toBeCloseTo(full + half / 2);
+    expect(area.floor).toBeCloseTo(80 * net);
+    expect(area.full).toBeCloseTo(full * net);
+    expect(area.half).toBeCloseTo(half * net);
+    expect(area.living).toBeCloseTo((full + half / 2) * net);
   });
 
   it("counts a knee wall of 1 m at least half", () => {
     const [building, attic] = atticHouse(true);
-    const area = livingArea(building, attic, findRooms(attic)[0]);
+    const room = findRooms(attic)[0];
+    const area = livingArea(building, attic, room);
+    const net = netRoomArea(attic, room) / room.area;
     const d2 = (2 - 1) / TAN - 0.1;
-    expect(area.full).toBeCloseTo(10 * (8 - 2 * d2));
-    expect(area.full + area.half).toBeCloseTo(80);
+    expect(area.full).toBeCloseTo(10 * (8 - 2 * d2) * net);
+    expect(area.full + area.half).toBeCloseTo(80 * net);
   });
 
   it("gives the lines of 1 m and 2 m clear height", () => {

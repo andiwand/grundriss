@@ -58,9 +58,44 @@ describe("heat loss", () => {
     // One story is the top and the lowest story: it has the roof and the floor.
     expect(loss.roof).toBeGreaterThan(0);
     expect(loss.floor).toBeGreaterThan(0);
+    // The thermal bridges add ΔU on the walls, the roof, and the floor (with its factor).
+    const roofArea = loss.roof / delta / uValue(env.roof, "roof");
+    const area = 18 * height + roofArea + 20 * GROUND_FACTOR;
+    expect(loss.bridges).toBeCloseTo(area * env.thermalBridge * delta);
     expect(loss.total).toBeCloseTo(
-      loss.walls + loss.windows + loss.doors + loss.roof + loss.floor + loss.ventilation,
+      loss.walls +
+        loss.windows +
+        loss.doors +
+        loss.roof +
+        loss.floor +
+        loss.bridges +
+        loss.ventilation,
     );
+  });
+
+  it("gives the net area inside the walls, and the gross area with the outer walls", () => {
+    const building = emptyBuilding();
+    const story = building.stories[0];
+    box(story, 5, 4);
+    const t = story.walls[0].thickness;
+    const loss = roomHeatLoss(building, story, findRooms(story)[0]);
+    expect(loss.netArea).toBeCloseTo((5 - t) * (4 - t));
+    // The gross area adds half of each outer wall, without the corners.
+    expect(loss.grossArea).toBeCloseTo(20 + (18 * t) / 2);
+  });
+
+  it("takes back the heat of the air with a ventilation system, but the leaks add", () => {
+    const building = emptyBuilding();
+    const story = building.stories[0];
+    box(story, 5, 4);
+    const room = findRooms(story)[0];
+    const natural = roomHeatLoss(building, story, room).ventilation;
+    building.envelope.ventilation = { airChange: 0.5, heatRecovery: 0.8, n50: 1 };
+    const system = roomHeatLoss(building, story, room).ventilation;
+    expect(system / natural).toBeCloseTo((0.5 * 0.2 + 0.07) / 0.5);
+    // Without a system, very leaky walls give more air than the windows.
+    building.envelope.ventilation = { airChange: 0.5, heatRecovery: 0, n50: 10 };
+    expect(roomHeatLoss(building, story, room).ventilation / natural).toBeCloseTo(0.7 / 0.5);
   });
 
   it("does not count an inner wall", () => {
@@ -207,5 +242,21 @@ describe("unheated stories", () => {
     const delta = e.inside - e.outside;
     expect(below.roof).toBe(0);
     expect(below.ceiling).toBeCloseTo(48 * uValue(e.ceiling, "roof") * ATTIC_FACTOR * delta);
+  });
+});
+
+describe("floors over the outside air", () => {
+  it("gives the part of a floor that sticks out past the story below the loss to the outside", () => {
+    const building = emptyBuilding();
+    const ground = building.stories[0];
+    box(ground, 4, 4);
+    const top = addStoryOnTop(building);
+    box(top, 8, 4);
+    const room = findRooms(top)[0];
+    const loss = roomHeatLoss(building, top, room);
+    const e = building.envelope;
+    const delta = e.inside - e.outside;
+    // 16 m² are over the heated room, and 16 m² over the outside air.
+    expect(loss.floor).toBeCloseTo(16 * uValue(e.ceiling, "floor") * delta);
   });
 });

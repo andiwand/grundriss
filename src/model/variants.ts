@@ -5,12 +5,17 @@
 // more insulation. It can make a new variant from the plan, or go into a variant.
 
 import { defaultHeating } from "./heating";
+import { copyTree } from "./history";
 import { material } from "./insulation";
 import { newId } from "./plan";
 import { newPvField } from "./pv";
 import type { Building, Layer, Variant } from "./types";
 
-const copy = <T>(value: T): T => structuredClone(value);
+const copy = copyTree;
+
+/** True if two values of plain data have the same content. */
+export const sameData = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
 
 /** The ids of the unheated stories of the building. */
 const unheatedOf = (building: Building) =>
@@ -63,11 +68,10 @@ export function updateVariant(variant: Variant, building: Building): void {
 /** True if the variant has the same state as the plan. */
 export function sameAsPlan(building: Building, variant: Variant): boolean {
   const ids = (list: string[]) => [...list].sort().join("|");
-  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   return (
-    same(variant.envelope, building.envelope) &&
-    same(variant.household, building.household) &&
-    same(variant.pv, building.pv) &&
+    sameData(variant.envelope, building.envelope) &&
+    sameData(variant.household, building.household) &&
+    sameData(variant.pv, building.pv) &&
     ids(variant.unheated) === ids(unheatedOf(building))
   );
 }

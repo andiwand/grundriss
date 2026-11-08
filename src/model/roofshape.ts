@@ -615,7 +615,6 @@ function extend(sides: Line[], i: number, p: Vec3): Vec3 {
   const hip = on.find((j) => sides[j].side.kind === "half-hip" && p.z > sides[j].start - 1e-6);
   if (hip !== undefined) {
     const h = sides[hip];
-    const z = p.z - h.side.overhang * h.tan;
     // The other plane of the hip line: the face itself, or for the hip face a neighbor whose
     // plane goes through the point.
     const other =
@@ -624,10 +623,15 @@ function extend(sides: Line[], i: number, p: Vec3): Vec3 {
         : [sides[(hip + n - 1) % n], sides[(hip + 1) % n]].find(
             (s) => s.side.kind !== "gable" && Math.abs(planeHeight(s, plan) - p.z) < 1e-6,
           );
-    const at =
-      other &&
-      meet(h.normal, h.c - h.side.overhang, other.normal, other.c + (z - other.start) / other.tan);
-    if (at) return v3(at, z);
+    if (other) {
+      // The hip line ends at the overhang of the hip face, but not lower than the eave of the
+      // other face. A steep hip face would else go below that eave and make a spike.
+      const eave = other.start - other.side.overhang * other.tan;
+      const z = Math.max(p.z - h.side.overhang * h.tan, eave);
+      const out = (p.z - z) / h.tan;
+      const at = meet(h.normal, h.c - out, other.normal, other.c + (z - other.start) / other.tan);
+      if (at) return v3(at, z);
+    }
   }
   let q = plan;
   if (on.length === 1) {

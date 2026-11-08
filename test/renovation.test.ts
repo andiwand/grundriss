@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { makeHouse } from "../src/model/example";
 import { defaultHeating } from "../src/model/heating";
 import {
-  BATTERY_PRICE,
   estimateItems,
-  HEATING_COSTS,
+  paybackYears,
+  PRICES,
+  subsidyEstimate,
   variantCost,
   variantEconomy,
 } from "../src/model/renovation";
+
+const HEATING_COSTS = PRICES.AT.heating;
+const BATTERY_PRICE = PRICES.AT.battery;
 import type { Building, Climate } from "../src/model/types";
 import { MEASURES, measureVariant, variantOf } from "../src/model/variants";
 import vienna from "./fixtures/vienna-climate.json";
@@ -54,7 +58,43 @@ describe("renovation", () => {
     expect(economy.saving).toBeGreaterThan(0);
     expect(economy.co2Saving).toBeGreaterThan(0);
     expect(economy.net).toBeCloseTo(HEATING_COSTS["heat-pump"] - 10000);
-    expect(economy.payback).toBeCloseTo(economy.net / economy.saving);
+    // With interest and growing prices, the payback is near the simple one, but not the same.
+    expect(economy.payback).toBeCloseTo(paybackYears(economy.net, economy.saving, 0.03, 0.02)!);
+  });
+
+  it("gives the simple payback without interest and price changes", () => {
+    expect(paybackYears(1000, 100, 0, 0)).toBeCloseTo(10);
+    // Interest makes it longer, and growing prices make it shorter.
+    expect(paybackYears(1000, 100, 0.05, 0)!).toBeGreaterThan(10);
+    expect(paybackYears(1000, 100, 0, 0.05)!).toBeLessThan(10);
+    expect(paybackYears(1000, 0, 0, 0)).toBeNull();
+    expect(paybackYears(0, 0, 0, 0)).toBe(0);
+    expect(paybackYears(1e9, 1, 0.03, 0)).toBeNull();
+  });
+
+  it("uses the prices of the region", () => {
+    const at = house((b) => (b.envelope.heating = defaultHeating("gas")));
+    const de = house((b) => {
+      b.envelope.heating = defaultHeating("gas");
+      b.finance.region = "DE";
+    });
+    const v = measureVariant(at, measure("heat-pump"));
+    expect(variantCost(at, v)).toBe(PRICES.AT.heating["heat-pump"]);
+    expect(variantCost(de, v)).toBe(PRICES.DE.heating["heat-pump"]);
+  });
+
+  it("estimates the German subsidy of a heat pump and of insulation, and none for Austria", () => {
+    const de = house((b) => {
+      b.envelope.heating = defaultHeating("oil");
+      b.finance.region = "DE";
+    });
+    const pump = measureVariant(de, measure("heat-pump"));
+    // 30 % base and 20 % for the replaced oil boiler, of at most 30 000 €.
+    expect(subsidyEstimate(de, pump)!.amount).toBeCloseTo(0.5 * 30000);
+    const walls = measureVariant(de, measure("walls"));
+    const cost = variantCost(de, walls);
+    expect(subsidyEstimate(de, walls)!.amount).toBeCloseTo(0.15 * Math.min(30000, cost));
+    expect(subsidyEstimate(house(), pump)).toBeNull();
   });
 
   it("needs a climate", () => {
