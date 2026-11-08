@@ -70,6 +70,120 @@ Questions to decide:
 - **Large data.** The background image and the models go to a store for files, not into the
   live document.
 
+### The server component
+
+One server program for two uses:
+
+- **The service.** We run it in the EU for all users. This is the part that costs money (see
+  the business model).
+- **Self-hosting.** A person or an organization runs the same program on its own machine, from
+  one container image (`docker compose up`), with SQLite, a local file store, and one
+  configuration file. This costs little if it is a goal from the start. It is also an answer
+  for users who do not want their plan on our server.
+
+The server is in TypeScript (Node), in this repository. It then uses the same code as the app
+to read, check, and migrate a `.grundriss` file, so the file format has one implementation. The
+app gets a setting for the server address, so that it can connect to the service or to a
+self-hosted server.
+
+The service needs a small server and a file store in the EU, for example at Hetzner or
+Scaleway. At the start, this costs about 10 to 20 € each month.
+
+### Accounts
+
+We do not write the login ourselves. Passwords, password resets, 2FA, and protection against
+abuse are much work, and a mistake in them is dangerous. The steps:
+
+1. **No accounts.** A shared plan does not need an account. The upload gives two secret links:
+   one to view the plan, and one for the owner to replace or delete it. A payment for one plan
+   also works without an account: the buyer pays, and gets the links by email. Many private
+   users never need more.
+2. **Login with a link by email, no passwords.** When a subscription or a team needs accounts,
+   a library in our own server (for example Better Auth) does the login. The data of the users
+   stays in our database. We only need a service that sends the emails (for example Postmark,
+   or Brevo in the EU).
+3. **An external login service, if necessary.** Zitadel or Keycloak are open source, and run
+   self-hosted or as a service in the EU. They also support the login of a company (OIDC or
+   SAML). Clerk and Auth0 are simpler, but they are in the US.
+
+## Business model
+
+The app stays free and open source, with all features that work without a server. Money comes
+only from the server: the hosting of plans and the collaboration.
+
+- **A price for each shared plan.** One payment, for example for one renovation project with an
+  architect and the craftsmen. This fits private users, who have one house and a project of
+  some months. The plan stays online for a set time, or until the owner deletes it.
+- **A subscription.** For energy consultants, architects, and planners with many plans and a
+  team. A price for each seat and month.
+
+Before we build the payment, GitHub Sponsors can show with no work if people pay at all.
+
+**Enterprise** (self-hosting with a contract for support) is not a goal now. The possible
+customers are energy consultancies, offices of architects, housing cooperatives, and public
+bodies. Their sales take a long time, and a contract for support needs a reliability that one
+person cannot give. The server stays easy to self-host, so we can decide this again when an
+organization asks.
+
+### Payment
+
+A merchant of record sells to the customer in its own name. It handles the VAT of each
+country, the invoices, the refunds, and the chargebacks. We get one payout and one invoice from
+it. Examples: Paddle, Lemon Squeezy, and Polar.sh (made for open source). The fee is about 4 to
+5 % and a small fixed amount for each sale; check the current prices.
+
+The alternative is Stripe. Its fee is lower, but then we are the seller: we register for the
+one-stop shop (OSS) of the EU VAT and send a VAT return each quarter. This is worth it only when
+the revenue is large enough.
+
+In both cases we need a registered business (in Austria a trade license), terms of service, a
+privacy policy, and an Impressum. A tax adviser must check the setup once.
+
+### License
+
+Today the only author is the owner of the project, so the license can still change freely.
+After the first outside contribution, a change needs the consent of each contributor. The
+options:
+
+- **MPL-2.0 for all, as today.** Simple, and friendly to contributors. But another company can
+  run our server as a paid service and keep its changes private, if it puts the changes in new
+  files.
+- **AGPL-3.0 for the server, MPL-2.0 for the app.** A hosted service of the server must publish
+  its changes. A commercial license for companies that do not accept the AGPL (a dual license)
+  needs a contributor license agreement (CLA) for each outside contribution.
+- **AGPL-3.0 for all.** The strongest protection, and still open source. But it can stop
+  companies that want to use parts of the app in their own products.
+
+Recommendation: the second option. Decide before the code of the server is public, or before
+the first outside contribution.
+
+## Native apps
+
+The app already runs on phones, tablets, and desktops as a PWA. A native app adds a place in
+the app stores, the file system of the device, and a better feeling of a "real" app.
+
+Recommendation: keep one TypeScript code base, and put it in a native shell:
+
+- **Desktop**: Tauri (the web view of the system, about 10 MB) or Electron (larger, but the same
+  browser on each system).
+- **iOS and Android**: Capacitor, with plugins for the files, the camera, and sharing.
+
+All three use the existing code without change, so there is no duplicated code.
+
+A rewrite in C++ (or Rust) is not a good way to remove duplication, because:
+
+- No duplication exists today. One code base serves the browser, the PWA, and the shells above.
+- A rewrite would replace Three.js, OpenCV.js, ONNX Runtime Web, the SVG editor, and the PDF and
+  DXF export. That is all of the code, and the users get no new feature from it.
+- A native interface needs a toolkit for each platform, or Qt. Qt in the browser (WASM) is large
+  and slow to load, so the web app, which is the way most people find the app, would become
+  worse.
+- The server in TypeScript shares the model code with the app. A C++ app would need the file
+  format two times, or a C++ server.
+
+C++ or Rust compiled to WASM makes sense later for one slow part only, if a profile shows the
+need (see the decisions). Then the same WASM module runs in the browser and in each shell.
+
 ## Ideas
 
 - Sections and elevations: a cut along a line, and a view of each facade, with the heights.
