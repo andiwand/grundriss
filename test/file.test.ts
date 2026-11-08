@@ -14,6 +14,7 @@ function parsePlan(text: string): Plan {
     name: _name,
     elevation: _elevation,
     height: _height,
+    heated: _heated,
     ...plan
   } = building.stories[0];
   return plan;

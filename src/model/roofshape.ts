@@ -11,12 +11,14 @@
 // height. Each eave side is a plane through its side of the outline at the height `base`. The
 // plane rises inward with the tangent of the pitch, so at the height z the side is at the
 // distance (z - base) / tan(pitch) inward. A gable side does not move: its wall is vertical,
-// and the faces of the other sides end on it. The simulation shrinks the outline in height and
-// stops at events:
+// and the faces of the other sides end on it. A half-hip side is a gable side up to its gable
+// height. There, it starts to move like an eave side, so a small hip face closes the top of the
+// gable. The simulation shrinks the outline in height and stops at events:
 //
 // - An edge event: a side of the wavefront shrinks to zero length. Its two vertices merge.
 // - A split event: a reflex vertex hits a side that is not next to it. The wavefront splits in
 //   two parts.
+// - A start event: a half-hip side starts to move. The vertices on it change their direction.
 //
 // Each vertex moves on a straight line between two events. Its path separates the faces of its
 // two sides. At the end, the face of each side is the loop of its side of the outline and the
@@ -27,7 +29,9 @@
 // the side of the outline moved outward by its overhang. At a gable side, the faces of the
 // neighbors go on past the gable wall by the overhang of the gable side (the verge). With equal
 // pitches and overhangs, the corners are exact. With different values, the two faces at a corner
-// end at different heights, and a small step stays between them.
+// end at different heights, and a small step stays between them. At a half-hip side, the hip
+// lines go on outward and down until the hip face reaches its overhang, so the hip face and the
+// faces of its neighbors meet without a gap.
 
 import { signedArea } from "./geometry";
 import type { Dormer, Id, Point, RoofSide, RoofWindow } from "./types";
@@ -182,17 +186,22 @@ interface Line {
   /** The unit direction of the side, and the unit normal that points into the roof. */
   dir: Point;
   normal: Point;
-  /** normal · p = c on the side at the height `base`. */
+  /** normal · p = c on the side of the outline. */
   c: number;
-  /** The inward speed per meter of height: 1 / tan(pitch). 0 for a gable side. */
+  /** The inward speed per meter of height when the side moves: 1 / tan(pitch). 0 for a gable side. */
   speed: number;
   tan: number;
+  /**
+   * The height where the side starts to move: `base` for an eave side, the top of the gable wall
+   * for a half-hip side, and Infinity for a gable side. Below it, the side does not move.
+   */
+  start: number;
   a: Point;
   b: Point;
   side: RoofSide;
 }
 
-function lines(outline: Point[], sides: RoofSide[]): Line[] {
+function lines(outline: Point[], sides: RoofSide[], base: number): Line[] {
   return outline.map((a, i) => {
     const b = outline[(i + 1) % outline.length];
     const dir = unit(sub(b, a));
@@ -201,18 +210,31 @@ function lines(outline: Point[], sides: RoofSide[]): Line[] {
     const side = sides[i] ?? { kind: "eave", pitch: 30, overhang: 0 };
     const pitch = Math.min(MAX_PITCH, Math.max(MIN_PITCH, side.pitch));
     const tan = Math.tan((pitch * Math.PI) / 180);
+    const gable = side.kind === "gable";
     return {
       dir,
       normal,
       c: dot(normal, a),
-      speed: side.kind === "gable" ? 0 : 1 / tan,
-      tan: side.kind === "gable" ? Infinity : tan,
+      speed: gable ? 0 : 1 / tan,
+      tan: gable ? Infinity : tan,
+      start: gable
+        ? Infinity
+        : side.kind === "half-hip"
+          ? base + Math.max(0, side.gableHeight ?? 0)
+          : base,
       a,
       b,
       side,
     };
   });
 }
+
+/** True if the side moves at the height z. */
+const moves = (line: Line, z: number) => z >= line.start - 1e-9;
+/** The inward speed of the side at the height z. */
+const speedAt = (line: Line, z: number) => (moves(line, z) ? line.speed : 0);
+/** The inward distance of the side from the outline at the height z. */
+const offsetAt = (line: Line, z: number) => line.speed * Math.max(0, z - line.start);
 
 // ----- The wavefront -----
 
@@ -242,20 +264,22 @@ interface Arc {
   right: number;
 }
 
-function velocity(l: Line, r: Line): { w: Point; stuck: boolean } {
+function velocity(l: Line, r: Line, z: number): { w: Point; stuck: boolean } {
+  const ls = speedAt(l, z);
+  const rs = speedAt(r, z);
   const det = l.normal.x * r.normal.y - l.normal.y * r.normal.x;
   if (Math.abs(det) < 1e-9) {
     if (dot(l.normal, r.normal) > 0) {
       // Collinear sides: the vertex moves with them, along the normal.
-      return { w: mul(l.normal, (l.speed + r.speed) / 2), stuck: false };
+      return { w: mul(l.normal, (ls + rs) / 2), stuck: false };
     }
     return { w: { x: 0, y: 0 }, stuck: true };
   }
-  // Solve [l.normal; r.normal] · w = [l.speed; r.speed].
+  // Solve [l.normal; r.normal] · w = [ls; rs].
   return {
     w: {
-      x: (l.speed * r.normal.y - l.normal.y * r.speed) / det,
-      y: (l.normal.x * r.speed - l.speed * r.normal.x) / det,
+      x: (ls * r.normal.y - l.normal.y * rs) / det,
+      y: (l.normal.x * rs - ls * r.normal.x) / det,
     },
     stuck: false,
   };
@@ -269,7 +293,7 @@ function skeleton(sides: Line[], base: number): Arc[] {
   const arcs: Arc[] = [];
   let nextId = 0;
   const make = (p: Point, z: number, left: number, right: number): Vertex => {
-    const { w, stuck } = velocity(sides[left], sides[right]);
+    const { w, stuck } = velocity(sides[left], sides[right], z);
     const vertex = {
       id: nextId++,
       p: { ...p },
@@ -361,8 +385,8 @@ function skeleton(sides: Line[], base: number): Arc[] {
       let guard = 0;
       for (let a = v.next; a !== v.prev && a !== v && guard++ < 200; a = a.next) {
         const e = sides[a.right];
-        const f = dot(e.normal, v.p) - (e.c + e.speed * (z - base));
-        const rate = dot(e.normal, v.w) - e.speed;
+        const f = dot(e.normal, v.p) - (e.c + offsetAt(e, z));
+        const rate = dot(e.normal, v.w) - speedAt(e, z);
         if (rate > -1e-12) continue;
         const dz = f / -rate;
         if (dz < -1e-9) continue;
@@ -376,6 +400,29 @@ function skeleton(sides: Line[], base: number): Arc[] {
         if (at < -tolerance || at > span + tolerance) continue;
         consider(dz, "split", v, a);
       }
+    }
+    // A start event comes before the other events if it is lower. At the start height of a
+    // half-hip side, each vertex on the side ends its path and starts a new one.
+    const starts = sides.map((s) => s.start).filter((h) => Number.isFinite(h) && h > z + 1e-9);
+    const next = starts.length > 0 ? Math.min(...starts) : Infinity;
+    const found = best as { dz: number } | null;
+    if (Number.isFinite(next) && (!found || z + found.dz > next + 1e-9)) {
+      const dz = next - z;
+      z = next;
+      for (const v of all) v.p = add(v.p, mul(v.w, dz));
+      for (const v of all) {
+        if (Math.abs(sides[v.left].start - z) > 1e-9 && Math.abs(sides[v.right].start - z) > 1e-9)
+          continue;
+        const at = v3(v.p, z);
+        if (dist3(v.start, at) > SAME) {
+          arcs.push({ a: v.start, b: at, left: v.left, right: v.right });
+        }
+        v.start = at;
+        const { w, stuck } = velocity(sides[v.left], sides[v.right], z);
+        v.w = w;
+        v.stuck = stuck;
+      }
+      continue;
     }
     if (!best) {
       // Nothing more happens, for example because the rest has only gable sides. The rest
@@ -528,9 +575,9 @@ function planarGraph(sides: Line[], arcs: Arc[], base: number): Graph {
   return { nodes, regions };
 }
 
-/** The height of the plane of an eave side at a point of the plan. */
-const planeHeight = (line: Line, p: Point, base: number) =>
-  base + (dot(line.normal, p) - line.c) * line.tan;
+/** The height of the plane of an eave or a half-hip side at a point of the plan. */
+const planeHeight = (line: Line, p: Point) =>
+  line.start + (dot(line.normal, p) - line.c) * line.tan;
 
 /** True if the point lies on the side, between its ends, within a small distance. */
 function onSide(line: Line, p: Point): boolean {
@@ -552,7 +599,7 @@ function meet(n1: Point, c1: number, n2: Point, c2: number): Point | null {
  * of `i` itself, on the side of a neighbor, or on a gable side moves out by the overhangs of
  * those sides, and its height follows the plane of `i`.
  */
-function extend(sides: Line[], i: number, p: Vec3, base: number): Vec3 {
+function extend(sides: Line[], i: number, p: Vec3): Vec3 {
   const n = sides.length;
   const plan = flat2(p);
   const on: number[] = [];
@@ -563,6 +610,25 @@ function extend(sides: Line[], i: number, p: Vec3, base: number): Vec3 {
     if (onSide(s, plan)) on.push(j);
   }
   if (on.length === 0) return p;
+  // A point at the top of a half-hip gable is the low end of a hip line. The hip line goes on
+  // outward and down until the hip face reaches its overhang.
+  const hip = on.find((j) => sides[j].side.kind === "half-hip" && p.z > sides[j].start - 1e-6);
+  if (hip !== undefined) {
+    const h = sides[hip];
+    const z = p.z - h.side.overhang * h.tan;
+    // The other plane of the hip line: the face itself, or for the hip face a neighbor whose
+    // plane goes through the point.
+    const other =
+      i !== hip
+        ? sides[i]
+        : [sides[(hip + n - 1) % n], sides[(hip + 1) % n]].find(
+            (s) => s.side.kind !== "gable" && Math.abs(planeHeight(s, plan) - p.z) < 1e-6,
+          );
+    const at =
+      other &&
+      meet(h.normal, h.c - h.side.overhang, other.normal, other.c + (z - other.start) / other.tan);
+    if (at) return v3(at, z);
+  }
   let q = plan;
   if (on.length === 1) {
     q = sub(plan, mul(sides[on[0]].normal, sides[on[0]].side.overhang));
@@ -576,7 +642,7 @@ function extend(sides: Line[], i: number, p: Vec3, base: number): Vec3 {
     );
     if (hit) q = hit;
   }
-  return v3(q, planeHeight(sides[i], q, base));
+  return v3(q, planeHeight(sides[i], q));
 }
 
 /** The outline with the overhangs: each corner where the two moved sides meet. */
@@ -764,11 +830,12 @@ export function roofGeometry(input: RoofInput): RoofGeometry {
     if (order.length > 0) order.push(order.shift()!);
   }
   const outline = order.map((j) => ({ ...(reversed ? end(j) : input.outline[j]) }));
+  const base = input.base;
   const all = lines(
     outline,
     order.map((j) => input.sides[j]),
+    base,
   );
-  const base = input.base;
   if (input.flat) return flatRoof(all, base);
 
   const arcs = skeleton(all, base);
@@ -776,22 +843,27 @@ export function roofGeometry(input: RoofInput): RoofGeometry {
   const faces: RoofFace[] = [];
   for (const region of graph.regions) {
     const points = region.map((k) => graph.nodes[k].p);
-    // The region belongs to the eave side whose outline holds one of its edges.
+    // The region belongs to the eave side whose outline holds one of its edges. A half-hip side
+    // owns only the edge at the top of its gable wall. Its lower edges belong to the neighbors.
     let owner = -1;
     for (let k = 0; k < points.length && owner < 0; k++) {
       const p = points[k];
       const q = points[(k + 1) % points.length];
       const mid = mul(add(p, q), 0.5);
+      const tops = [graph.nodes[region[k]].top, graph.nodes[region[(k + 1) % region.length]].top];
       owner = all.findIndex(
         (line) =>
-          line.side.kind === "eave" && onSide(line, p) && onSide(line, q) && onSide(line, mid),
+          (line.side.kind === "eave" ||
+            (line.side.kind === "half-hip" &&
+              tops.every((t) => Math.abs(t - line.start) < 1e-6))) &&
+          onSide(line, p) &&
+          onSide(line, q) &&
+          onSide(line, mid),
       );
     }
     if (owner < 0) continue;
     const line = all[owner];
-    const polygon = clean(
-      points.map((p) => extend(all, owner, v3(p, planeHeight(line, p, base)), base)),
-    );
+    const polygon = clean(points.map((p) => extend(all, owner, v3(p, planeHeight(line, p)))));
     if (polygon.length < 3) continue;
     const slope = Math.atan(line.tan);
     faces.push({
@@ -807,9 +879,10 @@ export function roofGeometry(input: RoofInput): RoofGeometry {
   }
 
   // A gable wall goes from its side of the outline up to the heights of the nodes on its line.
+  // The wall of a half-hip side ends at the hip face.
   const gables: Vec3[][] = [];
   for (const line of all) {
-    if (line.side.kind !== "gable") continue;
+    if (line.side.kind === "eave") continue;
     const length = len(sub(line.b, line.a));
     const top = graph.nodes
       .filter((nd) => onSide(line, nd.p))
@@ -903,16 +976,27 @@ export function roofGeometry(input: RoofInput): RoofGeometry {
 }
 
 /**
+ * The usual height of the gable wall of a half-hip side of the length `length`: 60 % of the rise
+ * of a ridge across the side with the pitch, rounded to 5 cm.
+ */
+export function halfHipHeight(length: number, pitch: number): number {
+  const rise =
+    (length / 2) * Math.tan((Math.min(MAX_PITCH, Math.max(MIN_PITCH, pitch)) * Math.PI) / 180);
+  return Math.round(rise * 0.6 * 20) / 20;
+}
+
+/**
  * The settings of the sides for a usual kind of roof:
  *
  * - gable: the sides that go along the longest side are eaves, the others are gables.
+ * - half-hip: as gable, but the gables are half-hip sides.
  * - hip: all sides are eaves.
  * - shed: the longest side is an eave, the others are gables.
  * - flat: all sides are eaves with a pitch of 0. Use `flat` in RoofInput for the slab.
  */
 export function presetSides(
   outline: Point[],
-  preset: "gable" | "hip" | "shed" | "flat",
+  preset: "gable" | "half-hip" | "hip" | "shed" | "flat",
   pitch: number,
   overhang: number,
 ): RoofSide[] {
@@ -920,14 +1004,19 @@ export function presetSides(
   const dirs = outline.map((a, i) => unit(sub(outline[(i + 1) % n], a)));
   const lengths = outline.map((a, i) => len(sub(outline[(i + 1) % n], a)));
   const longest = lengths.indexOf(Math.max(...lengths));
-  const gables = preset === "gable" ? wingEnds(outline, dirs, lengths) : new Set<number>();
+  const gables =
+    preset === "gable" || preset === "half-hip"
+      ? wingEnds(outline, dirs, lengths)
+      : new Set<number>();
   return outline.map((_, i): RoofSide => {
     if (preset === "flat") return { kind: "eave", pitch: 0, overhang };
     if (preset === "hip") return { kind: "eave", pitch, overhang };
     if (preset === "shed") {
       return i === longest ? { kind: "eave", pitch, overhang } : { kind: "gable", pitch, overhang };
     }
-    return { kind: gables.has(i) ? "gable" : "eave", pitch, overhang };
+    if (!gables.has(i)) return { kind: "eave", pitch, overhang };
+    if (preset === "gable") return { kind: "gable", pitch, overhang };
+    return { kind: "half-hip", pitch, overhang, gableHeight: halfHipHeight(lengths[i], pitch) };
   });
 }
 

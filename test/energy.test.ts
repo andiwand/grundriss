@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addStoryOnTop, emptyBuilding } from "../src/model/building";
+import { addCellar, addStoryOnTop, emptyBuilding } from "../src/model/building";
 import {
   AIR_CHANGE,
   AIR_HEAT,
+  ATTIC_FACTOR,
   buildingHeatLoss,
+  CELLAR_FACTOR,
+  GROUND_FACTOR,
   isOuterWall,
   roomHeatLoss,
   uValue,
@@ -150,5 +153,59 @@ describe("heat loss", () => {
     expect(loss.heating).toBe(1200);
     expect(loss.floorHeating?.power).toBeCloseTo(70 * 20);
     expect(loss.floorHeating?.pipe).toBeCloseTo(20 / 0.15);
+  });
+});
+
+describe("unheated stories", () => {
+  /** A box of 8 × 6 m on three stories: a cellar, the ground floor, and an attic story. */
+  function threeStories() {
+    const building = emptyBuilding();
+    const ground = building.stories[0];
+    box(ground, 8, 6);
+    const cellar = addCellar(building);
+    box(cellar, 8, 6);
+    const top = addStoryOnTop(building);
+    box(top, 8, 6);
+    return { building, cellar, ground, top };
+  }
+  const roomOf = (story: Story) => findRooms(story)[0];
+
+  it("adds a cellar as an unheated story, and leaves its rooms out", () => {
+    const { building, cellar, ground } = threeStories();
+    expect(cellar.heated).toBe(false);
+    const loss = buildingHeatLoss(building);
+    expect(loss.rooms.map((r) => r.storyId)).not.toContain(cellar.id);
+    expect(loss.area).toBeCloseTo(96);
+    // The ground floor loses heat through the slab to the cold cellar.
+    const floor = roomHeatLoss(building, ground, roomOf(ground)).floor;
+    const e = building.envelope;
+    const delta = e.inside - e.outside;
+    expect(floor).toBeCloseTo(48 * uValue(e.ceiling, "floor") * CELLAR_FACTOR * delta);
+  });
+
+  it("puts the floor of a heated cellar on the ground, and its walls in the ground lose less", () => {
+    const { building, cellar, ground } = threeStories();
+    cellar.heated = true;
+    const loss = roomHeatLoss(building, cellar, roomOf(cellar));
+    const e = building.envelope;
+    const delta = e.inside - e.outside;
+    expect(loss.floor).toBeCloseTo(48 * uValue(e.floor, "floor") * GROUND_FACTOR * delta);
+    // The whole cellar is in the ground, so its walls lose GROUND_FACTOR of the full loss.
+    expect(loss.walls).toBeCloseTo(loss.wallArea * uValue(e.wall, "wall") * GROUND_FACTOR * delta);
+    expect(roomHeatLoss(building, ground, roomOf(ground)).floor).toBe(0);
+  });
+
+  it("gives the story under a cold attic a loss through its ceiling, and no roof", () => {
+    const { building, top, ground } = threeStories();
+    building.roofs.push(newRoof(building, top, "gable")!);
+    const heated = roomHeatLoss(building, top, roomOf(top));
+    expect(heated.roof).toBeGreaterThan(0);
+    expect(heated.ceiling).toBe(0);
+    top.heated = false;
+    const below = roomHeatLoss(building, ground, roomOf(ground));
+    const e = building.envelope;
+    const delta = e.inside - e.outside;
+    expect(below.roof).toBe(0);
+    expect(below.ceiling).toBeCloseTo(48 * uValue(e.ceiling, "roof") * ATTIC_FACTOR * delta);
   });
 });

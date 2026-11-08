@@ -229,13 +229,28 @@ export interface HeatingSystem {
 }
 
 /**
- * The thermal envelope of the building: the default layers of the outer walls, the roof, and the
- * lowest floor, the U-values of windows and doors, and the design temperatures.
+ * The hot water of the building. The heater is the heating of the building, or a direct electric
+ * heater. `people` 0 means no hot water in the energy per year.
+ */
+export interface HotWater {
+  people: number;
+  /** The hot water per person and day in liters, from 10 °C to 55 °C. */
+  liters: number;
+  heater: "heating" | "electric";
+}
+
+/**
+ * The thermal envelope of the building: the default layers of the outer walls, the roof, the
+ * lowest floor, and the slab to an unheated story, the U-values of windows and doors, and the
+ * design temperatures.
  */
 export interface Envelope {
   wall: Layer[];
   roof: Layer[];
+  /** The floor on the ground. */
   floor: Layer[];
+  /** The slab between a heated and an unheated story: a cold cellar below, or a cold attic above. */
+  ceiling: Layer[];
   /** U-values in W/(m²K). */
   windowU: number;
   doorU: number;
@@ -244,6 +259,18 @@ export interface Envelope {
   inside: number;
   /** The heating, for the energy per year. */
   heating: HeatingSystem;
+  hotWater: HotWater;
+}
+
+/**
+ * A variant of the envelope, the heating, and the heated stories, to compare with the plan.
+ * `unheated` has the ids of the unheated stories.
+ */
+export interface Variant {
+  id: Id;
+  name: string;
+  envelope: Envelope;
+  unheated: Id[];
 }
 
 /**
@@ -354,20 +381,28 @@ export interface Story extends Plan {
   elevation: number;
   /** The height from this floor to the floor of the next story, in meters. */
   height: number;
+  /**
+   * False for an unheated story, for example a cold cellar or attic. Its rooms lose no heat. The
+   * heated rooms next to it lose heat through the slab between them (`Envelope.ceiling`).
+   */
+  heated: boolean;
 }
 
 /** The presets of a new roof. `presetSides` in roofshape.ts makes the sides from them. */
-export type RoofKind = "gable" | "hip" | "flat" | "shed";
+export type RoofKind = "gable" | "half-hip" | "hip" | "flat" | "shed";
 
 /**
  * One side of a roof outline: from point i to point i + 1. An eave side has a roof face that
  * rises inward with the pitch. A gable side has a vertical wall up to the roof faces of the
- * other sides, like the end of a gable roof or the high side of a shed roof.
+ * other sides, like the end of a gable roof or the high side of a shed roof. A half-hip side has
+ * a gable wall up to `gableHeight`, and above it a small hip face with the pitch.
  */
 export interface RoofSide {
-  kind: "eave" | "gable";
+  kind: "eave" | "gable" | "half-hip";
   /** The slope in degrees. A gable side ignores it. */
   pitch: number;
+  /** The height of the gable wall of a half-hip side above the eaves, in meters. */
+  gableHeight?: number;
   /** The horizontal distance from the outline to the edge of the roof, outward. */
   overhang: number;
 }
@@ -480,6 +515,8 @@ export interface Building {
   /** The 3D models that the furniture of all stories uses. */
   models: Model[];
   envelope: Envelope;
+  /** The variants of the energy, to compare with the plan. */
+  variants: Variant[];
   pv: PvArray[];
   /** The place of the building, or null. */
   location: Location | null;

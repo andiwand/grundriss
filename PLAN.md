@@ -15,15 +15,15 @@
    connect two stories, a roof (gable, hip, flat, and shed), chimneys, and the orientation of
    the plan to north. The 3D view stacks the stories. This milestone changes the file format.
    Later: several roofs on any outline, with settings for each side, dormers, and roof
-   windows (done), and attics under the roof with the WoFlV living area (done). The half-hip
-   end is still open.
+   windows (done), attics under the roof with the WoFlV living area (done), and the half-hip
+   end (done).
 7. **Building services** (done, first version): layers on the plan for photovoltaic panels on the roof, heating
    (radiators, floor heating, and the heat source), the insulation of walls, roof, and floor,
    and the electrical wiring (sockets, switches, lights, and cables). Each layer can be on or
    off in the 2D and in the 3D view.
-8. **Energy efficiency** (done, first version: the location, the climate, and the heating per
-   year as a monthly balance with the heating system, cost, CO₂, a class, and the PV share;
-   open: hot water, a heated or unheated cellar, and the comparison of variants): first, the location of the building: a place search (Open-Meteo
+8. **Energy efficiency** (done: the location, the climate, the heating per year as a monthly
+   balance with the heating system, cost, CO₂, a class, and the PV share, the hot water, heated
+   and unheated stories, and the comparison of variants): first, the location of the building: a place search (Open-Meteo
    geocoding) or coordinates. A button loads the climate once and stores it in the plan, so that
    the app works offline after that: a typical year of hourly radiation (global, direct, and
    diffuse) and temperature from the Open-Meteo archive (CC BY 4.0, free for non-commercial use).
@@ -47,6 +47,10 @@
    research work, and it must not block the other milestones.
 10. **Website** (done): a scroll story at the root of GitHub Pages that builds one house with the
     engine of the app. The app is at `/app/`.
+11. **Topics and projects** (done): the user interface in five topics (overview, structure,
+    utilities, interior, and energy), water and communication as systems of the utilities, a
+    Projects page with the plans in the browser (IndexedDB) and autosave, and the app as a PWA
+    that the user can install and use offline.
 
 ## Known limits
 
@@ -58,7 +62,11 @@ step.
   ignores dormers and roof windows.
 - **Attic and energy**: the clear height ignores the thickness of the roof. Where two roofs
   overlap on the plan, the overlap counts two times. Roof windows count as roof area, not as
-  windows.
+  windows. A slab counts to the ground or to an unheated story only under the label point of the
+  room, so a room that sticks out past the story below loses nothing through that part. A
+  variant does not keep the own layers of single walls.
+- **Half hip**: dormers and roof windows go only on eave sides, not on the hip face of a half
+  hip.
 - **Furniture**: the app does not check furniture under a roof. A tall piece under the slope
   goes through the roof without a warning. A compound name without spaces ("gothicbed") can go
   to the wrong group of the catalog.
@@ -70,8 +78,6 @@ step.
   10 to 25 km, not from a station. The PV yield ignores shade, snow, and the spectrum. The design
   temperature (the coldest mean of 48 hours in 10 years) is not the value of a national annex to
   EN 12831.
-- **Tooling**: the deploy workflow uses GitHub Actions that run on Node.js 20, which GitHub
-  deprecates.
 
 ## Decisions
 

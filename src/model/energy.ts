@@ -13,9 +13,14 @@
 // Under a roof, the areas and the volume come from the ceiling of the room (`roomCeiling` in
 // attic.ts): the roof area is the sloped area of the roof over the room, a wall goes up to the
 // roof (knee walls and gable triangles), and the volume is the volume under the roof.
+//
+// An unheated story (`Story.heated`) loses no heat. A heated room above or below an unheated room
+// loses heat through the slab between them (`Envelope.ceiling`). The unheated room is warmer than
+// the outside, so a temperature factor reduces this loss. The part of an outer wall of a heated
+// cellar that is in the ground loses less, by GROUND_FACTOR.
 
 import { ceilingArea, ceilingVolume, dormerAreas, roomCeiling, stripArea } from "./attic";
-import { findStory } from "./building";
+import { findStory, storyAbove, storyBelow } from "./building";
 import { material } from "./insulation";
 import { roofGeometries } from "./roof";
 import { findRooms, pointInPolygon, type Room } from "./rooms";
@@ -34,6 +39,12 @@ export const AIR_CHANGE = 0.5;
 export const AIR_HEAT = 0.34;
 /** A floor on the ground loses less than a floor to the outside air. This factor reduces it. */
 export const GROUND_FACTOR = 0.6;
+/**
+ * The temperature factors of a slab to an unheated story (OIB RL 6): a cold cellar below, and a
+ * cold attic above.
+ */
+export const CELLAR_FACTOR = 0.7;
+export const ATTIC_FACTOR = 0.9;
 /** An estimate of the heat output of floor heating, in W/m². */
 export const FLOOR_HEATING_POWER = 70;
 /** The usual distance between the pipes of floor heating, in meters. */
@@ -104,6 +115,8 @@ export interface RoomLoss {
   doors: number;
   roof: number;
   floor: number;
+  /** The loss through the slab to an unheated story above. */
+  ceiling: number;
   ventilation: number;
   /** The sum of the parts in W. */
   total: number;
@@ -126,6 +139,8 @@ export interface RoomLoss {
  * roof over the top story.
  */
 function underRoof(building: Building, story: Story, room: Room): boolean {
+  // A roof over an unheated story is not over a heated room under that story.
+  if (roomAt(storyAbove(building, story), room.labelAt)?.heated === false) return false;
   const roofs = roofGeometries(building);
   if (roofs.length === 0) return story.id === building.stories[building.stories.length - 1]?.id;
   const p = room.labelAt;
@@ -143,6 +158,12 @@ function underRoof(building: Building, story: Story, room: Room): boolean {
   });
 }
 
+/** The story if one of its rooms contains the point, or null. */
+function roomAt(story: Story | undefined, p: { x: number; y: number }): Story | null {
+  if (!story) return null;
+  return findRooms(story).some((r) => pointInPolygon(p, r.polygon)) ? story : null;
+}
+
 /** The heat loss of one room of a story. */
 export function roomHeatLoss(building: Building, story: Story, room: Room): RoomLoss {
   return lossOf(building, story, room, roomsPerWall(story));
@@ -156,6 +177,11 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
   const delta = temperature - envelope.outside;
   const area = room.area;
   const volume = ceilingVolume(ceiling);
+
+  // The part of the height of a cellar wall that is in the ground loses less.
+  const buried =
+    story.elevation < 0 ? Math.min(1, -story.elevation / Math.max(story.height, 1e-6)) : 0;
+  const inGround = 1 - buried * (1 - GROUND_FACTOR);
 
   // Each outer wall on the edge of the room loses heat through its area without its openings.
   // A wall borders one room at most, so all its openings belong to this room. Under a roof, the
@@ -196,7 +222,7 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     }
     const net = Math.max(0, strip(0, Math.hypot(b.x - a.x, b.y - a.y)) - openingArea);
     wallArea += net;
-    walls += net * uValue(wallLayers(building, wall), "wall");
+    walls += net * uValue(wallLayers(building, wall), "wall") * inGround;
   }
 
   // The roof loss goes to the highest room under the roof. The walls and the windows of the
@@ -210,9 +236,18 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     windows += dormers.windows * envelope.windowU;
   }
   const roof = roofArea * uValue(envelope.roof, "roof");
-  const lowest = building.stories[0];
-  const floor =
-    lowest && story.id === lowest.id ? area * uValue(envelope.floor, "floor") * GROUND_FACTOR : 0;
+  // The floor is on the ground if no story is below. Above an unheated room, the slab loses heat
+  // to it. Above a heated room, it loses nothing.
+  const below = storyBelow(building, story);
+  const under = roomAt(below, room.labelAt);
+  const floor = !below
+    ? area * uValue(envelope.floor, "floor") * GROUND_FACTOR
+    : under && !under.heated
+      ? area * uValue(envelope.ceiling, "floor") * CELLAR_FACTOR
+      : 0;
+  // The slab to an unheated room above. The heat flows up, as through a roof.
+  const over = roofArea === 0 ? roomAt(storyAbove(building, story), room.labelAt) : null;
+  const slab = over && !over.heated ? area * uValue(envelope.ceiling, "roof") * ATTIC_FACTOR : 0;
   const ventilation = AIR_HEAT * AIR_CHANGE * volume;
 
   const heating = story.fixtures
@@ -223,7 +258,7 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     : null;
 
   // The parts above are in W/K. The loss in W is the part times the difference of temperature.
-  const transfer = walls + windows + doors + roof + floor + ventilation;
+  const transfer = walls + windows + doors + roof + floor + slab + ventilation;
   return {
     area,
     height,
@@ -236,6 +271,7 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     doors: doors * delta,
     roof: roof * delta,
     floor: floor * delta,
+    ceiling: slab * delta,
     ventilation: ventilation * delta,
     total: transfer * delta,
     transfer,
@@ -254,10 +290,11 @@ export interface BuildingLoss {
   perArea: number;
 }
 
-/** The heat loss of all rooms of all stories. */
+/** The heat loss of all rooms of the heated stories. */
 export function buildingHeatLoss(building: Building): BuildingLoss {
   const rooms: BuildingLoss["rooms"] = [];
   for (const story of building.stories) {
+    if (!story.heated) continue;
     const found = findRooms(story);
     const perWall = roomsPerWall(story, found);
     for (const room of found) {

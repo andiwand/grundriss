@@ -4,6 +4,19 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Roofs: a new kind of side, the half hip. Its gable wall goes up to a height, and a small hip
+  face closes the top. The hip lines go on to the overhang, so the faces meet without a gap. The
+  roof panel and the add buttons have a **Half hip** preset.
+- Energy: hot water. The Hot water group sets the people, the liters per person and day, and
+  the heater. The cost, the CO₂, the final energy, and the PV share include it.
+- Energy: heated and unheated stories. A new cellar is unheated. The heated rooms next to an
+  unheated story lose heat through the new slab layers of the envelope. The walls of a heated
+  cellar lose less in the ground.
+- Energy: variants. The Variants group compares the plan with variants, for example more
+  insulation or a heat pump, and shows the difference of the cost. A variant can go into the
+  plan, and the plan can go into a variant. The plan file keeps the variants.
+- Build: the GitHub workflow uses the actions that run on Node.js 24, and builds with Node.js 24.
+
 - 2D: when the 2D pane changes its size, for example from split to 2D only, the point at the
   center of the view stays at the center.
 - Energy: the topic shows one view, 2D or 3D, and a wide panel for the calculations. The edge

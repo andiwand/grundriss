@@ -41,7 +41,8 @@ export const layersThickness = (layers: Layer[]): number =>
 
 /**
  * A usual new building in Central Europe: a brick wall with 16 cm EPS, a roof with 22 cm
- * mineral wool between rafters, a slab on the ground with 12 cm XPS, and triple glazing.
+ * mineral wool between rafters, a slab on the ground with 12 cm XPS, a slab to an unheated story
+ * with 12 cm EPS, and triple glazing. Three people use 40 liters of hot water each per day.
  */
 export function defaultEnvelope(): Envelope {
   return {
@@ -62,10 +63,17 @@ export function defaultEnvelope(): Envelope {
       { material: "concrete", thickness: 0.2 },
       { material: "xps", thickness: 0.12 },
     ],
+    ceiling: [
+      { material: "screed", thickness: 0.06 },
+      { material: "eps", thickness: 0.04 },
+      { material: "concrete", thickness: 0.2 },
+      { material: "eps", thickness: 0.12 },
+    ],
     windowU: 0.9,
     doorU: 1.3,
     outside: -12,
     inside: 20,
     heating: defaultHeating("heat-pump"),
+    hotWater: { people: 3, liters: 40, heater: "heating" },
   };
 }

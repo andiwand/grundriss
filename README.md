@@ -25,17 +25,17 @@ account and no server, and your plans stay on your computer as files.
 
 ## Features
 
-| Part          | What it does                                                                                                                                                      |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.           |
-| **Draw**      | Walls with snapping and angles, doors and windows, dimensions, and rooms that close by themselves with their names and areas.                                     |
-| **3D**        | The 3D view shows the plan at the same time as you edit it, with holes for each door and window.                                                                  |
-| **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                         |
-| **Roofs**     | Gable, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
-| **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                        |
-| **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                     |
-| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, and solar panels with their yield.                                 |
-| **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                               |
+| Part          | What it does                                                                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.                     |
+| **Draw**      | Walls with snapping and angles, doors and windows, dimensions, and rooms that close by themselves with their names and areas.                                               |
+| **3D**        | The 3D view shows the plan at the same time as you edit it, with holes for each door and window.                                                                            |
+| **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                                   |
+| **Roofs**     | Gable, half-hip, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
+| **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                                  |
+| **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                               |
+| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, and solar panels with their yield.                                           |
+| **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                                         |
 
 <p align="center">
   <a href="https://andiwand.github.io/grundriss/">
@@ -54,8 +54,8 @@ shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top 
   and roofs.
 - **Utilities**: water, heating, electricity with PV, and communication.
 - **Interior**: furniture and rooms.
-- **Energy**: the location, the map, the climate, the insulation, the heating per year, and its
-  cost.
+- **Energy**: the location, the map, the climate, the insulation, the heated stories, the
+  heating and the hot water per year, their cost, and the variants.
 
 Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic.
 
@@ -179,12 +179,14 @@ or the facade.
 
 ### Roofs
 
-Without a selection, the panel lists the roofs. **Gable**, **Hip**, **Shed**, and **Flat** add a
+Without a selection, the panel lists the roofs. **Gable**, **Half hip**, **Hip**, **Shed**, and **Flat** add a
 roof on the outline of the walls of the active story. Click a roof to change it:
 
-- **Sides**: each side of the outline is an **eave** (a face rises from it with its pitch) or a
-  **gable** (a vertical wall). The plan shows the number of each side. The gable preset puts a
-  gable at the end of each wing.
+- **Sides**: each side of the outline is an **eave** (a face rises from it with its pitch), a
+  **gable** (a vertical wall), or a **half hip**: a gable wall up to the height of its **gable
+  wall**, and above it a small hip face with the pitch of the side. The plan shows the number of
+  each side. The gable preset puts a gable at the end of each wing, and the half-hip preset a
+  half hip.
 - **Outline**: drag the corners on the plan. Drag a + in the middle of a side to add a corner.
   Select a corner and press Delete to remove it. A second roof, for example of a garage, can have
   its own outline.
@@ -234,7 +236,26 @@ From the stored year, the app calculates:
   district heating, or direct electric) and its efficiency. The **Heating per year** group of
   the Energy panel sets the price. It shows the heat demand,
   an efficiency class, the final energy, the cost, the CO₂, the heat demand of each month, and
-  for a heat pump the part that the PV can cover. Hot water is not included.
+  the part of the electricity that the PV can cover.
+- the hot water: the **Hot water** group sets the people, the liters per person and day, and the
+  heater (the heating, or direct electric). The water goes from 10 °C to 55 °C, and the storage
+  and the pipes lose 40 % more. A heat pump has 80 % of its performance factor for hot water. The
+  hot water adds to the final energy, the cost, and the CO₂, but not to the heat demand and the
+  class.
+
+A story can be **heated** or not: the check box in the panel of the story, or the **Heated
+stories** group of the Envelope. A new cellar is unheated. An unheated story loses no heat, and
+a heated room above or below it loses heat through the **slab to an unheated story**, with a
+factor of 0.7 to a cold cellar and 0.9 to a cold attic. The walls of a heated cellar lose less
+in the part that is in the ground.
+
+The **Variants** group compares the plan with variants. **Add a variant** makes one from the
+plan with a usual change: more insulation on the walls, the roof, or the slab, triple glazing,
+a heat pump, or a heated or unheated cellar. Each variant shows its heat demand, class, cost,
+and CO₂, and the difference of the cost to the plan. The check mark puts a variant into the
+plan, so you can change it in the inputs; the disk saves the plan back into the variant. A
+variant keeps the envelope, the heating, the hot water, and the heated stories. Its own walls
+with their own layers stay as in the plan.
 
 Without a climate, the PV yield is a general estimate for Central Europe.
 

@@ -16,8 +16,8 @@ export const STEP_HEIGHT = 0.18;
 /** A chimney without a given top ends this much above the roof. */
 export const CHIMNEY_ABOVE_ROOF = 0.8;
 
-export function newStory(name: string, elevation: number, height: number): Story {
-  return { id: newId("st"), name, elevation, height, ...emptyPlan() };
+export function newStory(name: string, elevation: number, height: number, heated = true): Story {
+  return { id: newId("st"), name, elevation, height, heated, ...emptyPlan() };
 }
 
 export function emptyBuilding(): Building {
@@ -28,6 +28,7 @@ export function emptyBuilding(): Building {
     facade: DEFAULT_COLORS.facade,
     models: [],
     envelope: defaultEnvelope(),
+    variants: [],
     pv: [],
     location: null,
     climate: null,
@@ -63,13 +64,14 @@ export function addStoryOnTop(building: Building, attic = false): Story {
   return story;
 }
 
-/** Adds a cellar under the lowest story. */
+/** Adds a cellar under the lowest story. A new cellar is unheated. */
 export function addCellar(building: Building): Story {
   const bottom = building.stories[0];
   const height = STORY_DEFAULTS.cellarHeight;
   const elevation = (bottom ? bottom.elevation : 0) - height;
   const cellars = building.stories.filter((s) => s.elevation < 0).length;
-  const story = newStory(cellars === 0 ? "Cellar" : `Cellar ${cellars + 1}`, elevation, height);
+  const name = cellars === 0 ? "Cellar" : `Cellar ${cellars + 1}`;
+  const story = newStory(name, elevation, height, false);
   building.stories.unshift(story);
   sortStories(building);
   return story;

@@ -60,8 +60,11 @@ import type {
   Building,
   Dormer,
   Roof,
+  RoofKind,
+  RoofSide,
   RoofWindow,
   Envelope,
+  Variant,
   Item,
   ItemKind,
   Layer,
@@ -81,7 +84,21 @@ import { topView } from "./view3d/models";
 import { buildModelAsync, View3D } from "./view3d/view3d";
 import { findFurniture, genericType } from "./model/furniture";
 import { buildingHeatLoss, isOuterWall, roomHeatLoss, uValue, wallLayers } from "./model/energy";
-import { defaultHeating, HEATING_KINDS, heatingEnergy, INTERNAL_GAINS } from "./model/heating";
+import {
+  defaultHeating,
+  HEATING_KINDS,
+  heatingEnergy,
+  HOT_WATER_LOSS,
+  INTERNAL_GAINS,
+} from "./model/heating";
+import {
+  applyVariant,
+  presetVariant,
+  sameAsPlan,
+  VARIANT_PRESETS,
+  variantOf,
+  withVariant,
+} from "./model/variants";
 import { DEFAULT_COLORS, roomOnSide, wallSideColor } from "./model/colors";
 import { makeHouse } from "./model/example";
 import { MATERIALS, layersThickness } from "./model/insulation";
@@ -101,7 +118,7 @@ import { newRoof, roofBase, roofGeometryOf, storyBox } from "./model/roof";
 import { livingArea, roofIsCeiling } from "./model/attic";
 import type { Room } from "./model/rooms";
 import type { Story } from "./model/types";
-import { presetSides } from "./model/roofshape";
+import { halfHipHeight, presetSides } from "./model/roofshape";
 import { newId } from "./model/plan";
 import {
   FIXTURE_TYPES,
@@ -896,6 +913,13 @@ function renderPanel(): void {
 
     const loss = roomHeatLoss(doc.building, story, room);
     heading("Heating", "flame");
+    if (!story.heated) {
+      paragraph(
+        `${story.name} is unheated, so its rooms lose no heat. Make it heated in the panel of the story or in Energy.`,
+        "note",
+      );
+      return;
+    }
     checkField("Floor heating", room.info?.floorHeating ?? false, (value) =>
       change((info) => (info.floorHeating = value)),
     );
@@ -917,6 +941,7 @@ function renderPanel(): void {
       ["doors", loss.doors],
       ["roof", loss.roof],
       ["floor", loss.floor],
+      ["ceiling", loss.ceiling],
       ["ventilation", loss.ventilation],
     ];
     paragraph(
@@ -1450,6 +1475,7 @@ function renderEnergyTopic(): void {
   column = results;
   renderHeatLoss();
   renderHeatingResults();
+  renderVariants();
   const building = doc.building;
   if (building.pv.length > 0) {
     const total = pvSummary(building);
@@ -1551,6 +1577,9 @@ function renderStoryPanel(): void {
       }),
     { min: 0.5 },
   );
+  checkField("Heated", story.heated, (value) =>
+    doc.editBuilding((b) => (findStory(b, id)!.heated = value)),
+  );
   renderStoryLivingArea(story);
   if (doc.building.stories.length > 1) {
     button(
@@ -1598,6 +1627,7 @@ function renderBuildingPanel(): void {
   );
   for (const [preset, name] of [
     ["gable", "Gable"],
+    ["half-hip", "Half hip"],
     ["hip", "Hip"],
     ["shed", "Shed"],
     ["flat", "Flat"],
@@ -1607,7 +1637,7 @@ function renderBuildingPanel(): void {
 }
 
 /** Adds a roof on the outline of the walls of the active story. */
-function addRoof(preset: "gable" | "hip" | "shed" | "flat"): void {
+function addRoof(preset: RoofKind): void {
   const roof = newRoof(doc.building, doc.plan, preset);
   if (!roof) {
     showStatus("The walls of this story close no outline, so the roof has no outline yet.", true);
@@ -1667,6 +1697,7 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
   paragraph("Presets for all sides:", "note");
   for (const [preset, name] of [
     ["gable", "Gable"],
+    ["half-hip", "Half hip"],
     ["hip", "Hip"],
     ["shed", "Shed"],
   ] as const) {
@@ -1701,6 +1732,11 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
     { icon: "fit" },
   );
 
+  const sideLength = (i: number) => {
+    const p = roof.outline[i];
+    const q = roof.outline[(i + 1) % roof.outline.length];
+    return Math.hypot(q.x - p.x, q.y - p.y);
+  };
   group("Sides", true, () => {
     roof.sides.forEach((side, i) => {
       const row = document.createElement("div");
@@ -1711,9 +1747,16 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
       kind.append(
         new Option("Eave", "eave", false, side.kind === "eave"),
         new Option("Gable", "gable", false, side.kind === "gable"),
+        new Option("Half hip", "half-hip", false, side.kind === "half-hip"),
       );
       kind.addEventListener("change", () =>
-        change((r) => (r.sides[i].kind = kind.value as "eave" | "gable")),
+        change((r) => {
+          const next = r.sides[i];
+          next.kind = kind.value as RoofSide["kind"];
+          if (next.kind === "half-hip") {
+            next.gableHeight ??= halfHipHeight(sideLength(i), next.pitch);
+          } else delete next.gableHeight;
+        }),
       );
       const pitch = document.createElement("input");
       pitch.type = "number";
@@ -1738,19 +1781,25 @@ function renderRoofPanel(roofId: string, corner: number | null): void {
       });
       row.append(label, kind, pitch, overhang);
       section.append(row);
+      if (side.kind === "half-hip") {
+        numberField(
+          `Side ${i + 1}: gable wall`,
+          side.gableHeight ?? 0,
+          (v) => change((r) => (r.sides[i].gableHeight = v)),
+          { step: 0.05, unit: "m" },
+        );
+      }
     });
-    paragraph("Each row: the kind, the pitch in °, and the overhang in m.", "note");
+    paragraph(
+      "Each row: the kind, the pitch in °, and the overhang in m. A half-hip side has a gable wall up to its height, and a small hip face above it.",
+      "note",
+    );
   });
 
   const eaves = roof.sides
     .map((side, i) => ({ side, i }))
     .filter(({ side }) => side.kind === "eave")
     .map(({ i }) => i);
-  const sideLength = (i: number) => {
-    const p = roof.outline[i];
-    const q = roof.outline[(i + 1) % roof.outline.length];
-    return Math.hypot(q.x - p.x, q.y - p.y);
-  };
   // A new dormer or window goes on the longest eave side. The copy keeps `eaves` in side order.
   const longest = [...eaves].sort((a, b) => sideLength(b) - sideLength(a))[0];
 
@@ -2294,6 +2343,25 @@ function renderEnvelopeInputs(): void {
   group(`Floor on the ground · U ${uValue(envelope.floor, "floor").toFixed(2)}`, false, () =>
     layerEditor(envelope.floor, "floor", (change) => editEnvelope((e) => change(e.floor))),
   );
+  group(
+    `Slab to an unheated story · U ${uValue(envelope.ceiling, "floor").toFixed(2)}`,
+    false,
+    () =>
+      layerEditor(envelope.ceiling, "floor", (change) => editEnvelope((e) => change(e.ceiling))),
+  );
+  const stories = doc.building.stories;
+  const heated = stories.filter((s) => s.heated).length;
+  group(`Heated stories · ${heated} of ${stories.length}`, false, () => {
+    for (const story of [...stories].reverse()) {
+      checkField(story.name, story.heated, (value) =>
+        doc.editBuilding((b) => (findStory(b, story.id)!.heated = value)),
+      );
+    }
+    paragraph(
+      "An unheated story, for example a cold cellar or attic, loses no heat. The heated rooms next to it lose heat through the slab between them.",
+      "note",
+    );
+  });
   group("Windows, doors, and climate", false, () => {
     const set = (key: "windowU" | "doorU" | "outside" | "inside") => (value: number) =>
       editEnvelope((e) => (e[key] = value));
@@ -2360,6 +2428,32 @@ function renderHeatingInputs(): void {
     step: 0.01,
     unit: "€/kWh",
   });
+
+  const water = doc.building.envelope.hotWater;
+  heading("Hot water", "drop");
+  const setWater = (edit: (w: typeof water) => void) =>
+    doc.editBuilding((b) => edit(b.envelope.hotWater));
+  numberField("People", water.people, (v) => setWater((w) => (w.people = Math.round(v))), {
+    step: 1,
+    unit: "",
+  });
+  numberField("Per person and day", water.liters, (v) => setWater((w) => (w.liters = v)), {
+    step: 5,
+    unit: "l",
+  });
+  selectField(
+    "Heater",
+    water.heater,
+    [
+      ["heating", info.name],
+      ["electric", "Direct electric"],
+    ],
+    (heater) => setWater((w) => (w.heater = heater)),
+  );
+  paragraph(
+    `Water from 10 °C to 55 °C, and ${Math.round(HOT_WATER_LOSS * 100)} % more for the losses of the storage and the pipes. 0 people leaves the hot water out.`,
+    "note",
+  );
 }
 
 /** The energy for heating per year: the demand, the cost, the CO₂, the class, and the months. */
@@ -2382,19 +2476,168 @@ function renderHeatingResults(): void {
     [`${Math.round(energy.perArea)} kWh/m²`, "per heated area"],
     [energy.efficiencyClass, "efficiency class"],
     [kwh(energy.final), `${info.energy} for the heating`],
+  ];
+  if (energy.hotWaterFinal > 0) {
+    const water = energy.hotWaterElectric ? "electricity" : info.energy;
+    tiles.push([kwh(energy.hotWaterFinal), `${water} for the hot water`]);
+  }
+  tiles.push(
     [`${Math.round(energy.cost).toLocaleString("en")} €`, "per year"],
     [`${(energy.co2 / 1000).toFixed(1)} t`, "CO₂ per year"],
-  ];
-  if (info.energy === "electricity" && energy.pvCovered > 0) {
-    const share = Math.round((energy.pvCovered / energy.final) * 100);
-    tiles.push([`${share} %`, "of it from your PV, in the balance of each month", true]);
+  );
+  if (energy.electric > 0 && energy.pvCovered > 0) {
+    const share = Math.round((energy.pvCovered / energy.electric) * 100);
+    tiles.push([
+      `${share} %`,
+      "of the electricity from your PV, in the balance of each month",
+      true,
+    ]);
   }
   stats(tiles);
   monthChart(energy.months.map((m) => m.demand));
   paragraph(
-    `A monthly balance in the spirit of EN ISO 13790, with the stored climate: the heat loss of the rooms, the sun through the windows, and ${INTERNAL_GAINS} W/m² from people and devices. Without hot water. The class uses the scale of the Austrian energy certificate (OIB), but it is an estimate, not a certificate. The PV share is an upper limit, because PV in the day does not heat at night without a battery.`,
+    `A monthly balance in the spirit of EN ISO 13790, with the stored climate: the heat loss of the heated rooms, the sun through the windows, and ${INTERNAL_GAINS} W/m² from people and devices. The cost and the CO₂ include the hot water. The class uses the heat demand on the scale of the Austrian energy certificate (OIB), but it is an estimate, not a certificate. The PV share is an upper limit, because PV in the day does not heat at night without a battery.`,
     "note",
   );
+}
+
+/**
+ * The variants: each one is a copy of the envelope, the heating, and the heated stories. The
+ * list compares each variant with the plan. A variant can go to the plan, or take the plan.
+ */
+function renderVariants(): void {
+  const building = doc.building;
+  heading("Variants", "copy");
+  const plan = heatingEnergy(building);
+  if (!plan) {
+    paragraph("Variants need the energy per year: load the climate, and draw rooms.", "note");
+    return;
+  }
+  const rows = [
+    { variant: null as Variant | null, energy: plan },
+    ...building.variants.map((variant) => ({
+      variant,
+      energy: heatingEnergy(withVariant(building, variant)),
+    })),
+  ];
+  const most = Math.max(...rows.map((r) => r.energy?.cost ?? 0), 1);
+  const list = document.createElement("div");
+  list.className = "variants";
+  const euro = (value: number) => `${Math.round(value).toLocaleString("en")} €`;
+  for (const { variant, energy } of rows) {
+    const card = document.createElement("div");
+    card.className = variant ? "variant" : "variant plan";
+    const top = document.createElement("div");
+    top.className = "variant-top";
+    if (variant) {
+      const name = document.createElement("input");
+      name.type = "text";
+      name.value = variant.name;
+      name.setAttribute("aria-label", "Name of the variant");
+      name.addEventListener("change", () => {
+        const value = name.value.trim();
+        if (value) editVariant(variant.id, (v) => (v.name = value));
+      });
+      const same = sameAsPlan(building, variant);
+      const action = (iconName: IconName, title: string, act: () => void, disabled = false) => {
+        const element = document.createElement("button");
+        element.className = "icon-button";
+        element.title = title;
+        element.setAttribute("aria-label", title);
+        element.innerHTML = icon(iconName);
+        element.disabled = disabled;
+        element.addEventListener("click", act);
+        return element;
+      };
+      top.append(
+        name,
+        action(
+          "check",
+          same ? "The plan has this variant" : "Use this variant in the plan",
+          () => {
+            doc.editBuilding((b) =>
+              applyVariant(
+                b,
+                b.variants.find((v) => v.id === variant.id)!,
+              ),
+            );
+            showStatus(`The plan now has the variant "${variant.name}". Undo goes back.`);
+          },
+          same,
+        ),
+        action(
+          "save",
+          "Save the plan into this variant",
+          () =>
+            editVariant(variant.id, (v) => {
+              const now = variantOf(doc.building, v.name);
+              v.envelope = now.envelope;
+              v.unheated = now.unheated;
+            }),
+          same,
+        ),
+        action("trash", "Delete the variant", () =>
+          doc.editBuilding((b) => (b.variants = b.variants.filter((v) => v.id !== variant.id))),
+        ),
+      );
+    } else {
+      const name = document.createElement("strong");
+      name.textContent = "Plan";
+      top.append(name);
+    }
+    card.append(top);
+    const line = document.createElement("div");
+    line.className = "variant-values";
+    if (energy) {
+      const delta = energy.cost - plan.cost;
+      const parts = [
+        `${Math.round(energy.perArea)} kWh/m² · ${energy.efficiencyClass}`,
+        `${euro(energy.cost)} per year`,
+        `${(energy.co2 / 1000).toFixed(1)} t CO₂`,
+      ];
+      line.textContent = parts.join(" · ");
+      if (variant && Math.abs(delta) >= 1) {
+        const change = document.createElement("span");
+        change.className = delta < 0 ? "better" : "worse";
+        change.textContent = ` · ${delta < 0 ? "−" : "+"}${euro(Math.abs(delta))}`;
+        line.append(change);
+      }
+      const bar = document.createElement("div");
+      bar.className = "variant-bar";
+      bar.style.width = `${(energy.cost / most) * 100}%`;
+      card.append(line, bar);
+    } else {
+      line.textContent = "No rooms to calculate.";
+      card.append(line);
+    }
+    list.append(card);
+  }
+  section.append(list);
+
+  const add = document.createElement("select");
+  add.setAttribute("aria-label", "Add a variant");
+  add.append(new Option("Add a variant…", "", true, true));
+  for (const preset of VARIANT_PRESETS.filter((p) => p.available(building))) {
+    add.append(new Option(preset.name, preset.id));
+  }
+  add.addEventListener("change", () => {
+    const preset = VARIANT_PRESETS.find((p) => p.id === add.value);
+    if (!preset) return;
+    doc.editBuilding((b) => b.variants.push(presetVariant(b, preset)));
+  });
+  field("New", add);
+  paragraph(
+    "A variant keeps its own envelope, heating, hot water, and heated stories. The check mark puts a variant into the plan, so you can change it in the inputs. The disk saves the plan back into the variant. The bar shows the cost per year.",
+    "note",
+  );
+}
+
+/** Changes one variant of the building. */
+function editVariant(id: string, edit: (variant: Variant) => void): void {
+  doc.editBuilding((b) => {
+    const variant = b.variants.find((v) => v.id === id);
+    if (variant) edit(variant);
+  });
 }
 
 /**
@@ -2803,7 +3046,7 @@ function drawInsulation(group: SVGGElement, zoom: number): void {
     text.setAttribute("font-size", String(12 / zoom));
     text.setAttribute("stroke-width", String(3 / zoom));
     text.setAttribute("class", "heat-label");
-    text.textContent = `${Math.round(loss.total)} W`;
+    text.textContent = story.heated ? `${Math.round(loss.total)} W` : "unheated";
     group.append(text);
   }
 }

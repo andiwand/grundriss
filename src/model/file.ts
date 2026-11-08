@@ -20,6 +20,7 @@ import type {
   Envelope,
   HeatingKind,
   HeatingSystem,
+  HotWater,
   Fixture,
   Furniture,
   Layer,
@@ -38,6 +39,7 @@ import type {
   Story,
   Vertex,
   Wall,
+  Variant,
 } from "./types";
 
 import { decodeSeries, SERIES_NAMES } from "./climate";
@@ -104,6 +106,7 @@ export function parseBuilding(text: string): Building {
       name: "Ground floor",
       elevation: 0,
       height: 2.75,
+      heated: true,
       ...parsePlanData(data, ""),
     };
     return {
@@ -113,6 +116,7 @@ export function parseBuilding(text: string): Building {
       facade: DEFAULT_COLORS.facade,
       models: [],
       envelope: defaultEnvelope(),
+      variants: [],
       pv: [],
       location: null,
       climate: null,
@@ -131,6 +135,8 @@ export function parseBuilding(text: string): Building {
       name: string(s, "name", where),
       elevation: number(s, "elevation", where),
       height: number(s, "height", where),
+      // A file before the unheated stories has only heated stories.
+      heated: s.heated !== false,
       ...parsePlanData(s, `${where}, `),
     };
   });
@@ -183,6 +189,18 @@ export function parseBuilding(text: string): Building {
     }
   }
   const envelope = parseEnvelope(data.envelope);
+  const storyIds = new Set(stories.map((s) => s.id));
+  const variants: Variant[] = list(data, "variants").map((v, i) => {
+    const where = `variant ${i}`;
+    return {
+      id: string(v, "id", where),
+      name: string(v, "name", where),
+      envelope: parseEnvelope(v.envelope),
+      unheated: Array.isArray(v.unheated)
+        ? v.unheated.filter((id): id is string => typeof id === "string" && storyIds.has(id))
+        : [],
+    };
+  });
   const pv: PvArray[] = list(data, "pv").map((d, i) => {
     const where = `PV field ${i}`;
     return {
@@ -202,7 +220,7 @@ export function parseBuilding(text: string): Building {
   const location = parseLocation(data.location);
   const climate = parseClimate(data.climate);
   const facade = isColor(data.facade) ? data.facade : DEFAULT_COLORS.facade;
-  return { stories, roofs, north, facade, models, envelope, pv, location, climate };
+  return { stories, roofs, north, facade, models, envelope, variants, pv, location, climate };
 }
 
 /** A number in the interval [low, high], or an error. */
@@ -271,11 +289,14 @@ function parseRoof(r: Data, where: string): Roof {
   const outline = r.outline.map((p, i) => pointOf(p, `${where}, point ${i}`));
   const sides: RoofSide[] = list(r, "sides").map((side, i) => {
     const at = `${where}, side ${i}`;
-    return {
-      kind: side.kind === "gable" ? "gable" : "eave",
+    const kind = side.kind === "gable" || side.kind === "half-hip" ? side.kind : "eave";
+    const result: RoofSide = {
+      kind,
       pitch: number(side, "pitch", at),
       overhang: number(side, "overhang", at),
     };
+    if (kind === "half-hip") result.gableHeight = Math.max(0, number(side, "gableHeight", at));
+    return result;
   });
   if (sides.length !== outline.length) {
     throw new Error(`The file is damaged: ${where} needs one side for each side of its outline.`);
@@ -388,11 +409,24 @@ function parseEnvelope(data: unknown): Envelope {
     wall: data.wall == null ? defaults.wall : layers(data, "wall", "the outer walls"),
     roof: data.roof == null ? defaults.roof : layers(data, "roof", "the roof"),
     floor: data.floor == null ? defaults.floor : layers(data, "floor", "the floor"),
+    ceiling: data.ceiling == null ? defaults.ceiling : layers(data, "ceiling", "the ceiling"),
     windowU: finite(data.windowU, defaults.windowU),
     doorU: finite(data.doorU, defaults.doorU),
     outside: finite(data.outside, defaults.outside),
     inside: finite(data.inside, defaults.inside),
     heating: parseHeating(data.heating),
+    hotWater: parseHotWater(data.hotWater),
+  };
+}
+
+/** Reads the hot water. A file without it gets the default hot water. */
+function parseHotWater(data: unknown): HotWater {
+  const defaults = defaultEnvelope().hotWater;
+  if (!isObject(data)) return defaults;
+  return {
+    people: Math.max(0, finite(data.people, defaults.people)),
+    liters: Math.max(0, finite(data.liters, defaults.liters)),
+    heater: data.heater === "electric" ? "electric" : "heating",
   };
 }
 

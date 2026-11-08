@@ -15,6 +15,7 @@
   --accent-soft: rgb(47 107 255 / 0.12);
   --danger: #d93b3b;
   --danger-soft: rgb(217 59 59 / 0.1);
+  --good: #2b8a3e;
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
   --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 6px 20px rgb(16 24 40 / 0.08);
   --radius: 12px;
@@ -62,6 +63,7 @@
     --accent-soft: rgb(91 140 255 / 0.16);
     --danger: #ff6b6b;
     --danger-soft: rgb(255 107 107 / 0.12);
+    --good: #69db7c;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
 
@@ -2426,4 +2428,86 @@ body.overview #layers-button {
   .topbar .divider {
     display: none;
   }
+}
+
+/* The variants of the energy: one card for the plan and one for each variant. */
+#panel .variants {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#panel .variant {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+#panel .variant.plan {
+  background: var(--surface-2);
+}
+
+#panel .variant-top {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+}
+
+#panel .variant-top strong,
+#panel .variant-top input {
+  flex: 1;
+  min-width: 0;
+}
+
+#panel .variant-top input {
+  font: inherit;
+  font-weight: 600;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+}
+
+#panel .variant-top input:hover,
+#panel .variant-top input:focus {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+
+#panel .variant-top .icon-button {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+
+#panel .variant-values {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+#panel .variant-values .better {
+  color: var(--good);
+  font-weight: 600;
+}
+
+#panel .variant-values .worse {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+#panel .variant-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+#panel .variant.plan .variant-bar {
+  background: var(--ink-3);
 }

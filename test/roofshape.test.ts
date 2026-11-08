@@ -475,3 +475,73 @@ describe("mixed sides", () => {
     expect(g.gables.length).toBeGreaterThan(0);
   });
 });
+
+describe("half-hip roofs", () => {
+  const outline = rectangle(10, 6);
+  const sides = (overhang: number): RoofSide[] =>
+    presetSides(outline, "gable", 35, overhang).map((side) =>
+      side.kind === "gable" ? { ...side, kind: "half-hip", pitch: 50, gableHeight: 1.2 } : side,
+    );
+
+  it("ends the gable walls at the gable height, and closes the top with hip faces", () => {
+    const g = roof(outline, sides(0));
+    expect(g.faces).toHaveLength(4);
+    expect(g.gables).toHaveLength(2);
+    expect(g.top).toBeCloseTo(3 + 3 * tan(35));
+    for (const gable of g.gables) expect(Math.max(...gable.map((p) => p.z))).toBeCloseTo(4.2);
+    const total = g.faces.reduce((sum, f) => sum + planArea(f.polygon), 0);
+    expect(total).toBeCloseTo(60);
+    // The hip face starts at the top of the gable wall: 1.2 / tan(35) from each eave.
+    const hip = g.faces.find((f) => f.side === 1)!;
+    expect(hip.pitch).toBeCloseTo(50);
+    expect(Math.min(...hip.polygon.map((p) => p.z))).toBeCloseTo(4.2);
+    const ys = hip.polygon.filter((p) => Math.abs(p.z - 4.2) < 1e-6).map((p) => p.y);
+    expect(Math.min(...ys)).toBeCloseTo(1.2 / tan(35));
+    expect(Math.max(...ys)).toBeCloseTo(6 - 1.2 / tan(35));
+    // The hip face meets the ridge 0.9 / tan(50) from the gable.
+    const ridge = hip.polygon.filter((p) => Math.abs(p.z - g.top) < 1e-6);
+    for (const p of ridge) expect(p.x).toBeCloseTo(10 - (g.top - 4.2) / tan(50));
+    for (const face of g.faces) expect(worldNormal(face.polygon).y).toBeGreaterThan(0);
+  });
+
+  it("acts as a gable when the gable height is above the ridge", () => {
+    const high = sides(0).map((s) => (s.kind === "half-hip" ? { ...s, gableHeight: 10 } : s));
+    const g = roof(outline, high);
+    expect(g.faces).toHaveLength(2);
+    for (const gable of g.gables) expect(Math.max(...gable.map((p) => p.z))).toBeCloseTo(g.top);
+  });
+
+  it("lets the hip lines go on to the overhang, so the faces meet without a gap", () => {
+    const g = roof(outline, sides(0.5));
+    const hip = g.faces.find((f) => f.side === 1)!;
+    const low = Math.min(...hip.polygon.map((p) => p.z));
+    expect(low).toBeCloseTo(4.2 - 0.5 * tan(50));
+    const corners = hip.polygon.filter((p) => Math.abs(p.z - low) < 1e-6);
+    expect(corners).toHaveLength(2);
+    for (const c of corners) {
+      expect(c.x).toBeCloseTo(10.5);
+      // Each low corner of the hip face is also a corner of the face next to it.
+      const shared = g.faces
+        .filter((f) => f.side !== 1)
+        .some((f) => f.polygon.some((p) => Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) < 1e-6));
+      expect(shared).toBe(true);
+    }
+  });
+
+  it("is a preset with a usual gable height", () => {
+    const preset = presetSides(outline, "half-hip", 40, 0.3);
+    expect(preset.map((s) => s.kind)).toEqual(["eave", "half-hip", "eave", "half-hip"]);
+    expect(preset[1].gableHeight).toBeCloseTo(Math.round(3 * tan(40) * 0.6 * 20) / 20);
+    expect(roof(outline, preset).faces).toHaveLength(4);
+  });
+
+  it("works on each wing of an L", () => {
+    const preset = presetSides(ell, "half-hip", 35, 0.3);
+    const g = roof(ell, preset);
+    // The end of each wing has a hip face.
+    expect(g.faces.filter((f) => preset[f.side].kind === "half-hip")).toHaveLength(2);
+    expect(g.gables).toHaveLength(2);
+    expect(g.top).toBeCloseTo(3 + 2 * tan(35));
+    for (const face of g.faces) expect(worldNormal(face.polygon).y).toBeGreaterThan(0);
+  });
+});

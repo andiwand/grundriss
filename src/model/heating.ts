@@ -1,5 +1,5 @@
-// The energy for heating per year: a monthly balance in the spirit of EN ISO 13790. It is an
-// estimate to compare variants, not an energy certificate. It ignores the hot water, the cooling,
+// The energy for heating and hot water per year: a monthly balance in the spirit of EN ISO 13790.
+// It is an estimate to compare variants, not an energy certificate. It ignores the cooling,
 // thermal bridges, and the details of the ground and the control.
 //
 // For each month m and each room:
@@ -14,6 +14,11 @@
 // month, both from the stored climate. η is the utilization factor of the gains: a heavy
 // building stores more of the sun and uses more of it. The final energy is the demand plus the
 // losses of the distribution, divided by the efficiency of the heating.
+//
+// The hot water is the same on each day: people × liters × 1.163 Wh/(l·K) × 45 K. The storage
+// and the pipes lose HOT_WATER_LOSS more. The heating makes it with its efficiency, but a heat
+// pump has a lower performance factor for the higher temperature. A direct electric heater has
+// an efficiency of 1. The hot water does not change the heat demand and the class.
 
 import { climateFaceMonths, climateSeries, MONTH_DAYS, monthlyMeans } from "./climate";
 import { buildingHeatLoss } from "./energy";
@@ -31,6 +36,12 @@ export const SOLAR_FACTOR = 0.5 * 0.9 * 0.7 * 0.85;
 export const HEAT_CAPACITY = 45.8;
 /** The losses of the pipes and the storage, as a part of the heat demand. */
 export const DISTRIBUTION_LOSS = 0.1;
+/** The heat to warm one liter of water by 45 K (from 10 °C to 55 °C), in kWh. */
+export const HOT_WATER_HEAT = (1.163 * 45) / 1000;
+/** The losses of the storage and the circulation of the hot water, as a part of its heat. */
+export const HOT_WATER_LOSS = 0.4;
+/** A heat pump makes hot water with this part of its performance factor for the heating. */
+export const HOT_WATER_PUMP = 0.8;
 
 export interface HeatingKindInfo {
   name: string;
@@ -108,6 +119,9 @@ export interface MonthEnergy {
   /** The final energy of the heating, and the PV yield of the month, in kWh. */
   final: number;
   pv: number;
+  /** The heat for the hot water with its losses, and its final energy, in kWh. */
+  hotWater: number;
+  hotWaterFinal: number;
 }
 
 export interface HeatingEnergy {
@@ -118,16 +132,49 @@ export interface HeatingEnergy {
   demand: number;
   perArea: number;
   efficiencyClass: string;
-  /** The final energy per year in kWh (electricity for a heat pump), its cost, and its CO₂ in kg. */
+  /** The final energy of the heating per year in kWh (electricity for a heat pump). */
   final: number;
+  /** The heat for the hot water per year with its losses, and its final energy, in kWh. */
+  hotWater: number;
+  hotWaterFinal: number;
+  /** True if the hot water uses electricity. */
+  hotWaterElectric: boolean;
+  /** The cost and the CO₂ in kg of the heating and the hot water together. */
   cost: number;
   co2: number;
+  /** The final energy that uses electricity: the parts of the heating and the hot water. */
+  electric: number;
   /**
-   * The final energy that the PV covers in the balance of each month, in kWh. Only electric
-   * heating uses PV. The balance of the month is an upper limit: PV in the day does not heat
-   * at night without a battery.
+   * The electricity that the PV covers in the balance of each month, in kWh. The balance of the
+   * month is an upper limit: PV in the day does not heat at night without a battery.
    */
   pvCovered: number;
+}
+
+/**
+ * The hot water of one day: the heat with its losses, the final energy, its price per kWh, its
+ * CO₂ per kWh, and true if it uses electricity.
+ */
+export function hotWaterDay(envelope: Building["envelope"]) {
+  const { hotWater, heating } = envelope;
+  const heat = hotWater.people * hotWater.liters * HOT_WATER_HEAT * (1 + HOT_WATER_LOSS);
+  const own = HEATING_KINDS[heating.kind];
+  if (hotWater.heater === "electric") {
+    const electric = HEATING_KINDS.electric;
+    // The price of electricity: the price of the heating if it uses electricity too.
+    const price = own.energy === "electricity" ? heating.price : electric.price;
+    return { heat, final: heat, price, co2: electric.co2, electric: true };
+  }
+  const pump = heating.kind === "heat-pump";
+  const efficiency = heating.efficiency * (pump ? HOT_WATER_PUMP : 1);
+  const final = heat / efficiency;
+  return {
+    heat,
+    final,
+    price: heating.price,
+    co2: own.co2,
+    electric: own.energy === "electricity",
+  };
 }
 
 /**
@@ -143,6 +190,7 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
   const heating = building.envelope.heating;
   const info = HEATING_KINDS[heating.kind];
   const pvMonths = pvMonthly(building);
+  const water = hotWaterDay(building.envelope);
 
   // The whole building is one zone for the utilization: its time constant comes from all rooms.
   const transfer = loss.rooms.reduce((sum, r) => sum + r.transfer, 0);
@@ -173,13 +221,28 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
     const used = monthLoss > 0 ? Math.min(gains, utilization(gains / monthLoss, tau) * gains) : 0;
     const demand = Math.max(0, monthLoss - used);
     const final = (demand * (1 + DISTRIBUTION_LOSS)) / heating.efficiency;
-    return { loss: monthLoss, solar, internal, used, demand, final, pv: pvMonths[m] };
+    return {
+      loss: monthLoss,
+      solar,
+      internal,
+      used,
+      demand,
+      final,
+      pv: pvMonths[m],
+      hotWater: water.heat * days,
+      hotWaterFinal: water.final * days,
+    };
   });
 
-  const demand = months.reduce((sum, m) => sum + m.demand, 0);
-  const final = months.reduce((sum, m) => sum + m.final, 0);
-  const electric = info.energy === "electricity";
-  const pvCovered = electric ? months.reduce((sum, m) => sum + Math.min(m.final, m.pv), 0) : 0;
+  const sum = (key: keyof MonthEnergy) => months.reduce((total, m) => total + m[key], 0);
+  const demand = sum("demand");
+  const final = sum("final");
+  const hotWaterFinal = sum("hotWaterFinal");
+  const heatingElectric = info.energy === "electricity";
+  // The electricity of each month, and the part of it that the PV of the month covers.
+  const electricOf = (m: MonthEnergy) =>
+    (heatingElectric ? m.final : 0) + (water.electric ? m.hotWaterFinal : 0);
+  const pvCovered = months.reduce((total, m) => total + Math.min(electricOf(m), m.pv), 0);
   const perArea = demand / loss.area;
   return {
     months,
@@ -188,8 +251,12 @@ export function heatingEnergy(building: Building): HeatingEnergy | null {
     perArea,
     efficiencyClass: efficiencyClass(perArea),
     final,
-    cost: final * heating.price,
-    co2: final * info.co2,
+    hotWater: sum("hotWater"),
+    hotWaterFinal,
+    hotWaterElectric: water.electric,
+    cost: final * heating.price + hotWaterFinal * water.price,
+    co2: final * info.co2 + hotWaterFinal * water.co2,
+    electric: months.reduce((total, m) => total + electricOf(m), 0),
     pvCovered,
   };
 }

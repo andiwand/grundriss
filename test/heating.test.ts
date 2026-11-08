@@ -8,6 +8,9 @@ import {
   efficiencyClass,
   HEATING_KINDS,
   heatingEnergy,
+  HOT_WATER_HEAT,
+  HOT_WATER_LOSS,
+  HOT_WATER_PUMP,
   utilization,
 } from "../src/model/heating";
 import type { Building, Climate } from "../src/model/types";
@@ -76,11 +79,14 @@ describe("heating energy per year", () => {
     const pump = heatingEnergy(house())!;
     const heating = defaultHeating("heat-pump");
     expect(pump.final).toBeCloseTo((pump.demand * (1 + DISTRIBUTION_LOSS)) / heating.efficiency);
-    expect(pump.cost).toBeCloseTo(pump.final * heating.price);
-    expect(pump.co2).toBeCloseTo(pump.final * HEATING_KINDS["heat-pump"].co2);
+    // The heat pump makes the hot water too, so the cost and the CO₂ include it.
+    const total = pump.final + pump.hotWaterFinal;
+    expect(pump.cost).toBeCloseTo(total * heating.price);
+    expect(pump.co2).toBeCloseTo(total * HEATING_KINDS["heat-pump"].co2);
+    expect(pump.electric).toBeCloseTo(total);
     // The PV of the example house covers a part of the electricity of the heat pump.
     expect(pump.pvCovered).toBeGreaterThan(0);
-    expect(pump.pvCovered).toBeLessThanOrEqual(pump.final);
+    expect(pump.pvCovered).toBeLessThanOrEqual(pump.electric);
 
     const gas = heatingEnergy(house((b) => (b.envelope.heating = defaultHeating("gas"))))!;
     expect(gas.demand).toBeCloseTo(pump.demand);
@@ -102,5 +108,48 @@ describe("heating energy per year", () => {
     );
     data.envelope.heating = { kind: "coal", efficiency: 2 };
     expect(parseBuilding(JSON.stringify(data)).envelope.heating.kind).toBe("heat-pump");
+  });
+});
+
+describe("hot water", () => {
+  it("adds the hot water of the people to the final energy, but not to the heat demand", () => {
+    const none = heatingEnergy(house((b) => (b.envelope.hotWater.people = 0)))!;
+    const four = heatingEnergy(house((b) => (b.envelope.hotWater.people = 4)))!;
+    expect(none.hotWater).toBe(0);
+    expect(four.demand).toBeCloseTo(none.demand);
+    expect(four.efficiencyClass).toBe(none.efficiencyClass);
+    const heat = 4 * 40 * HOT_WATER_HEAT * (1 + HOT_WATER_LOSS) * 365;
+    expect(four.hotWater).toBeCloseTo(heat);
+    const pump = defaultHeating("heat-pump");
+    expect(four.hotWaterFinal).toBeCloseTo(heat / (pump.efficiency * HOT_WATER_PUMP));
+    expect(four.cost).toBeGreaterThan(none.cost);
+  });
+
+  it("uses electricity for a direct electric heater, also with a gas boiler", () => {
+    const gas = heatingEnergy(
+      house((b) => {
+        b.envelope.heating = defaultHeating("gas");
+        b.envelope.hotWater.heater = "electric";
+      }),
+    )!;
+    expect(gas.hotWaterElectric).toBe(true);
+    expect(gas.hotWaterFinal).toBeCloseTo(gas.hotWater);
+    expect(gas.electric).toBeCloseTo(gas.hotWaterFinal);
+    // The PV covers a part of the electric hot water.
+    expect(gas.pvCovered).toBeGreaterThan(0);
+  });
+
+  it("reads the hot water from a file, and a default for an old file", () => {
+    const building = emptyBuilding();
+    building.envelope.hotWater = { people: 5, liters: 30, heater: "electric" };
+    expect(parseBuilding(serializeBuilding(building)).envelope.hotWater).toEqual(
+      building.envelope.hotWater,
+    );
+    const data = JSON.parse(serializeBuilding(emptyBuilding()));
+    delete data.envelope.hotWater;
+    delete data.envelope.ceiling;
+    const old = parseBuilding(JSON.stringify(data));
+    expect(old.envelope.hotWater).toEqual(emptyBuilding().envelope.hotWater);
+    expect(old.envelope.ceiling).toEqual(emptyBuilding().envelope.ceiling);
   });
 });
