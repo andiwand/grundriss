@@ -229,7 +229,15 @@ export function createHandler(store: Store, config: Config) {
     if (head === "tokens") {
       if (method === "GET" && !id) {
         const planId = new URL(req.url ?? "/", "http://server").searchParams.get("plan");
-        return json(res, 200, store.tokens(token, planId ?? undefined).map(publicToken));
+        // A share link has the name of its plan, for the list of all links.
+        return json(
+          res,
+          200,
+          store.tokens(token, planId ?? undefined).map((t) => ({
+            ...publicToken(t),
+            planName: t.planId ? (store.plan(t.planId)?.name ?? null) : null,
+          })),
+        );
       }
       if (method === "POST" && !id) {
         const { record, token: secret } = store.makeToken(token, (await input()) as never);

@@ -2,7 +2,8 @@
 //
 // The tokens and the plans are in one JSON file (`data.json`), which the store writes again
 // after each change, through a temporary file, so that a crash does not leave half a file. The
-// files of the revisions are separate, one file for each revision. A private server has a few
+// files of the revisions are separate, one file for each revision. The large images of a plan are
+// in `blobs/`, once for all revisions, and a revision refers to them by hash (src/model/blobs.ts). A private server has a few
 // users and some dozen plans, so this is enough, and the image needs no native module.
 //
 // The store keeps only the hash of each token. The token itself shows once, when the store
@@ -11,6 +12,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { dehydrate, hydrate } from "../../src/model/blobs";
 
 export type TokenKind = "root" | "user" | "plan";
 
@@ -97,6 +99,7 @@ export class Store {
 
   constructor(private readonly dir: string) {
     mkdirSync(join(dir, "plans"), { recursive: true });
+    mkdirSync(join(dir, "blobs"), { recursive: true });
     const file = join(dir, "data.json");
     this.data = existsSync(file)
       ? (JSON.parse(readFileSync(file, "utf8")) as Data)
@@ -263,7 +266,23 @@ export class Store {
       throw new StoreError(404, "The token does not exist.");
     }
     if (target.kind === "root") throw new StoreError(400, "Root cannot be removed.");
-    const gone = new Set([target.id]);
+    this.removeWithMade([target.id]);
+  }
+
+  /**
+   * Removes the tokens that ended, and the tokens that they made, which ended with them. It gives
+   * the number of removed tokens. The server calls it at the start and then every hour.
+   */
+  removeExpired(now = Date.now()): number {
+    const ended = this.data.tokens.filter(
+      (t) => t.kind !== "root" && t.expires !== null && t.expires <= now,
+    );
+    return ended.length === 0 ? 0 : this.removeWithMade(ended.map((t) => t.id));
+  }
+
+  /** Removes the tokens with the ids and all tokens that they made. It gives their number. */
+  private removeWithMade(ids: string[]): number {
+    const gone = new Set(ids);
     for (let grew = true; grew;) {
       grew = false;
       for (const t of this.data.tokens) {
@@ -276,6 +295,7 @@ export class Store {
     this.data.tokens = this.data.tokens.filter((t) => !gone.has(t.id));
     this.index();
     this.save();
+    return gone.size;
   }
 
   // ----- Plans -----
@@ -358,7 +378,13 @@ export class Store {
     try {
       const dir = join(this.dir, "plans", plan.id);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, `${revision.id}.json`), data);
+      // Each large image goes to the store of the blobs once; the revision refers to it.
+      const { json, blobs } = dehydrate(data);
+      for (const [hash, value] of blobs) {
+        const file = join(this.dir, "blobs", hash);
+        if (!existsSync(file)) writeFileSync(file, value);
+      }
+      writeFileSync(join(dir, `${revision.id}.json`), json);
       plan.revisions.push(revision);
       this.save();
     } catch (error) {
@@ -372,7 +398,11 @@ export class Store {
     if (!plan.revisions.some((r) => r.id === id)) {
       throw new StoreError(404, "The revision does not exist.");
     }
-    return readFileSync(join(this.dir, "plans", plan.id, `${id}.json`), "utf8");
+    const json = readFileSync(join(this.dir, "plans", plan.id, `${id}.json`), "utf8");
+    return hydrate(json, (hash) => {
+      const file = join(this.dir, "blobs", hash);
+      return existsSync(file) ? readFileSync(file, "utf8") : undefined;
+    });
   }
 
   /** Removes a plan and its plan tokens. The files of its revisions stay on the disk. */

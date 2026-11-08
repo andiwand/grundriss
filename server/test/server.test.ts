@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -388,6 +388,11 @@ describe("tokens", () => {
       house.body.id,
     ]);
     expect((await call(bank, `plans/${house.body.id}`)).status).toBe(200);
+    // Root sees the link in the list of all links, with the name of its plan.
+    const links = (await call(root, "tokens")).body.filter(
+      (t: { kind: string }) => t.kind === "plan",
+    );
+    expect(links).toMatchObject([{ label: "Bank", planName: "House", write: false }]);
     // A plan token makes no tokens, and it only reads.
     const more = await call(bank, "tokens", {
       method: "POST",
@@ -465,5 +470,32 @@ describe("tokens", () => {
     const saved = await call(root, "settings", { method: "PUT", json: { name: "Office" } });
     expect(saved.body).toMatchObject({ name: "Office", plans: 0 });
     expect((await call(anna, "me")).body.server).toBe("Office");
+  });
+});
+
+describe("the store of the images", () => {
+  it("keeps an image of many revisions once, and gives the full plan back", async () => {
+    const building = emptyBuilding();
+    building.stories[0].background = {
+      image: `data:image/png;base64,${"A".repeat(20_000)}`,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      scale: 0.01,
+      opacity: 0.5,
+    };
+    const data = serializeBuilding(building);
+    const created = await call(root, "plans", { method: "POST", json: { name: "Scan", data } });
+    const id = created.body.id as string;
+    await call(root, `plans/${id}`, { method: "PUT", json: { parent: "1", data } });
+    const blobs = readdirSync(join(dir, "data", "blobs"));
+    expect(blobs).toHaveLength(1);
+    const revision = readFileSync(join(dir, "data", "plans", id, "2.json"), "utf8");
+    expect(revision).not.toContain("data:image");
+    const read = await call(root, `plans/${id}`);
+    expect(JSON.parse(read.body.data).stories[0].background.image).toBe(
+      building.stories[0].background.image,
+    );
   });
 });

@@ -45,3 +45,25 @@ it("does not retain a token after a failed metadata write", () => {
   expect(() => store.makeToken(store.token(secret)!, { kind: "user", label: "Failed" })).toThrow();
   expect(store.tokens(store.token(secret)!)).toHaveLength(1);
 });
+
+it("removes the tokens that ended, with the tokens that they made", () => {
+  const root = store.token(secret)!;
+  const lead = store.makeToken(root, {
+    kind: "user",
+    label: "Lead",
+    write: true,
+    makeUsers: true,
+    createPlans: true,
+    expires: Date.now() + 1000,
+  });
+  const staff = store.makeToken(lead.record, { kind: "user", label: "Staff", write: true });
+  const keep = store.makeToken(root, { kind: "user", label: "Keep", write: true });
+  expect(store.removeExpired(Date.now())).toBe(0);
+  expect(store.removeExpired(Date.now() + 2000)).toBe(2);
+  const labels = store.tokens(root).map((t) => t.label);
+  expect(labels).toContain("Keep");
+  expect(labels).not.toContain("Lead");
+  expect(labels).not.toContain("Staff");
+  expect(store.token(keep.token)).not.toBeNull();
+  expect(store.token(staff.token)).toBeNull();
+});

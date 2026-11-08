@@ -42,6 +42,14 @@ const port = Number(env.PORT ?? 8080);
 const store = new Store(resolve(env.GRUNDRISS_DATA ?? "data"));
 const created = store.ensureRoot(env.GRUNDRISS_ROOT_TOKEN || undefined);
 
+// Tokens that ended go away at the start, and then every hour.
+const cleanUp = () => {
+  const removed = store.removeExpired();
+  if (removed > 0) console.log(`Removed ${removed} tokens that ended.`);
+};
+cleanUp();
+setInterval(cleanUp, 3_600_000).unref();
+
 // One handler for all requests, so that the leases and the streams are shared.
 const handler = createHandler(store, config);
 const server = createServer((req, res) => void handler(req, res));
