@@ -33,6 +33,10 @@
   the help of the shortcuts.
 - A layout for phones and tablets, with touch input, and a German interface.
 - Browser tests with Playwright, and `src/main.ts` in modules of `src/ui/`.
+- A self-hosted server (steps 2 and 3 below): tokens in the path (root, users, plan links),
+  revisions with the parent check, the edit lease, live updates, server settings and users, share
+  links with rights and end dates, copy and move between the browser and a server, and the
+  Docker image with releases.
 
 ## Next: revisions and a self-hosted server
 
@@ -42,6 +46,9 @@ knows which state it starts from, and a save never overwrites the work of anothe
 without a message. The server is private and self-hosted; a public service comes later.
 
 Each step is useful alone.
+
+**Still open:** step 1; a list of the revisions in the app, to open or restore an old one; a copy
+of each connected plan for offline use; the images of a plan stored once by their hash.
 
 ### Step 1: revisions, without a server
 
@@ -62,8 +69,10 @@ Each step is useful alone.
 ### Step 2: the server
 
 One program in TypeScript (Node), in this repository, from one container image. It uses the
-code of the app to read and check a `.grundriss` file. It stores the data in SQLite and the
-files of the revisions on its disk.
+code of the app to read and check a `.grundriss` file. It stores the tokens and the plans in one
+JSON file and each revision in its own file on its disk; a private server has a few users and
+some dozen plans, so it needs no database and no native module. SQLite can come when a server
+needs more.
 
 **The token is in the path.** Each token is a place on the server: `https://<server>/<token>/`
 is the app with the access of that token, and `https://<server>/<token>/api/…` is its API. The

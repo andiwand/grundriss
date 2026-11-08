@@ -105,6 +105,57 @@ so in the status line.
 A large photo of a plan becomes smaller when it loads: at most 4000 pixels on its long side, as
 a JPEG. The undo keeps the last 200 steps.
 
+### Plans on your own server
+
+A small server keeps plans in one place, so that several people and devices work on the same
+plan and nothing goes out of sync. It has no accounts: each person and each shared plan has a
+link, and the link is the access.
+
+Start it with Docker:
+
+```sh
+docker run -d --name grundriss -v grundriss:/data -p 8080:8080 ghcr.io/andiwand/grundriss
+docker logs grundriss
+```
+
+The log shows the **root link** once, for example `http://localhost:8080/Ab3…/`. Keep it like a
+password. It opens the app with the server: all plans, the **server settings**, and the
+**users**. Put the server behind a reverse proxy with https (for example Caddy or Traefik).
+
+- **Users.** In the server settings, root adds a user with a name and rights: can edit, can make
+  plans, sees all plans, can add users, and an end date. The user gets an own link. A user sees
+  the own plans, and other plans only with "sees all plans". Removing a user also removes the
+  links that the user made.
+- **Share links.** A user who can edit shares a plan with **Share** in the top bar: a link for
+  this one plan, to view or to edit, with an end date. A link that only views makes no other
+  links.
+- **One editor at a time.** The first person who opens a plan to edit gets it. The others see
+  "Anna edits" next to the name of the plan, only view it, and see each change at once. When
+  the editor closes the plan, the next one can edit. A save never replaces a newer version: the
+  app then asks whether to load the newer version or to keep the own one as a copy.
+- **Server and browser.** On the Projects page, the plans of each server show under its name.
+  **Connect a server** adds a link. A plan of the browser goes to a server, and a plan of a
+  server to the browser, as a copy or as a move.
+- The installed app of GitHub Pages connects to a server too, if the server has https and
+  allows the app with `GRUNDRISS_ORIGINS` or `GRUNDRISS_APP_URL`.
+
+The settings are environment variables:
+
+| Variable                | Default | What                                                                    |
+| ----------------------- | ------- | ----------------------------------------------------------------------- |
+| `GRUNDRISS_MODE`        | `full`  | `full`: the app and the API under each link. `api`: only the API.       |
+| `GRUNDRISS_DATA`        | `/data` | The folder of the plans and their revisions.                            |
+| `PORT`                  | `8080`  | The port.                                                               |
+| `GRUNDRISS_ROOT_TOKEN`  | –       | An own root token. Without it, the server makes one at the first start. |
+| `GRUNDRISS_PUBLIC_SITE` | –       | `true`: the website at `/` and the app at `/app/`, for everybody.       |
+| `GRUNDRISS_HOME_URL`    | –       | `/` sends the browser to this website.                                  |
+| `GRUNDRISS_APP_URL`     | –       | `/app` sends the browser to this app; in mode `api` also each link.     |
+| `GRUNDRISS_ORIGINS`     | –       | Other sites that may use the API, separated by commas.                  |
+| `GRUNDRISS_MAX_BODY`    | `100`   | The largest plan in MB.                                                 |
+
+Without these settings, the server answers 404 to each address outside a valid link, also `/`.
+The image `ghcr.io/andiwand/grundriss:latest` is the last release; `:main` is the newest state.
+
 ### Install the app
 
 Grundriss is a Progressive Web App. In Chrome or Edge, click **Install** in the top bar, or use

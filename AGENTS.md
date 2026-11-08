@@ -40,6 +40,13 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   of the model (`t(type.name)`) where it shows them.
 - In a narrow window (`src/ui/compact.ts`), the app uses the layout for a phone: the class
   `compact` on the body, the topics in `#bottom-bar`, and the panel as a sheet.
+- A plan can also be on a Grundriss server (`server/`, `src/ui/remote.ts`). Each address of the
+  server starts with a token (`/<token>/` for the app, `/<token>/api/` for the API), and the
+  token is the access: root, a user, or one plan. A token makes only tokens with at most its
+  rights. An open plan of a server saves to it after each change, if the tab has the edit
+  lease; else `doc.readOnly` keeps it from changes, and the stream of the server updates it. A
+  save names its parent revision, so the server refuses a save on an old revision (409). The
+  server reads the plans with the code of `src/model/`, and esbuild bundles it into one file.
 - The open plan saves itself in IndexedDB (`src/io/projects.ts`) after each change. Each
   project stores the JSON of the file format, so `parseBuilding` reads it, with its migrations.
 - The app is a PWA: `public/manifest.webmanifest` and the service worker `src/pwa/sw.js`. The
@@ -162,6 +169,10 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/projects.ts`       | The Projects page, the autosave, the trash, the backup, and the lock of a project.       |
 | `src/ui/contents.ts`       | The tree of the Overview.                                                                |
 | `src/ui/tracing.ts`        | The assisted tracing of a background.                                                    |
+| `src/ui/remote.ts`         | The plans on a server: connections, the session of a plan, share, users, copy and move.  |
+| `src/io/server.ts`         | The client of the API of the server.                                                     |
+| `server/`                  | The server: `src/store.ts` (tokens, plans, revisions), `src/app.ts` (HTTP), the tests.   |
+| `Dockerfile`               | The image of the server with the website and the app. `.github/workflows/image.yml`.     |
 | `src/ui/conflicts.ts`      | The list of the collisions in the panel.                                                 |
 | `src/ui/edit3d.ts`         | The editing in the 3D view: select, hover, and move.                                     |
 | `src/ui/notes.ts`          | The notes and photos of the objects, and the circuit field.                              |
@@ -203,6 +214,7 @@ npm run dev:site      # serves the website (vite.site.config.ts)
 npm test
 npm run test:e2e      # browser tests: builds the app, and runs e2e/ in Chromium (desktop and phone)
 npm run build         # type check, the website in dist/, and the app in dist/app/
+npm run server        # builds the server, and starts it with the app of dist/app/ (data in server/data)
 npm run format:check
 ```
 
