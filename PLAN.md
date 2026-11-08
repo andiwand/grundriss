@@ -99,6 +99,20 @@ app asks `/<token>/api/me` for the scope, and shows what the token allows.
   write: this is the share link. The app opens the plan at once, without a list, and without the
   edit tools if the token only reads.
 
+**Who makes tokens.** Only root and users that can write make tokens, and a token gets at most
+the rights of its maker.
+
+- Root makes user tokens and plan tokens with any rights and any end date.
+- A user token that can write makes plan tokens for its own plans with its API: to read or to
+  write; with an end date or a duration (for example 7 days), at most the end date of the user
+  token; and with a label, for example "Bank" or "Architect".
+- A user token makes other user tokens only if root allows it with a setting, for example for an
+  office that invites its staff.
+- A user token that only reads, and a plan token, make no tokens.
+- A user lists and removes the tokens that it made; root lists and removes all of them. A removed
+  token also removes the tokens that it made, so that no share link lives longer than the person
+  who made it.
+
 A plan has its own id, which is not a token. So one plan can have many plan tokens, for example
 one to read for the bank and one to write for the architect, and each one ends or goes away
 alone. The data: `tokens` (the hash, the kind, a label, the owner, the plan of a plan token, the
