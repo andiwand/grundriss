@@ -94,6 +94,9 @@ export class ServerClient {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     let response: Response;
+    let text: string;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
       response = await fetch(`${this.base}/api/${path}`, {
         method,
@@ -103,11 +106,14 @@ export class ServerClient {
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         cache: "no-store",
+        signal: controller.signal,
       });
+      text = await response.text();
     } catch {
       throw new ServerError(0, "The server does not answer. Check the network and the address.");
+    } finally {
+      clearTimeout(timeout);
     }
-    const text = await response.text();
     let value: unknown = null;
     try {
       value = text ? JSON.parse(text) : null;
@@ -134,7 +140,11 @@ export class ServerClient {
     this.request<RemotePlan>("POST", "plans", { name, data });
   savePlan = (id: string, parent: string, data: string, name?: string) =>
     this.request<RemotePlan>("PUT", `plans/${id}`, { parent, data, name });
-  deletePlan = (id: string) => this.request<unknown>("DELETE", `plans/${id}`);
+  deletePlan = (id: string, parent?: string) =>
+    this.request<unknown>(
+      "DELETE",
+      `plans/${id}${parent === undefined ? "" : `?parent=${encodeURIComponent(parent)}`}`,
+    );
   revisions = (id: string) => this.request<Revision[]>("GET", `plans/${id}/revisions`);
   revision = (id: string, revision: string) =>
     this.request<{ data: string }>("GET", `plans/${id}/revisions/${revision}`);

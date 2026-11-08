@@ -8,6 +8,7 @@
 // from the last known revision, so it never replaces a revision that this tab did not see.
 
 import { locale, t } from "../i18n";
+import { newProjectId } from "../io/projects";
 import { icon, type IconName } from "../icons";
 import {
   API_VERSION,
@@ -49,8 +50,6 @@ interface Connection {
 }
 
 const STORE_KEY = "grundriss-servers";
-/** The id of this tab for the edit lease. */
-const CLIENT = crypto.randomUUID();
 /** The lease lasts 60 s on the server; the tab renews it well before. */
 const RENEW = 20_000;
 
@@ -168,20 +167,33 @@ interface Session {
   failed: boolean;
   events: EventSource | null;
   renew: number;
+  taking: Promise<void> | null;
+  loading: number;
 }
 
 let session: Session | null = null;
+let opening = 0;
+
+const unsaved = (current: Session) => doc.building !== current.saved || current.saving !== null;
 
 /** Opens a plan of a server, and starts its session. */
 export async function openRemote(address: string, planId: string): Promise<void> {
+  const request = ++opening;
   if (!(await confirmDiscard())) return;
-  const client = new ServerClient(address, CLIENT);
+  if (request !== opening) return;
+  const building = doc.building;
+  const generation = doc.generation;
+  // Each session owns its lease, so an old release cannot release a new session's lease.
+  const client = new ServerClient(address, newProjectId());
   try {
     const [me, plan] = await Promise.all([client.me(), client.plan(planId)]);
+    if (request !== opening || generation !== doc.generation || building !== doc.building) return;
     refreshConnection(address, me);
+    const parsed = parseBuilding(plan.data);
     endSession();
-    load(parseBuilding(plan.data), `${plan.name}.grundriss`, null, "remote");
-    session = {
+    doc.readOnly = true;
+    load(parsed, `${plan.name}.grundriss`, null, "remote");
+    const current: Session = {
       address,
       client,
       planId,
@@ -196,9 +208,14 @@ export async function openRemote(address: string, planId: string): Promise<void>
       failed: false,
       events: null,
       renew: 0,
+      taking: null,
+      loading: 0,
     };
-    await startEditing();
-    listen(session);
+    session = current;
+    if (current.write) current.renew = window.setInterval(() => void renewLease(current), RENEW);
+    await startEditing(current);
+    if (session !== current) return;
+    listen(current);
     showStatus(
       session.editing
         ? t('Opened "{name}" on {server}. Each change saves to the server.', {
@@ -219,39 +236,54 @@ export async function openRemote(address: string, planId: string): Promise<void>
 }
 
 /** Takes the edit lease, if the token can write and nobody else has it. */
-async function startEditing(): Promise<void> {
-  const current = session;
-  if (!current) return;
-  if (current.write) {
+async function startEditing(current = session): Promise<void> {
+  if (!current || session !== current || !current.write || current.editing) return;
+  if (current.taking) return current.taking;
+  current.taking = (async () => {
     try {
       await current.client.takeLease(current.planId);
+      if (session !== current) {
+        void current.client.releaseLease(current.planId).catch(() => undefined);
+        return;
+      }
+      // Load changes made before we acquired the lease, but never replace our own unsaved work.
+      if (!unsaved(current) && !(await reload(current))) return;
+      if (session !== current) return;
       current.editing = true;
       current.holder = null;
-      window.clearInterval(current.renew);
-      current.renew = window.setInterval(() => void renewLease(current), RENEW);
     } catch (error) {
+      if (session !== current) return;
       current.editing = false;
       if (error instanceof ServerError && error.status === 423) {
         current.holder =
           (error.body as { lease?: { holder?: string } } | null)?.lease?.holder ?? t("Somebody");
       }
+    } finally {
+      current.taking = null;
+      if (session === current) {
+        doc.readOnly = !current.editing;
+        updateRemoteState();
+      }
     }
-  }
-  doc.readOnly = !current.editing;
-  updateRemoteState();
+  })();
+  return current.taking;
 }
 
 async function renewLease(current: Session): Promise<void> {
-  if (session !== current || !current.editing) return;
+  if (session !== current) return;
+  if (!current.editing) return startEditing(current);
   try {
     await current.client.takeLease(current.planId);
   } catch (error) {
+    if (session !== current) return;
+    current.editing = false;
+    doc.readOnly = true;
     if (error instanceof ServerError && error.status === 423) {
-      current.editing = false;
-      doc.readOnly = true;
-      showStatus(t("Somebody else edits the plan now. You see it, and it updates itself."), true);
-      updateRemoteState();
+      showStatus(t("Somebody else edits the plan now. Save a copy to keep your changes."), true);
+    } else {
+      showStatus(errorText(error), true);
     }
+    updateRemoteState();
   }
 }
 
@@ -261,15 +293,25 @@ function listen(current: Session): void {
   current.events = events;
   const read = (event: Event) => JSON.parse((event as MessageEvent<string>).data) as unknown;
   events.addEventListener("hello", (event) => {
+    if (session !== current) return;
     // After a lost connection, the stream starts again; a newer revision loads.
-    const hello = read(event) as { revision: string | null };
+    const hello = read(event) as {
+      revision: string | null;
+      lease?: { client: string; holder: string } | null;
+    };
+    if (hello.lease && hello.lease.client !== current.client.client) {
+      current.holder = hello.lease.holder;
+      current.editing = false;
+      doc.readOnly = true;
+      updateRemoteState();
+    }
     if (hello.revision && hello.revision !== current.revision && !current.editing) {
       void reload(current);
     }
   });
   events.addEventListener("revision", (event) => {
     const revision = read(event) as { id: string; client: string };
-    if (revision.client === CLIENT || session !== current) return;
+    if (revision.client === current.client.client || session !== current) return;
     if (!current.editing) void reload(current);
   });
   events.addEventListener("lease", (event) => {
@@ -278,9 +320,11 @@ function listen(current: Session): void {
     if (!lease) {
       current.holder = null;
       // The plan is free: a tab that can write takes it.
-      if (current.write && !current.editing) void startEditing();
-    } else if (lease.client !== CLIENT) {
+      if (current.write && !current.editing) void startEditing(current);
+    } else if (lease.client !== current.client.client) {
       current.holder = lease.holder;
+      current.editing = false;
+      doc.readOnly = true;
     }
     updateRemoteState();
   });
@@ -295,10 +339,22 @@ function listen(current: Session): void {
 }
 
 /** Loads the current revision of the server into the open plan. */
-async function reload(current: Session): Promise<void> {
+async function reload(current: Session, discard = false): Promise<boolean> {
+  if (session !== current || current.saving || doc.inTransaction || (!discard && unsaved(current)))
+    return false;
+  const building = doc.building;
+  const request = ++current.loading;
   try {
     const plan = await current.client.plan(current.planId);
-    if (session !== current) return;
+    if (
+      session !== current ||
+      request !== current.loading ||
+      building !== doc.building ||
+      current.saving ||
+      doc.inTransaction
+    )
+      return false;
+    if (!discard && plan.revision === current.revision) return true;
     const story = doc.activeStoryId;
     doc.replace(parseBuilding(plan.data));
     doc.setActiveStory(story);
@@ -307,8 +363,10 @@ async function reload(current: Session): Promise<void> {
     app.fileName = `${plan.name}.grundriss`;
     updateTitle();
     updateRemoteState();
+    return true;
   } catch (error) {
-    showStatus(errorText(error), true);
+    if (session === current) showStatus(errorText(error), true);
+    return false;
   }
 }
 
@@ -334,6 +392,7 @@ async function save(): Promise<void> {
       // The plan is safe on the server, so the title shows no unsaved changes.
       if (session === current) doc.markSaved(building);
     } catch (error) {
+      if (session !== current) return;
       if (error instanceof ServerError && error.status === 409) return conflict(current);
       if (error instanceof ServerError && error.status === 423) {
         current.editing = false;
@@ -368,6 +427,7 @@ async function save(): Promise<void> {
 
 /** A newer revision came first: load it, or keep this version as a copy in the browser. */
 function conflict(current: Session): void {
+  if (session !== current) return;
   current.editing = false;
   doc.readOnly = true;
   updateRemoteState();
@@ -377,29 +437,43 @@ function conflict(current: Session): void {
     ),
   );
   if (reloadIt) {
-    void reload(current).then(() => startEditing());
+    // The save clears its pending promise before the replacement starts.
+    window.setTimeout(() => {
+      void reload(current, true).then((loaded) => {
+        if (loaded) return startEditing(current);
+      });
+    }, 0);
   } else {
-    keepCopy();
+    void keepCopy();
   }
 }
 
 /** Ends the session and keeps the open plan as a new project in this browser. */
-function keepCopy(): void {
+async function keepCopy(): Promise<void> {
+  const current = session;
   const building = doc.building;
-  const name = `${projectName()} (${t("copy")}).grundriss`;
-  endSession();
-  load(building, name, null, "from-file");
-  showStatus(t("The plan is now a copy in this browser, without the server."));
+  const name = `${projectName()} (${t("copy")})`;
+  const created = Date.now();
+  try {
+    const id = await addProject(building, name);
+    if (session !== current || doc.building !== building) return;
+    endSession();
+    load(building, `${name}.grundriss`, null, { id, created });
+    showStatus(t("The plan is now a copy in this browser, without the server."));
+  } catch (error) {
+    showStatus(errorText(error), true);
+  }
 }
 
 /** Ends the session of the open plan: the lease goes back, and the stream closes. */
 function endSession(): void {
+  opening++;
   const current = session;
   if (!current) return;
   session = null;
   window.clearInterval(current.renew);
   current.events?.close();
-  if (current.editing) void current.client.releaseLease(current.planId).catch(() => undefined);
+  if (current.write) void current.client.releaseLease(current.planId).catch(() => undefined);
   doc.readOnly = false;
   updateRemoteState();
 }
@@ -537,7 +611,15 @@ function showNewLink(parent: HTMLElement, client: ServerClient, token: string): 
   const links: [string, string][] = [[t("Link"), `${client.tokenAddress(token)}/`]];
   // An app on another site than the server opens the link with its own address too.
   const server = new URL(client.base).origin;
-  if (server !== location.origin) {
+  const ownAddress = normalizeAddress(new URL(".", location.href).href);
+  // Only the public app paths may be shared. A token path stays private even if browser
+  // storage is unavailable, or a #connect link bypassed the connection to this app's server.
+  const publicPath = location.pathname === "/" || location.pathname.endsWith("/app/");
+  if (
+    server !== location.origin &&
+    publicPath &&
+    !connections().some((c) => c.address === ownAddress)
+  ) {
     const here = `${location.origin}${location.pathname}#connect=${encodeURIComponent(client.tokenAddress(token))}`;
     links.push([t("Link for this app"), here]);
   }
@@ -639,12 +721,13 @@ function planDialog(): void {
   }
   actions.append(
     actionButton(t("Load again"), () => {
+      if (unsaved(current) && !confirm(t("The plan has unsaved changes. Discard them?"))) return;
       element.close();
-      void reload(current);
+      void reload(current, true);
     }),
     actionButton(t("Save a copy in this browser"), () => {
       element.close();
-      keepCopy();
+      void keepCopy();
     }),
   );
   if (canShare(current.me.token) && current.write) {
@@ -901,11 +984,15 @@ function uploadDialog(project: { id: string; name: string } | null): void {
     t("Put on the server"),
     async () => {
       put.disabled = true;
+      const current = doc.captureTarget();
+      const address = select.value;
+      const move = isMove();
       try {
         const building = project ? await projectBuilding(project.id) : doc.building;
-        const client = new ServerClient(select.value);
+        const client = new ServerClient(address);
         const plan = await client.createPlan(name, serializeBuilding(building));
-        if (isMove() && localId) await trashProjectById(localId);
+        if (!project && (!current() || doc.building !== building)) return;
+        if (move && localId) await trashProjectById(localId);
         element.close();
         if (project) {
           showStatus(
@@ -913,7 +1000,7 @@ function uploadDialog(project: { id: string; name: string } | null): void {
           );
           renderHome();
         } else {
-          await openRemote(select.value, plan.id);
+          await openRemote(address, plan.id);
         }
       } catch (error) {
         message.textContent = errorText(error);
@@ -949,8 +1036,8 @@ function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boole
         const remote = await client.plan(plan.id);
         await addProject(parseBuilding(remote.data), plan.name);
         if (isMove()) {
-          if (session?.planId === plan.id) endSession();
-          await client.deletePlan(plan.id);
+          await client.deletePlan(plan.id, remote.revision);
+          if (session?.planId === plan.id && session.address === client.base) endSession();
         }
         element.close();
         showStatus(t('"{name}" is in this browser now.', { name: plan.name }));
@@ -1133,8 +1220,7 @@ function remoteCard(connection: Connection, client: ServerClient, plan: RemotePl
 export function setupRemote(): void {
   remoteHooks.active = () => session !== null;
   remoteHooks.save = save;
-  remoteHooks.unsaved = () =>
-    !!session && session.editing && (doc.building !== session.saved || session.saving !== null);
+  remoteHooks.unsaved = () => !!session && unsaved(session);
   remoteHooks.end = endSession;
   remoteHooks.home = renderServers;
   remoteHooks.connect = connectDialog;

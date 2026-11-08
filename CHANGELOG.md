@@ -4,6 +4,18 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: edit leases belong to both the token and the browser session. Saves check access and
+  the lease after the upload completes. Removed tokens stop receiving live events.
+- Server: a failed disk write rolls back the state in memory. Invalid request bodies return a
+  client error, and large uploads return the size error without closing the connection early.
+- Shared plans: changes stay available after a lost lease. Old network replies cannot change
+  another open plan, and live updates do not replace unsaved work. A waiting editor loads the
+  latest revision before it starts to edit.
+- Connections: the app works on a local HTTP server without secure-context UUID support.
+  Requests have a timeout. Share links do not include the private address of the current app.
+- Copies: a conflict copy must reach browser storage before the server session ends. A move to
+  the browser does not delete a newer server revision or a plan that another session edits.
+
 ## 0.2.0 – 2026-11-08
 
 The first version with a number. The app shows it in the help of the shortcuts.

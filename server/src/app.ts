@@ -42,6 +42,7 @@ export interface Config {
 
 interface Lease {
   client: string;
+  token: TokenRecord;
   holder: string;
   until: number;
 }
@@ -68,17 +69,21 @@ export const maskPath = (path: string) => path.replace(/^\/[^/]+/, "/…");
 export function createHandler(store: Store, config: Config) {
   const leases = new Map<string, Lease>();
   /** The open streams of the events of each plan. */
-  const streams = new Map<string, Set<ServerResponse>>();
+  const streams = new Map<string, Map<ServerResponse, TokenRecord>>();
   const origins = new Set(config.origins);
   if (config.appUrl) origins.add(new URL(config.appUrl).origin);
 
   const lease = (planId: string, now = Date.now()) => {
     const current = leases.get(planId);
-    return current && current.until > now ? current : null;
+    return current && current.until > now && store.active(current.token, now) ? current : null;
   };
 
   const send = (planId: string, event: string, data: unknown) => {
-    for (const res of streams.get(planId) ?? []) {
+    for (const [res, token] of streams.get(planId) ?? []) {
+      if (!store.active(token) && event !== "removed") {
+        res.end();
+        continue;
+      }
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     }
   };
@@ -208,7 +213,7 @@ export function createHandler(store: Store, config: Config) {
 
     if (head === "settings") {
       if (token.kind !== "root") throw new StoreError(403, "Only root can change the settings.");
-      if (method === "PUT") store.saveSettings((await body(req)) as { name?: string });
+      if (method === "PUT") store.saveSettings(await input());
       return json(res, 200, {
         ...store.settings,
         ...store.counts(),
@@ -227,11 +232,20 @@ export function createHandler(store: Store, config: Config) {
         return json(res, 200, store.tokens(token, planId ?? undefined).map(publicToken));
       }
       if (method === "POST" && !id) {
-        const { record, token: secret } = store.makeToken(token, (await body(req)) as never);
+        const { record, token: secret } = store.makeToken(token, (await input()) as never);
         return json(res, 201, { ...publicToken(record), token: secret });
       }
       if (method === "DELETE" && id) {
         store.removeToken(token, id);
+        for (const set of streams.values()) {
+          for (const [stream, access] of set) if (!store.active(access)) stream.end();
+        }
+        for (const [planId, held] of leases) {
+          if (!store.active(held.token)) {
+            leases.delete(planId);
+            send(planId, "lease", null);
+          }
+        }
         return json(res, 200, { ok: true });
       }
     }
@@ -245,8 +259,8 @@ export function createHandler(store: Store, config: Config) {
             store.plans(token).map((p) => planInfo(p)),
           );
         if (method === "POST") {
-          const { name, data } = (await body(req)) as { name?: string; data?: string };
-          const plan = store.createPlan(token, String(name ?? ""), checkPlan(data));
+          const { name, data } = await input();
+          const plan = store.createPlan(token, name ?? "", checkPlan(data));
           return json(res, 201, planInfo(plan));
         }
       }
@@ -260,28 +274,38 @@ export function createHandler(store: Store, config: Config) {
           return json(res, 200, { ...planInfo(plan), data: store.revisionData(plan, current.id) });
         }
         if (method === "PUT") {
+          const value = await input();
+          // The plan, access, and lease can change while the request body arrives.
+          const latest = store.plan(plan.id);
+          if (!latest || !store.canSee(token, latest))
+            throw new StoreError(404, "The plan does not exist.");
           const held = lease(plan.id);
-          if (held && held.client !== client) {
+          if (held && (held.client !== client || held.token.id !== token.id)) {
             throw new StoreError(423, `${held.holder} edits the plan.`);
           }
-          const input = (await body(req)) as {
-            parent?: string | null;
-            data?: string;
-            name?: string;
-          };
           const revision = store.saveRevision(
             token,
-            plan,
-            input.parent ?? null,
-            checkPlan(input.data),
-            input.name,
+            latest,
+            value.parent ?? null,
+            checkPlan(value.data),
+            value.name,
           );
-          send(plan.id, "revision", { ...revision, name: plan.name, client });
-          return json(res, 200, planInfo(plan));
+          send(plan.id, "revision", { ...revision, name: latest.name, client });
+          return json(res, 200, planInfo(latest));
         }
         if (method === "DELETE") {
+          const parent = new URL(req.url ?? "/", "http://server").searchParams.get("parent");
+          if (parent !== null) {
+            if (parent !== plan.revisions.at(-1)?.id)
+              throw new StoreError(409, "The plan has a newer revision. Load it first.");
+            const held = lease(plan.id);
+            if (held && (held.client !== client || held.token.id !== token.id))
+              throw new StoreError(423, `${held.holder} edits the plan.`);
+          }
           store.removePlan(token, plan);
           send(plan.id, "removed", {});
+          for (const stream of streams.get(plan.id)?.keys() ?? []) stream.end();
+          leases.delete(plan.id);
           return json(res, 200, { ok: true });
         }
       }
@@ -293,19 +317,23 @@ export function createHandler(store: Store, config: Config) {
 
       if (sub === "lease") {
         if (!client) throw new StoreError(400, "The request needs the header X-Client.");
+        if (!store.canWrite(token, plan)) throw new StoreError(403, "This token only reads.");
         if (method === "POST") {
-          if (!store.canWrite(token, plan)) throw new StoreError(403, "This token only reads.");
           const held = lease(plan.id);
-          if (held && held.client !== client) {
-            return json(res, 423, { error: `${held.holder} edits the plan.`, lease: held });
+          if (held && (held.client !== client || held.token.id !== token.id)) {
+            return json(res, 423, {
+              error: `${held.holder} edits the plan.`,
+              lease: { holder: held.holder, until: held.until },
+            });
           }
-          const next = { client, holder: token.label, until: Date.now() + LEASE_TIME };
+          const next = { client, token, holder: token.label, until: Date.now() + LEASE_TIME };
           leases.set(plan.id, next);
           if (!held) send(plan.id, "lease", { holder: next.holder, client, until: next.until });
           return json(res, 200, { holder: next.holder, until: next.until });
         }
         if (method === "DELETE") {
-          if (lease(plan.id)?.client === client) {
+          const held = lease(plan.id);
+          if (held?.client === client && held.token.id === token.id) {
             leases.delete(plan.id);
             send(plan.id, "lease", null);
           }
@@ -326,18 +354,36 @@ export function createHandler(store: Store, config: Config) {
             lease: held ? { holder: held.holder, client: held.client, until: held.until } : null,
           })}\n\n`,
         );
-        const set = streams.get(plan.id) ?? new Set();
-        set.add(res);
+        const set = streams.get(plan.id) ?? new Map();
+        set.set(res, token);
         streams.set(plan.id, set);
-        const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
+        const ping = setInterval(() => {
+          if (!store.active(token)) return void res.end();
+          res.write(": ping\n\n");
+          if (leases.has(plan.id) && !lease(plan.id)) {
+            leases.delete(plan.id);
+            send(plan.id, "lease", null);
+          }
+        }, 25_000);
         req.on("close", () => {
           clearInterval(ping);
           set.delete(res);
+          if (set.size === 0) streams.delete(plan.id);
         });
         return;
       }
     }
     throw new StoreError(404, "The address does not exist.");
+
+    async function input(): Promise<{ name?: string; data?: unknown; parent?: string | null }> {
+      const value = await body(req);
+      if (!store.active(token)) throw new StoreError(404, "The token does not exist.");
+      if (value.name !== undefined && typeof value.name !== "string")
+        throw new StoreError(400, "The name must be text.");
+      if (value.parent != null && typeof value.parent !== "string")
+        throw new StoreError(400, "The parent must be a revision id.");
+      return value as { name?: string; data?: unknown; parent?: string | null };
+    }
 
     function planInfo(plan: PlanRecord) {
       const current = plan.revisions.at(-1)!;
@@ -356,21 +402,24 @@ export function createHandler(store: Store, config: Config) {
   }
 
   /** Reads the body of a request as JSON, up to `maxBody` bytes. */
-  function body(req: IncomingMessage): Promise<unknown> {
+  function body(req: IncomingMessage): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       let size = 0;
       req.on("data", (chunk: Buffer) => {
         size += chunk.length;
         if (size > config.maxBody) {
+          chunks.length = 0;
           reject(new StoreError(413, "The plan is too large for this server."));
-          req.destroy();
         } else chunks.push(chunk);
       });
       req.on("end", () => {
         try {
           const text = Buffer.concat(chunks).toString("utf8");
-          resolve(text ? JSON.parse(text) : {});
+          const value: unknown = text ? JSON.parse(text) : {};
+          if (value === null || typeof value !== "object" || Array.isArray(value)) {
+            reject(new StoreError(400, "The body must be a JSON object."));
+          } else resolve(value as Record<string, unknown>);
         } catch {
           reject(new StoreError(400, "The body is not JSON."));
         }

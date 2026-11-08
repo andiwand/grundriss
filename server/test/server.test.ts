@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -146,6 +146,150 @@ describe("the public website", () => {
 });
 
 describe("plans and revisions", () => {
+  it("does not delete a newer revision after a copy was downloaded", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    await call(root, `plans/${house.id}`, {
+      method: "PUT",
+      json: { parent: "1", data: plan("New") },
+    });
+    expect((await call(root, `plans/${house.id}?parent=1`, { method: "DELETE" })).status).toBe(409);
+    expect((await call(root, `plans/${house.id}`)).body.revision).toBe("2");
+    expect((await call(root, `plans/${house.id}?parent=2`, { method: "DELETE" })).status).toBe(200);
+  });
+
+  it("rejects an oversized body with HTTP 413 instead of resetting the connection", async () => {
+    const response = await call(root, "plans", {
+      method: "POST",
+      body: "x".repeat(10 * 1024 * 1024 + 1),
+    });
+    expect(response.status).toBe(413);
+  });
+
+  it("rechecks token access after receiving a slow request body", async () => {
+    const { body: user } = await call(root, "tokens", {
+      method: "POST",
+      json: {
+        kind: "user",
+        label: "Writer",
+        write: true,
+        createPlans: true,
+      },
+    });
+    const payload = JSON.stringify({ data: plan() });
+    let finish!: () => void;
+    const answer = new Promise<number>((resolve, reject) => {
+      const req = request(
+        `${base}/${user.token}/api/plans`,
+        {
+          method: "POST",
+          headers: { "Content-Length": Buffer.byteLength(payload) },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        },
+      );
+      req.on("error", reject);
+      req.write(payload.slice(0, 1));
+      finish = () => req.end(payload.slice(1));
+    });
+    await call(root, `tokens/${user.id}`, { method: "DELETE" });
+    finish();
+    expect(await answer).toBe(404);
+    expect((await call(root, "plans")).body).toHaveLength(0);
+  });
+
+  it("binds a lease to its token as well as its client", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const { body: reader } = await call(root, "tokens", {
+      method: "POST",
+      json: {
+        kind: "plan",
+        label: "Reader",
+        planId: house.id,
+      },
+    });
+    const { body: writer } = await call(root, "tokens", {
+      method: "POST",
+      json: {
+        kind: "plan",
+        label: "Writer",
+        planId: house.id,
+        write: true,
+      },
+    });
+    const path = `plans/${house.id}/lease`;
+    const headers = { "X-Client": "known-client" };
+    expect((await call(root, path, { method: "POST", headers })).status).toBe(200);
+    expect((await call(reader.token, path, { method: "DELETE", headers })).status).toBe(403);
+    expect((await call(writer.token, path, { method: "POST", headers })).status).toBe(423);
+    expect(
+      (
+        await call(writer.token, `plans/${house.id}`, {
+          method: "PUT",
+          headers,
+          json: { parent: "1", data: plan() },
+        })
+      ).status,
+    ).toBe(423);
+  });
+
+  it("checks the lease again after receiving a slow request body", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const payload = JSON.stringify({ parent: "1", data: plan() });
+    let finish!: () => void;
+    const answer = new Promise<number>((resolve, reject) => {
+      const req = request(
+        `${base}/${root}/api/plans/${house.id}`,
+        {
+          method: "PUT",
+          headers: { "X-Client": "slow", "Content-Length": Buffer.byteLength(payload) },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        },
+      );
+      req.on("error", reject);
+      req.write(payload.slice(0, 1));
+      finish = () => req.end(payload.slice(1));
+    });
+    await call(root, `plans/${house.id}/lease`, { method: "POST", headers: { "X-Client": "new" } });
+    finish();
+    expect(await answer).toBe(423);
+  });
+
+  it("rejects non-object bodies and invalid names with a client error", async () => {
+    for (const json of [null, [], 42, { data: plan(), name: 42 }]) {
+      expect((await call(root, "plans", { method: "POST", json })).status).toBe(400);
+    }
+  });
+
+  it("closes an event stream when its token is revoked", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const { body: link } = await call(root, "tokens", {
+      method: "POST",
+      json: {
+        kind: "plan",
+        label: "Reader",
+        planId: house.id,
+      },
+    });
+    const abort = new AbortController();
+    const response = await fetch(`${base}/${link.token}/api/plans/${house.id}/events`, {
+      signal: abort.signal,
+    });
+    const reader = response.body!.getReader();
+    await reader.read();
+    await call(root, `tokens/${link.id}`, { method: "DELETE" });
+    await call(root, `plans/${house.id}`, { method: "PUT", json: { parent: "1", data: plan() } });
+    try {
+      expect((await reader.read()).done).toBe(true);
+    } finally {
+      abort.abort();
+    }
+  });
+
   it("saves a revision only on top of the current one", async () => {
     const created = await call(root, "plans", {
       method: "POST",

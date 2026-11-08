@@ -7,7 +7,8 @@ milestones are in [`PLAN.md`](PLAN.md). The user documentation is in [`README.md
 
 Grundriss is a browser app for floor plans. The user loads a scan or a photo of a plan, traces
 the walls on it, and edits the plan in 2D. A 3D view shows the same plan. The app runs fully in
-the browser and has no server. It reads and writes plans as JSON files.
+the browser for local plans. An optional self-hosted server stores shared plans and revisions.
+The app also reads and writes plans as JSON files.
 
 ## Architecture
 

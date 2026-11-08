@@ -57,5 +57,9 @@ server.listen(port, () => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  process.on(signal, () => {
+    server.close(() => process.exit(0));
+    // Event streams can stay open forever. Give pending requests time, then close them too.
+    setTimeout(() => server.closeAllConnections(), 5_000).unref();
+  });
 }

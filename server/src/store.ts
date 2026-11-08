@@ -92,6 +92,7 @@ export class StoreError extends Error {
 
 export class Store {
   private data: Data;
+  private persisted: string;
   private byHash = new Map<string, TokenRecord>();
 
   constructor(private readonly dir: string) {
@@ -100,6 +101,7 @@ export class Store {
     this.data = existsSync(file)
       ? (JSON.parse(readFileSync(file, "utf8")) as Data)
       : { version: 1, settings: { name: "Grundriss" }, tokens: [], plans: [] };
+    this.persisted = JSON.stringify(this.data);
     this.index();
   }
 
@@ -109,8 +111,20 @@ export class Store {
 
   private save(): void {
     const file = join(this.dir, "data.json");
-    writeFileSync(`${file}.tmp`, JSON.stringify(this.data, null, 1));
-    renameSync(`${file}.tmp`, file);
+    try {
+      const text = JSON.stringify(this.data, null, 1);
+      writeFileSync(`${file}.tmp`, text);
+      renameSync(`${file}.tmp`, file);
+      this.persisted = text;
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
+  }
+
+  private rollback(): void {
+    this.data = JSON.parse(this.persisted) as Data;
+    this.index();
   }
 
   // ----- Tokens -----
@@ -149,14 +163,20 @@ export class Store {
   /** The token of a secret, if it exists and did not end. */
   token(secret: string, now = Date.now()): TokenRecord | null {
     const record = this.byHash.get(hashToken(secret));
-    if (!record || (record.expires !== null && record.expires <= now)) return null;
-    // A token whose maker is gone or ended is gone too.
-    if (record.maker) {
-      const maker = this.data.tokens.find((t) => t.id === record.maker);
-      if (!maker || (maker.expires !== null && maker.expires <= now)) return null;
+    return record && this.active(record, now) ? record : null;
+  }
+
+  /** Rechecks a token held by a request, a lease, or an event stream. */
+  active(record: TokenRecord, now = Date.now()): boolean {
+    let current: TokenRecord | undefined = this.byHash.get(record.hash);
+    if (!current || current.id !== record.id) return false;
+    while (current) {
+      if (current.expires !== null && current.expires <= now) return false;
+      if (current.planId && !this.plan(current.planId)) return false;
+      if (!current.maker) return true;
+      current = this.data.tokens.find((t) => t.id === current!.maker);
     }
-    if (record.planId && !this.plan(record.planId)) return null;
-    return record;
+    return false;
   }
 
   /** The tokens that the token can see: root all, a user the tokens that it made. */
@@ -335,11 +355,16 @@ export class Store {
       by: by.label,
       size: Buffer.byteLength(data),
     };
-    const dir = join(this.dir, "plans", plan.id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${revision.id}.json`), data);
-    plan.revisions.push(revision);
-    this.save();
+    try {
+      const dir = join(this.dir, "plans", plan.id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${revision.id}.json`), data);
+      plan.revisions.push(revision);
+      this.save();
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
     return revision;
   }
 
