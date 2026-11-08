@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Phone: the status line no longer lies under the sheet of the panel. The sheet, the status line,
+  and the bar at the bottom keep their places also when the toolbar of the browser moves.
 - Projects page: one column in the middle of the window, without a large box. Three tiles at the
   top start a plan: a new plan, a file, or the example house. Your plans follow below, and the
   backup, the restore, and the trash are links at the end.

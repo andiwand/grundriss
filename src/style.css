@@ -2905,7 +2905,8 @@ body.compact {
   grid-template-columns: minmax(0, 1fr);
   --bottom-bar: calc(58px + env(safe-area-inset-bottom));
   /* The sheet of the panel starts above the status line and the bar at the bottom. */
-  --sheet-bottom: calc(var(--bottom-bar) + 20px);
+  --status-height: 22px;
+  --sheet-bottom: calc(var(--bottom-bar) + var(--status-height));
   grid-template-rows: auto 1fr auto auto;
 }
 
@@ -2949,7 +2950,10 @@ body.compact #views button {
 /* The topics in the bar at the bottom: an icon with a small label. */
 body.compact:not(.no-plan) .bottom-bar {
   display: flex;
-  grid-row: 4;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: var(--bottom-bar);
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface);
@@ -3069,10 +3073,26 @@ body.compact.overview #panel {
 }
 
 /* The status line of a phone: one short line above the sheet. */
+/* The status line and the bar at the bottom are fixed, like the sheet, so the three parts stay in
+   their order also when the toolbar of the browser of a phone changes the height of the page. */
+body.compact:not(.no-plan) {
+  padding-bottom: var(--sheet-bottom);
+}
+
+body.compact:not(.no-plan) #status {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--bottom-bar);
+  z-index: 25;
+  background: var(--bg);
+}
+
 body.compact #status {
   grid-row: 3;
   min-width: 0;
-  height: 20px;
+  height: var(--status-height);
+  min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
   white-space: nowrap;
