@@ -28,14 +28,14 @@ account and no server, and your plans stay on your computer as files.
 | Part          | What it does                                                                                                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.                     |
-| **Draw**      | Walls with snapping and angles, doors and windows, dimensions, and rooms that close by themselves with their names and areas.                                               |
-| **3D**        | The 3D view shows the plan at the same time as you edit it, with holes for each door and window.                                                                            |
+| **Draw**      | Walls with snapping and angles, doors and windows that open in a direction, dimensions, rooms with names and areas, and a check for objects that collide.                   |
+| **3D**        | The 3D view shows the plan at the same time as you edit it. Click an object to select it, and drag furniture, doors, and windows to move them.                              |
 | **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                                   |
 | **Roofs**     | Gable, half-hip, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
 | **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                                  |
 | **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                               |
 | **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, solar panels, and an hourly balance with a battery.                          |
-| **Renovate**  | Variants with measures, an estimate of their cost, the subsidy, the saving per year, and the payback time.                                                                  |
+| **Renovate**  | Variants with measures or another floor plan, an estimate of their cost, the subsidy, the saving per year, and the payback time.                                            |
 | **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                                         |
 
 <p align="center">
@@ -57,7 +57,8 @@ shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top 
 - **Interior**: furniture and rooms.
 - **Energy**: the location, the map, the climate, the insulation, the heated stories, the
   heating and the hot water per year, and the hourly balance of electricity.
-- **Renovation**: variants of the building with measures, their cost, and their payback.
+- **Renovation**: variants of the building with measures or another floor plan, their cost, and
+  their payback.
 
 Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic. **?** shows
 all keyboard shortcuts.
@@ -123,7 +124,10 @@ internet.
 4. Select the **Wall** tool and click the corners of the walls. A click on a corner or on a wall
    ends the chain.
 5. Select **Door** or **Window** and click on a wall. A door opens to the side of the wall where
-   you click. The panel can flip the hinge and the swing of a door.
+   you click; a window opens into the room. The opening goes to the nearest free place on the
+   wall, so that it does not overlap another opening. The panel sets how it opens (a hinged
+   leaf, sliding, or fixed), one or two leaves, the hinge, and the swing. A window wider than
+   1 m gets two leaves.
 6. Select **Measure** to add a dimension line: click the two ends, then click where the line goes.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
@@ -145,7 +149,16 @@ internet.
 13. Without a selection, the panel shows the content of the topic. In **Structure**, it shows
     the story, the north direction, and the roof. Drag the
     compass at the top right to turn north.
-14. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
+14. Objects that collide have a red dashed outline: two doors or windows that overlap, an
+    opening in a corner or higher than its wall, furniture in a wall, on a stair, or on another
+    piece, and furniture in the way of a door or a window that opens. The panel of the object,
+    and of Structure and Interior, lists the collisions; a click selects the other object. A
+    chair can stand under a table, and a low piece under a window.
+15. In the 3D view, click an object to select it, also on another story. Shift+click adds it to
+    the selection. Drag a selected piece of furniture, device, stair, or chimney to move it on
+    its floor, and a selected door or window to move it along its wall. The mouse over an object
+    shows it in a color.
+16. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
     model.
 
 | Key                      | Action                                            |
@@ -333,8 +346,16 @@ too often for an estimate: see umweltfoerderung.at and the programs of your stat
 time is the first year where the savings pay the cost after the subsidy. The saving of each
 year grows with **Energy prices**, and **Interest** discounts it.
 
-The check mark puts a variant into the plan, so you can change it in the other topics. The disk
-saves the plan back into the variant. Undo goes back.
+**Open** a variant (the cube on its card, or the switch next to the file name in the top bar) to
+see and change it in all topics: its insulation and heating, but also its walls, doors, rooms,
+and furniture. The changes go into the variant, and the plan stays as it is. **Add a variant →
+Another floor plan** makes a new variant and opens it in Structure, for example to try which
+walls to remove. A variant with its own floor plan shows its rooms, and its estimate has the
+walls to remove and to build, the cuts for new openings, the new doors and windows, and the
+openings to close. If a wall to remove can carry a load (an outer wall, a wall under a wall of
+the story above, or a wall of 24 cm or more), the card asks you to talk to a structural engineer.
+A variant without its own floor plan follows the floor plan of the plan. The check mark makes a
+variant the new plan. Undo goes back.
 
 ### Heat loss, heat pump, and summer
 

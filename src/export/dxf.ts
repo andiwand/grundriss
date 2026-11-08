@@ -203,23 +203,20 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
       const shape = openingShape(plan, opening);
       if (!shape) continue;
       polygon(L.OPENINGS, shape.gap);
-      if (shape.kind === "window") {
-        line(L.OPENINGS, ...shape.glass);
-        continue;
+      for (const segment of [...shape.glass, ...shape.leaves]) line(L.OPENINGS, ...segment);
+      for (const arc of shape.arcs) {
+        // DXF angles are in degrees, with y up, and an ARC always turns counterclockwise.
+        const angle = (p: Point) =>
+          (Math.atan2(-(p.y - arc.center.y), p.x - arc.center.x) * 180) / Math.PI;
+        // Sweep 1 turns to larger plan angles, which is clockwise with y up.
+        const [start, end] = arc.sweep === 1 ? [arc.to, arc.from] : [arc.from, arc.to];
+        pair(0, "ARC");
+        pair(8, L.OPENINGS);
+        xy(arc.center);
+        pair(40, arc.radius);
+        pair(50, angle(start));
+        pair(51, angle(end));
       }
-      line(L.OPENINGS, shape.hinge, shape.leaf);
-      const { arc } = shape;
-      // DXF angles are in degrees, with y up, and an ARC always turns counterclockwise.
-      const angle = (p: Point) =>
-        (Math.atan2(-(p.y - arc.center.y), p.x - arc.center.x) * 180) / Math.PI;
-      // Sweep 1 turns to larger plan angles, which is clockwise with y up.
-      const [start, end] = arc.sweep === 1 ? [arc.to, arc.from] : [arc.from, arc.to];
-      pair(0, "ARC");
-      pair(8, L.OPENINGS);
-      xy(arc.center);
-      pair(40, arc.radius);
-      pair(50, angle(start));
-      pair(51, angle(end));
     }
     for (const dimension of plan.dimensions) {
       const shape = dimensionShape(dimension);

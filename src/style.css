@@ -312,6 +312,26 @@ body:not(.no-plan) .brand:hover .brand-back {
   max-width: 30vw;
 }
 
+/* The variant that the plan shows: an accent color while a variant is open, so that the user
+   knows that the changes go into the variant. */
+.variant-switch {
+  max-width: 160px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+}
+
+.variant-switch.open {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 #file-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -402,6 +422,28 @@ body:not(.no-plan) .brand:hover .brand-back {
   }
 
   .topics button {
+    gap: 0;
+    padding: 0 8px;
+  }
+}
+
+/* The switch of the variants takes about 140 px, so with it the steps come earlier. */
+@media (max-width: 1740px) {
+  body.has-variants #views button,
+  body.has-variants #layers-button,
+  body.has-variants #export {
+    gap: 0;
+    padding: 0 8px;
+    font-size: 0;
+  }
+}
+
+@media (max-width: 1580px) {
+  body.has-variants .topics button span {
+    display: none;
+  }
+
+  body.has-variants .topics button {
     gap: 0;
     padding: 0 8px;
   }
@@ -1102,6 +1144,20 @@ body.wide .empty-state {
 .opening .glass {
   stroke: var(--glass);
   stroke-width: 2;
+}
+
+/* The leaves of a window are thin, so that the glass stays the main line. */
+.opening.window .leaf {
+  stroke-width: 0.8;
+  opacity: 0.7;
+}
+
+/* An object with a collision (see src/model/conflicts.ts). */
+.opening.conflict .gap,
+.piece.conflict .box {
+  stroke: var(--danger);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
 }
 
 .opening.selected .gap {
@@ -2513,6 +2569,29 @@ body.overview #layers-button {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
+}
+
+/* The open variant: the plan shows it, and the changes go into it. */
+#panel .variant.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+#panel .variant-top .icon-button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#panel .variant-warning {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+#panel .note.variant-open {
+  color: var(--accent);
 }
 
 #panel .variant-top {

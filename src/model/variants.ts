@@ -1,15 +1,20 @@
-// The variants of the energy and the renovation: copies of the envelope, the heating, the heated
-// stories, the household with its battery, and the PV fields. The app calculates each variant on
-// a copy of the building, so that the user can compare them with the plan, for example "more
-// insulation on the roof" against "a heat pump". A measure is a usual change, for example 10 cm
-// more insulation. It can make a new variant from the plan, or go into a variant.
+// The variants of the building: copies of the envelope, the heating, the heated stories, the
+// household with its battery, the PV fields, and, if the user changes it, the floor plan. The app
+// calculates each variant on a copy of the building, so that the user can compare them with the
+// plan, for example "more insulation on the roof" against "a heat pump", or "kitchen and living
+// room in one" against the plan. A measure is a usual change, for example 10 cm more insulation.
+// It can make a new variant from the plan, or go into a variant.
+//
+// One variant at a time can be open (`Building.variant`): the building then shows the variant,
+// the user edits it in all topics, and `base` keeps the plan. `switchVariant` saves the open
+// state into its variant and opens the next one, so no change gets lost.
 
 import { defaultHeating } from "./heating";
 import { copyTree } from "./history";
 import { material } from "./insulation";
 import { newId } from "./plan";
 import { newPvField } from "./pv";
-import type { Building, Layer, Variant } from "./types";
+import type { Building, Layer, Layout, Variant, VariantState } from "./types";
 
 const copy = copyTree;
 
@@ -21,59 +26,167 @@ export const sameData = (a: unknown, b: unknown): boolean =>
 const unheatedOf = (building: Building) =>
   building.stories.filter((s) => !s.heated).map((s) => s.id);
 
-/** A variant with the state of the plan, without a cost. */
-export function variantOf(building: Building, name: string): Variant {
+/** A copy of the floor plan of the building, without the background images. */
+export function layoutOf(building: Building): Layout {
   return {
-    id: newId("var"),
-    name,
+    stories: building.stories.map((s) => ({ ...copy(s), background: null, heated: true })),
+    roofs: copy(building.roofs),
+  };
+}
+
+/** The floor plan of the plan: the live stories, or the copy in `base` while a variant is open. */
+function planLayout(building: Building): Layout {
+  return building.base?.layout ?? { stories: building.stories, roofs: building.roofs };
+}
+
+/** A copy of the state that the building shows now, with its floor plan. */
+function liveState(building: Building): VariantState & { layout: Layout } {
+  return {
     envelope: copy(building.envelope),
     unheated: unheatedOf(building),
     household: copy(building.household),
     pv: copy(building.pv),
+    layout: layoutOf(building),
+  };
+}
+
+/** True if two floor plans are the same. */
+const sameLayout = (a: Layout, b: Layout) =>
+  sameData(
+    a.stories.map((s) => ({ ...s, background: null, heated: true })),
+    b.stories.map((s) => ({ ...s, background: null, heated: true })),
+  ) && sameData(a.roofs, b.roofs);
+
+/** The state of the plan. */
+export function planState(building: Building): VariantState {
+  return building.base ?? { ...liveState(building), layout: null };
+}
+
+/** A variant with the state of the plan and its floor plan, without a cost. */
+export function variantOf(building: Building, name: string): Variant {
+  const plan = planState(building);
+  return {
+    id: newId("var"),
+    name,
+    envelope: copy(plan.envelope),
+    unheated: [...plan.unheated],
+    household: copy(plan.household),
+    pv: copy(plan.pv),
+    layout: null,
     cost: null,
     subsidy: 0,
   };
 }
 
-/** A copy of the building with the state of the variant. The copy shares the other parts. */
-export function withVariant(building: Building, variant: Variant): Building {
-  const unheated = new Set(variant.unheated);
+/** A copy of the building with the state, for a calculation. The copy shares the other parts. */
+function withState(building: Building, state: VariantState): Building {
+  const unheated = new Set(state.unheated);
+  const layout = state.layout ?? planLayout(building);
   return {
     ...building,
-    envelope: variant.envelope,
-    household: variant.household,
-    pv: variant.pv,
-    stories: building.stories.map((s) => ({ ...s, heated: !unheated.has(s.id) })),
+    envelope: state.envelope,
+    household: state.household,
+    pv: state.pv,
+    roofs: layout.roofs,
+    stories: layout.stories.map((s) => ({ ...s, heated: !unheated.has(s.id) })),
+    variant: null,
+    base: null,
   };
 }
 
-/** Gives the plan the state of the variant. */
-export function applyVariant(building: Building, variant: Variant): void {
-  const unheated = new Set(variant.unheated);
-  building.envelope = copy(variant.envelope);
-  building.household = copy(variant.household);
-  building.pv = copy(variant.pv);
-  for (const story of building.stories) story.heated = !unheated.has(story.id);
+/**
+ * A copy of the building with the state of the variant. The open variant is the building itself.
+ * The copy shares the other parts.
+ */
+export function withVariant(building: Building, variant: Variant): Building {
+  return variant.id === building.variant ? building : withState(building, variant);
 }
 
-/** Saves the state of the plan into the variant. The name and the cost stay. */
+/** The building of the plan: the building itself, or the plan while a variant is open. */
+export function planBuilding(building: Building): Building {
+  return building.base ? withState(building, building.base) : building;
+}
+
+/**
+ * Gives the building the state, as copies. The stories keep the background images of the
+ * stories with the same id.
+ */
+function showState(building: Building, state: VariantState, layout: Layout): void {
+  const backgrounds = new Map(building.stories.map((s) => [s.id, s.background]));
+  const unheated = new Set(state.unheated);
+  building.envelope = copy(state.envelope);
+  building.household = copy(state.household);
+  building.pv = copy(state.pv);
+  building.roofs = copy(layout.roofs);
+  building.stories = copy(layout.stories).map((s) => ({
+    ...s,
+    background: backgrounds.get(s.id) ?? null,
+    heated: !unheated.has(s.id),
+  }));
+}
+
+/**
+ * Opens the variant with the id, or the plan for null. The state that the building shows goes
+ * into the open variant first. A variant keeps no floor plan of its own if its floor plan is the
+ * same as the plan.
+ */
+export function switchVariant(building: Building, id: string | null): void {
+  if (building.variant === id) return;
+  if (id !== null && !building.variants.some((v) => v.id === id)) return;
+  const live = liveState(building);
+  if (building.variant === null) {
+    building.base = live;
+  } else {
+    const open = building.variants.find((v) => v.id === building.variant);
+    if (open) {
+      Object.assign(open, live);
+      if (sameLayout(live.layout, planLayout(building))) open.layout = null;
+    }
+  }
+  const base = building.base!;
+  const target = id === null ? base : building.variants.find((v) => v.id === id)!;
+  showState(building, target, target.layout ?? base.layout!);
+  building.variant = id;
+  if (id === null) building.base = null;
+}
+
+/** Makes the variant the new plan. The variant stays in the list, now the same as the plan. */
+export function applyVariant(building: Building, variant: Variant): void {
+  switchVariant(building, null);
+  const own = building.variants.find((v) => v.id === variant.id) ?? variant;
+  showState(building, own, own.layout ?? layoutOf(building));
+  // The floor plan of the variant is now the plan, and the others keep their own floor plan
+  // only if it differs from the new plan.
+  own.layout = null;
+}
+
+/** Saves the energy part of the building into the variant. The name, the cost, and the floor plan stay. */
 export function updateVariant(variant: Variant, building: Building): void {
-  const now = variantOf(building, variant.name);
-  variant.envelope = now.envelope;
-  variant.unheated = now.unheated;
-  variant.household = now.household;
-  variant.pv = now.pv;
+  variant.envelope = copy(building.envelope);
+  variant.unheated = unheatedOf(building);
+  variant.household = copy(building.household);
+  variant.pv = copy(building.pv);
 }
 
 /** True if the variant has the same state as the plan. */
 export function sameAsPlan(building: Building, variant: Variant): boolean {
   const ids = (list: string[]) => [...list].sort().join("|");
+  const plan = planState(building);
+  const state = variant.id === building.variant ? liveState(building) : variant;
+  const layout = state.layout;
   return (
-    sameData(variant.envelope, building.envelope) &&
-    sameData(variant.household, building.household) &&
-    sameData(variant.pv, building.pv) &&
-    ids(variant.unheated) === ids(unheatedOf(building))
+    sameData(state.envelope, plan.envelope) &&
+    sameData(state.household, plan.household) &&
+    sameData(state.pv, plan.pv) &&
+    ids(state.unheated) === ids(plan.unheated) &&
+    (layout === null || sameLayout(layout, planLayout(building)))
   );
+}
+
+/** True if the variant has its own floor plan. */
+export function hasOwnLayout(building: Building, variant: Variant): boolean {
+  if (variant.id !== building.variant) return variant.layout !== null;
+  return !sameLayout(layoutOf(building), planLayout(building));
 }
 
 /**
@@ -182,12 +295,17 @@ const variantBuilding = (building: Building, variant: Variant) =>
 
 /** The measures that change something on the variant. */
 export function measuresFor(building: Building, variant: Variant): Measure[] {
-  const b = variantBuilding(building, variant);
+  const b = withVariant(building, variant);
   return MEASURES.filter((m) => m.available(b));
 }
 
 /** Adds the measure to the variant. The name of the variant stays. */
 export function addMeasure(building: Building, variant: Variant, measure: Measure): void {
+  // The open variant is the building: the measure changes it directly.
+  if (variant.id === building.variant) {
+    measure.apply(building);
+    return;
+  }
   const b = variantBuilding(building, variant);
   measure.apply(b);
   updateVariant(variant, b);

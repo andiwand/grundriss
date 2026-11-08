@@ -149,21 +149,25 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
     const shape = openingShape(plan, opening);
     if (!shape) continue;
     out.push(`<polygon points="${points(shape.gap)}" fill="${COLORS.paper}"/>`);
-    if (shape.kind === "door") {
-      const { hinge, leaf, arc } = shape;
-      out.push(
-        `<line x1="${n(hinge.x)}" y1="${n(hinge.y)}" x2="${n(leaf.x)}" y2="${n(leaf.y)}" ` +
-          `stroke-width="${n(line * 1.5)}"/>`,
-      );
-      out.push(
-        `<path d="M ${n(arc.from.x)} ${n(arc.from.y)} A ${n(arc.radius)} ${n(arc.radius)} 0 0 ` +
-          `${arc.sweep} ${n(arc.to.x)} ${n(arc.to.y)}" stroke-dasharray="${n(line * 4)} ${n(line * 3)}"/>`,
-      );
-    } else {
-      const [s, e] = shape.glass;
+    // The leaves of a window are thin, like its arcs.
+    const leafWidth = shape.kind === "door" ? line * 1.5 : line * 0.7;
+    for (const [s, e] of shape.glass) {
       out.push(
         `<line x1="${n(s.x)}" y1="${n(s.y)}" x2="${n(e.x)}" y2="${n(e.y)}" ` +
           `stroke="${COLORS.glass}" stroke-width="${n(line * 2)}"/>`,
+      );
+    }
+    for (const [s, e] of shape.leaves) {
+      out.push(
+        `<line x1="${n(s.x)}" y1="${n(s.y)}" x2="${n(e.x)}" y2="${n(e.y)}" ` +
+          `stroke-width="${n(leafWidth)}"/>`,
+      );
+    }
+    for (const arc of shape.arcs) {
+      out.push(
+        `<path d="M ${n(arc.from.x)} ${n(arc.from.y)} A ${n(arc.radius)} ${n(arc.radius)} 0 0 ` +
+          `${arc.sweep} ${n(arc.to.x)} ${n(arc.to.y)}" stroke-width="${n(line * 0.7)}" ` +
+          `stroke-dasharray="${n(line * 4)} ${n(line * 3)}"/>`,
       );
     }
   }

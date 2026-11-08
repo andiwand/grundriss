@@ -332,18 +332,23 @@ function pageContent(
     if (!shape) continue;
     polygon(shape.gap);
     ops.push("B");
-    if (shape.kind === "door") {
-      ops.push("0.8 w");
-      line(shape.hinge, shape.leaf);
-      ops.push("0.4 w [2 1.5] 0 d");
-      const from = map(shape.arc.from);
-      ops.push(`${n(from.x)} ${n(from.y)} m ${arcCurve(shape.arc, map)} S`);
-      ops.push("[] 0 d 0.5 w");
-    } else {
+    if (shape.glass.length > 0) {
       ops.push("0.227 0.557 0.902 RG 1 w");
-      line(...shape.glass);
-      ops.push("0.149 0.173 0.220 RG 0.5 w");
+      for (const glass of shape.glass) line(...glass);
+      ops.push("0.149 0.173 0.220 RG");
     }
+    // The leaves of a window are thin, like its arcs.
+    ops.push(shape.kind === "door" ? "0.8 w" : "0.35 w");
+    for (const leaf of shape.leaves) line(...leaf);
+    if (shape.arcs.length > 0) {
+      ops.push("0.4 w [2 1.5] 0 d");
+      for (const arc of shape.arcs) {
+        const from = map(arc.from);
+        ops.push(`${n(from.x)} ${n(from.y)} m ${arcCurve(arc, map)} S`);
+      }
+      ops.push("[] 0 d");
+    }
+    ops.push("0.5 w");
   }
 
   ops.push("0.478 0.396 0.259 rg");

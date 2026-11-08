@@ -22,6 +22,8 @@
   room, a summer check, and the shade on the PV.
 - Renovation, second step: prices for Austria and Germany, interest and price changes in the
   payback, and an estimate of the German subsidy (BEG).
+- Doors and windows with a way to open and one or two leaves, collision checks, editing in the
+  3D view, and variants with their own floor plan.
 - The website: a scroll story at the root of GitHub Pages, in English and in German, with the use
   cases. The app is at `/app/`.
 - Topics, the Projects page with autosave in IndexedDB, and the app as an installable PWA.
@@ -221,6 +223,14 @@ step.
 - **Languages**: the names of the Kenney models stay English. A plan stores the names of new
   stories and roofs in the language of the code (English), and the app translates them when it
   shows them. Some error messages with values stay English.
+- **Collisions**: the check works on one story at a time and in the plan, with heights only for
+  furniture against the leaves. It does not check furniture under a roof, devices, or lines. The
+  app prevents only the overlap of openings on one wall; furniture can still go into a wall.
+- **3D editing**: a drag moves objects; it does not turn them or change their size. A wall can be
+  selected in 3D, but it moves only in 2D.
+- **Variants**: a variant with its own floor plan keeps a full copy of its stories, with the notes
+  and photos, so the file grows. All variants share the background images. The estimate of a
+  floor plan does not know which walls carry a load; it only warns.
 - **Furniture**: the app does not check furniture under a roof. A tall piece under the slope
   goes through the roof without a warning. A compound name without spaces ("gothicbed") can go
   to the wrong group of the catalog.

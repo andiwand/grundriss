@@ -31,6 +31,8 @@ export function emptyBuilding(): Building {
     household: defaultHousehold(),
     finance: defaultFinance(),
     variants: [],
+    variant: null,
+    base: null,
     pv: [],
     location: null,
     climate: null,

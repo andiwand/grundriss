@@ -6,6 +6,7 @@ import { fmt } from "./model/format";
 import { buildingTakeoff } from "./model/takeoff";
 import { isCompact, selectionChanged, setupCompact, toolChanged, topicChanged } from "./ui/compact";
 import { renderContents } from "./ui/contents";
+import { setupEdit3d } from "./ui/edit3d";
 import {
   $,
   app,
@@ -36,6 +37,7 @@ import {
   storeProject,
   updateTitle,
 } from "./ui/projects";
+import { renderVariantSwitch } from "./ui/renovation";
 import { renderPanel } from "./ui/selection";
 import { showShortcuts } from "./ui/shortcuts";
 import { backgroundElement, replaceBackground, tracing, work } from "./ui/tracing";
@@ -651,6 +653,7 @@ function afterChange(): void {
   frameRequested = false;
   loadTopViews();
   updateTitle();
+  renderVariantSwitch();
   renderStories();
   renderCompass();
   // The tree of the overview shows the plan of now, for example after an undo.
@@ -707,7 +710,9 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-add-st
 editor.onSelect = () => {
   renderPanel();
   selectionChanged();
+  view3d.setSelection(editor.selection);
 };
+setupEdit3d();
 
 setupCompact({
   onCompact: () => {

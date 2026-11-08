@@ -2,8 +2,8 @@
 // cannot read needs a new version and a migration in parseBuilding.
 //
 // A new field that old versions can ignore needs no new version. parsePlan gives it a default
-// value when a file does not have it. Examples: `hinge` and `swing` of an opening, and
-// `dimensions`.
+// value when a file does not have it. Examples: `hinge`, `swing`, `style`, and `leaves` of an
+// opening, and `dimensions`.
 //
 // `location` and `climate` are such fields: a file without them gets null for both.
 //
@@ -47,6 +47,7 @@ import type {
   Vertex,
   Wall,
   Variant,
+  Layout,
   Ventilation,
 } from "./types";
 
@@ -56,13 +57,32 @@ import { copyTree } from "./history";
 import { DEFAULT_COLORS, isColor } from "./colors";
 import { defaultEnvelope, defaultFinance, defaultHousehold } from "./insulation";
 import { storyBox } from "./roof";
+import { roomSide, WIDE_WINDOW } from "./openings";
+import { findRooms } from "./rooms";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
+import { switchVariant } from "./variants";
 
 export const FILE_FORMAT = "grundriss";
 export const FILE_VERSION = 3;
 
+/**
+ * The JSON of the building. While a variant is open, the file has the plan in the building and
+ * the open state in its variant, so that an app without open variants reads the plan. `variant`
+ * gives the open variant.
+ */
 export function serializeBuilding(building: Building): string {
-  return JSON.stringify({ format: FILE_FORMAT, version: FILE_VERSION, ...building }, null, 2);
+  let plain = building;
+  if (building.variant !== null) {
+    plain = copyTree(building);
+    switchVariant(plain, null);
+  }
+  const { base, ...rest } = plain;
+  void base;
+  return JSON.stringify(
+    { format: FILE_FORMAT, version: FILE_VERSION, ...rest, variant: building.variant },
+    null,
+    2,
+  );
 }
 
 type Data = Record<string, unknown>;
@@ -128,6 +148,8 @@ export function parseBuilding(text: string): Building {
       household: defaultHousehold(),
       finance: defaultFinance(),
       variants: [],
+      variant: null,
+      base: null,
       pv: [],
       location: null,
       climate: null,
@@ -139,33 +161,7 @@ export function parseBuilding(text: string): Building {
     );
   }
 
-  const stories: Story[] = list(data, "stories").map((s, i) => {
-    const where = `story ${i}`;
-    return {
-      id: string(s, "id", where),
-      name: string(s, "name", where),
-      elevation: number(s, "elevation", where),
-      height: number(s, "height", where),
-      // A file before the unheated stories has only heated stories.
-      heated: s.heated !== false,
-      ...parsePlanData(s, `${where}, `),
-    };
-  });
-  if (stories.length === 0) throw new Error("The file is damaged: it has no story.");
-  stories.sort((a, b) => a.elevation - b.elevation);
-
-  const roofs: Roof[] = list(data, "roofs").map((r, i) => parseRoof(r, `roof ${i}`));
-  // Files before the roofs had one roof on the box around the walls of its story.
-  if (data.roof != null) {
-    if (!isObject(data.roof)) throw new Error('The file is damaged: invalid "roof".');
-    const old = oldRoof(data.roof, stories);
-    if (old) roofs.push(old);
-  }
-  for (const roof of roofs) {
-    if (!stories.some((s) => s.id === roof.storyId)) {
-      throw new Error(`The file is damaged: ${roof.name} refers to a story that does not exist.`);
-    }
-  }
+  const { stories, roofs } = parseLayout(data, "");
   const north = finite(data.north, 0);
   const models: Model[] = list(data, "models").map((m, i) => {
     const where = `model ${i}`;
@@ -190,7 +186,11 @@ export function parseBuilding(text: string): Building {
     };
   });
   const modelIds = new Set(models.map((m) => m.id));
-  for (const story of stories) {
+  const layouts: Data[] = list(data, "variants")
+    .map((v) => v.layout)
+    .filter((l): l is Data => isObject(l));
+  const variantLayouts = layouts.map((l, i) => parseLayout(l, `the floor plan of variant ${i}, `));
+  for (const story of [stories, ...variantLayouts.map((l) => l.stories)].flat()) {
     for (const piece of story.furniture) {
       if (piece.source.kind === "model" && !modelIds.has(piece.source.modelId)) {
         throw new Error(
@@ -218,9 +218,11 @@ export function parseBuilding(text: string): Building {
   };
   const pv = list(data, "pv").map((d, i) => parsePv(d, `PV field ${i}`));
   const household = parseHousehold(data.household, envelope);
-  const storyIds = new Set(stories.map((s) => s.id));
+  let layoutIndex = 0;
   const variants: Variant[] = list(data, "variants").map((v, i) => {
     const where = `variant ${i}`;
+    const layout = isObject(v.layout) ? variantLayouts[layoutIndex++] : null;
+    const storyIds = new Set((layout ?? { stories }).stories.map((s) => s.id));
     return {
       id: string(v, "id", where),
       name: string(v, "name", where),
@@ -235,6 +237,7 @@ export function parseBuilding(text: string): Building {
         v.pv == null
           ? copyTree(pv)
           : list(v, "pv").map((d, j) => parsePv(d, `${where}, PV field ${j}`)),
+      layout,
       cost: v.cost == null ? null : Math.max(0, number(v, "cost", where)),
       subsidy: Math.max(0, finite(v.subsidy, 0)),
     };
@@ -242,7 +245,7 @@ export function parseBuilding(text: string): Building {
   const location = parseLocation(data.location);
   const climate = parseClimate(data.climate);
   const facade = isColor(data.facade) ? data.facade : DEFAULT_COLORS.facade;
-  return {
+  const building: Building = {
     stories,
     roofs,
     north,
@@ -252,10 +255,15 @@ export function parseBuilding(text: string): Building {
     household,
     finance: parseFinance(data.finance),
     variants,
+    variant: null,
+    base: null,
     pv,
     location,
     climate,
   };
+  // The file has the plan in the building. The open variant opens again.
+  if (typeof data.variant === "string") switchVariant(building, data.variant);
+  return building;
 }
 
 /** A number in the interval [low, high], or an error. */
@@ -546,6 +554,40 @@ function parseFinance(data: unknown): Finance {
   };
 }
 
+/** Reads the stories and the roofs of a building, or of the floor plan of a variant. */
+function parseLayout(data: Data, prefix: string): Layout {
+  const stories: Story[] = list(data, "stories").map((s, i) => {
+    const where = `${prefix}story ${i}`;
+    return {
+      id: string(s, "id", where),
+      name: string(s, "name", where),
+      elevation: number(s, "elevation", where),
+      height: number(s, "height", where),
+      // A file before the unheated stories has only heated stories.
+      heated: s.heated !== false,
+      ...parsePlanData(s, `${where}, `),
+    };
+  });
+  if (stories.length === 0) {
+    throw new Error(`The file is damaged: ${prefix || "it has "}no story.`);
+  }
+  stories.sort((a, b) => a.elevation - b.elevation);
+
+  const roofs: Roof[] = list(data, "roofs").map((r, i) => parseRoof(r, `${prefix}roof ${i}`));
+  // Files before the roofs had one roof on the box around the walls of its story.
+  if (data.roof != null) {
+    if (!isObject(data.roof)) throw new Error('The file is damaged: invalid "roof".');
+    const old = oldRoof(data.roof, stories);
+    if (old) roofs.push(old);
+  }
+  for (const roof of roofs) {
+    if (!stories.some((s) => s.id === roof.storyId)) {
+      throw new Error(`The file is damaged: ${roof.name} refers to a story that does not exist.`);
+    }
+  }
+  return { stories, roofs };
+}
+
 /** Reads the floor plan of one story. `prefix` names the story in the error messages. */
 function parsePlanData(data: Data, prefix: string): Plan {
   const vertices: Vertex[] = list(data, "vertices").map((v, i) => ({
@@ -590,6 +632,8 @@ function parsePlanData(data: Data, prefix: string): Plan {
       width: number(o, "width", where),
       height: number(o, "height", where),
       sill: number(o, "sill", where),
+      style: o.style === "sliding" || o.style === "fixed" ? o.style : "hinged",
+      leaves: o.leaves === 2 ? 2 : 1,
       hinge: o.hinge === "b" ? "b" : "a",
       swing: o.swing === -1 ? -1 : 1,
     } satisfies Opening;
@@ -742,7 +786,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
   circuits("fixtures", fixtures);
   circuits("runs", runs);
 
-  return {
+  const plan: Plan = {
     vertices,
     walls,
     openings,
@@ -755,6 +799,21 @@ function parsePlanData(data: Data, prefix: string): Plan {
     runs,
     background,
   };
+  // A window of an old file has no style. It gets hinged leaves that open into the room, like
+  // most windows: two leaves if it is wider than WIDE_WINDOW.
+  const oldWindows = list(data, "openings")
+    .map((raw, i) =>
+      raw.style === undefined && openings[i]?.kind === "window" ? openings[i] : null,
+    )
+    .filter((o): o is Opening => o !== null);
+  if (oldWindows.length > 0) {
+    const found = findRooms(plan);
+    for (const o of oldWindows) {
+      o.swing = roomSide(plan, o, found) ?? o.swing;
+      if (o.width > WIDE_WINDOW) o.leaves = 2;
+    }
+  }
+  return plan;
 }
 
 /** Reads a note. A note without a text and without photos is no note. */

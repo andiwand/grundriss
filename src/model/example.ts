@@ -6,12 +6,13 @@
 import { addStoryOnTop, emptyBuilding } from "./building";
 import { newFurniture } from "./furniture";
 import { distance } from "./geometry";
+import { roomSide, WIDE_WINDOW } from "./openings";
 import { addOpening, addStair, addVertex, addWall, wallEnds } from "./plan";
 import { faceInfo } from "./pv";
 import { newRoof } from "./roof";
 import { editRoomInfo, findRooms, pointInPolygon } from "./rooms";
 import { newFixture, newRun } from "./services";
-import type { Building, OpeningKind, Plan, Point, Story } from "./types";
+import type { Building, OpeningKind, OpeningStyle, Plan, Point, Story } from "./types";
 
 type Segment = [Point, Point, number];
 
@@ -57,7 +58,13 @@ function opening(
   plan: Plan,
   kind: OpeningKind,
   at: Point,
-  size: { width?: number; height?: number; sill?: number; swing?: 1 | -1 } = {},
+  size: {
+    width?: number;
+    height?: number;
+    sill?: number;
+    swing?: 1 | -1;
+    style?: OpeningStyle;
+  } = {},
 ): void {
   const wall = plan.walls.find((w) => {
     const [a, b] = wallEnds(plan, w);
@@ -70,6 +77,11 @@ function opening(
   const [a] = wallEnds(plan, wall);
   const o = addOpening(plan, wall.id, kind, distance(a, at));
   Object.assign(o, size);
+  // A window opens into the room, with two leaves if it is wide, like a new window of the editor.
+  if (kind === "window") {
+    o.swing = size.swing ?? roomSide(plan, o) ?? 1;
+    if (o.width > WIDE_WINDOW) o.leaves = 2;
+  }
 }
 
 function name(plan: Plan, at: Point, text: string): void {
@@ -124,16 +136,17 @@ function groundFloor(story: Story): void {
   opening(story, "door", p(6.45, 4), { width: 0.9 });
   opening(story, "door", p(7, 2.2));
   opening(story, "door", p(9.5, 3.8));
-  opening(story, "door", p(7, 6.4));
+  // The bedroom door opens into the bedroom, away from the dining table.
+  opening(story, "door", p(7, 6.4), { swing: -1 });
   // Windows: large glass to the south garden, smaller ones elsewhere.
-  opening(story, "window", p(2, 9), { width: 2.4, height: 2.2, sill: 0 });
+  opening(story, "window", p(2, 9), { width: 2.4, height: 2.2, sill: 0, style: "sliding" });
   opening(story, "window", p(5.2, 9), { width: 1.6, height: 1.5, sill: 0.7 });
   opening(story, "window", p(9.5, 9), { width: 1.8 });
   opening(story, "window", p(0, 6.5), { width: 1.4 });
   opening(story, "window", p(0, 2), { width: 1.2 });
   opening(story, "window", p(2, 0), { width: 1.4 });
   opening(story, "window", p(10.75, 0), { width: 0.8, height: 0.9, sill: 1.3 });
-  opening(story, "window", p(12, 7), { width: 1.4 });
+  opening(story, "window", p(12, 6.6), { width: 1.2 });
   opening(story, "window", p(12, 2.5), { width: 1.0 });
 
   name(story, p(2, 2), "Kitchen");
@@ -155,13 +168,14 @@ function groundFloor(story: Story): void {
   furniture(story, "coffee-table", p(3.4, 6.1));
   furniture(story, "armchair", p(1.2, 5.8), 270);
   furniture(story, "shelf", p(0.35, 7.6), 270);
-  // The table spans x 5.15 to 6.05. The chairs stand beside it and face it.
-  furniture(story, "table", p(5.6, 7.3), 90, { width: 1.6, depth: 0.9 });
+  // The table spans x 5.15 to 6.05. The chairs stand beside it and face it. The window behind
+  // the table opens over it.
+  furniture(story, "table", p(5.6, 7.15), 90, { width: 1.6, depth: 0.9 });
   for (const [x, y, r] of [
-    [4.88, 6.85, 270],
-    [4.88, 7.75, 270],
-    [6.32, 6.85, 90],
-    [6.32, 7.75, 90],
+    [4.88, 6.7, 270],
+    [4.88, 7.6, 270],
+    [6.32, 6.7, 90],
+    [6.32, 7.6, 90],
   ]) {
     furniture(story, "chair", p(x, y), r);
   }
@@ -188,7 +202,7 @@ function groundFloor(story: Story): void {
   furniture(story, "bed-double", p(9.6, 6.06), 0);
   furniture(story, "nightstand", p(8.45, 5.26), 0);
   furniture(story, "nightstand", p(10.75, 5.26), 0);
-  furniture(story, "wardrobe", p(11.55, 7.6), 90);
+  furniture(story, "wardrobe", p(11.55, 8.1), 90);
 
   // Electricity: sockets, switches, and lights.
   const board = fixture(story, "board", p(7.13, 1.2), 90);

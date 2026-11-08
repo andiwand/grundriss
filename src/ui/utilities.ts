@@ -18,6 +18,7 @@ import {
   systemColor,
 } from "../model/services";
 import type { PvArray, ServiceSystem } from "../model/types";
+import { renderConflicts } from "./conflicts";
 import { $, cached, doc, editor, HINTS, shell, showStatus } from "./context";
 import { pvSourceNote, renderHeatingSystem } from "./energy";
 import {
@@ -129,6 +130,7 @@ export function renderInteriorPanel(): void {
     ),
     "note",
   );
+  renderConflicts();
   const rooms = findRooms(plan);
   if (rooms.length === 0) return;
   heading(t("Rooms"), "view2d");

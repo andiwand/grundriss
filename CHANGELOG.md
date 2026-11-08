@@ -4,6 +4,24 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Doors and windows: each one has a way to open (a hinged leaf, sliding, or fixed: a door
+  without a leaf, or fixed glass) and one or two leaves. A window opens into the room, and a
+  window wider than 1 m has two leaves. The 2D plan, the exports, and the 3D view show the
+  leaves; a door in 3D is open, so that you see its direction. Old files keep their doors; their
+  windows get leaves that open into the room.
+- Collisions: the plan marks objects that collide with a red dashed outline, and the panel lists
+  them: doors and windows that overlap or go into a corner, furniture in a wall, on a stair, or
+  on another piece, and furniture in the way of a door or a window. A new or moved door or window
+  goes to the nearest free place on its wall.
+- 3D editing: click an object in the 3D view to select it. Drag a selected piece of furniture, a
+  device, a stair, or a chimney to move it, and a door or a window to move it along its wall.
+  The object under the mouse shows in a color.
+- Variants: open a variant to change it in all topics, also its walls, rooms, and furniture,
+  while the plan stays. "Another floor plan" starts a variant for a new layout, for example
+  with a wall less. The estimate counts the walls to remove and to build, the new openings, and
+  the openings to close, and warns if a wall to remove can carry a load. A switch in the top bar
+  shows which variant is open. The variants work without the climate; only the energy cost
+  needs it.
 - Phone: the status line no longer lies under the sheet of the panel. The sheet, the status line,
   and the bar at the bottom keep their places also when the toolbar of the browser moves.
 - Projects page: one column in the middle of the window, without a large box. Three tiles at the

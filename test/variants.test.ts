@@ -9,13 +9,20 @@ import {
   addInsulation,
   addMeasure,
   applyVariant,
+  hasOwnLayout,
   measuresFor,
   measureVariant,
   MEASURES,
+  planBuilding,
   sameAsPlan,
+  switchVariant,
   variantOf,
   withVariant,
 } from "../src/model/variants";
+import { isOuterWall } from "../src/model/energy";
+import { layoutChanges, noLayoutChange } from "../src/model/layout";
+import { removeWall, splitWall, wallEnds } from "../src/model/plan";
+import { estimateItems } from "../src/model/renovation";
 import vienna from "./fixtures/vienna-climate.json";
 
 function house(): Building {
@@ -69,7 +76,7 @@ describe("variants", () => {
     const heated = measureVariant(building, preset("heated-cellar"));
     expect(heated.unheated).not.toContain(cellar.id);
     applyVariant(building, heated);
-    expect(cellar.heated).toBe(true);
+    expect(building.stories.find((s) => s.id === cellar.id)!.heated).toBe(true);
     expect(sameAsPlan(building, heated)).toBe(true);
     // The variant keeps its own copy of the envelope.
     building.envelope.windowU = 2;
@@ -109,5 +116,90 @@ describe("measures", () => {
     const variant = measureVariant(building, preset("pv"));
     expect(variant.pv).toHaveLength(1);
     expect(building.pv).toHaveLength(0);
+  });
+});
+
+describe("variants with a floor plan", () => {
+  /** An inner wall of the ground floor, and its length. */
+  function innerWall(building: Building) {
+    const story = building.stories[0];
+    const wall = story.walls.find((w) => !isOuterWall(story, w) && w.thickness < 0.24)!;
+    const [a, b] = wallEnds(story, wall);
+    return { id: wall.id, length: Math.hypot(b.x - a.x, b.y - a.y), height: wall.height };
+  }
+
+  it("opens a variant, keeps its own floor plan, and goes back to the plan", () => {
+    const building = house();
+    const variant = variantOf(building, "Open kitchen");
+    building.variants.push(variant);
+    const wall = innerWall(building);
+    const walls = building.stories[0].walls.length;
+
+    switchVariant(building, variant.id);
+    expect(building.variant).toBe(variant.id);
+    removeWall(building.stories[0], wall.id);
+    expect(hasOwnLayout(building, variant)).toBe(true);
+    expect(planBuilding(building).stories[0].walls).toHaveLength(walls);
+
+    switchVariant(building, null);
+    expect(building.variant).toBeNull();
+    expect(building.base).toBeNull();
+    expect(building.stories[0].walls).toHaveLength(walls);
+    expect(variant.layout!.stories[0].walls).toHaveLength(walls - 1);
+    expect(withVariant(building, variant).stories[0].walls).toHaveLength(walls - 1);
+    // The copies of the variant have no background image.
+    expect(variant.layout!.stories.every((s) => s.background === null)).toBe(true);
+  });
+
+  it("keeps no floor plan for a variant that only changes the energy", () => {
+    const building = house();
+    const variant = variantOf(building, "Roof");
+    building.variants.push(variant);
+    switchVariant(building, variant.id);
+    addMeasure(building, variant, preset("roof"));
+    switchVariant(building, null);
+    expect(variant.layout).toBeNull();
+    expect(sameAsPlan(building, variant)).toBe(false);
+  });
+
+  it("writes the plan into the file, and opens the open variant again", () => {
+    const building = house();
+    const variant = variantOf(building, "Open kitchen");
+    building.variants.push(variant);
+    const wall = innerWall(building);
+    switchVariant(building, variant.id);
+    removeWall(building.stories[0], wall.id);
+    const data = JSON.parse(serializeBuilding(building));
+    // An app without open variants reads the plan.
+    expect(data.stories[0].walls.some((w: { id: string }) => w.id === wall.id)).toBe(true);
+    expect(data.base).toBeUndefined();
+    const read = parseBuilding(JSON.stringify(data));
+    expect(read.variant).toBe(variant.id);
+    expect(read.stories[0].walls.some((w) => w.id === wall.id)).toBe(false);
+    switchVariant(read, null);
+    expect(read.stories[0].walls.some((w) => w.id === wall.id)).toBe(true);
+  });
+
+  it("estimates the cost of a removed wall", () => {
+    const building = house();
+    const variant = variantOf(building, "Open kitchen");
+    building.variants.push(variant);
+    const wall = innerWall(building);
+    switchVariant(building, variant.id);
+    removeWall(building.stories[0], wall.id);
+    const changes = layoutChanges(planBuilding(building), building);
+    expect(changes.removed).toBeCloseTo(wall.length * wall.height, 1);
+    expect(changes.added).toBe(0);
+    const items = estimateItems(building, variant);
+    expect(items.map((i) => i.kind)).toContain("layout");
+    // A split wall is the same wall, so it costs nothing.
+    switchVariant(building, null);
+    const other = variantOf(building, "Split");
+    building.variants.push(other);
+    switchVariant(building, other.id);
+    const story = building.stories[0];
+    const [a, b] = wallEnds(story, story.walls[0]);
+    splitWall(story, story.walls[0].id, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    expect(noLayoutChange(layoutChanges(planBuilding(building), building))).toBe(true);
   });
 });

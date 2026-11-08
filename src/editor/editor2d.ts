@@ -79,6 +79,8 @@ import {
   type MoveOrigin,
 } from "../model/plan";
 import { findRooms, pointInPolygon, roomLabel } from "../model/rooms";
+import { conflictIds, planConflicts } from "../model/conflicts";
+import { freeOffset, roomSide, WIDE_WINDOW } from "../model/openings";
 import type {
   Chimney,
   Fixture,
@@ -592,7 +594,10 @@ export class Editor2D {
         // An opening moves along its wall. The component of `delta` along the wall moves it.
         const [a, b] = wallEnds(plan, wall);
         const length = distance(a, b);
-        if (length > 0) opening.offset += dot(delta, scale(sub(b, a), 1 / length));
+        if (length > 0) {
+          const wanted = opening.offset + dot(delta, scale(sub(b, a), 1 / length));
+          opening.offset = freeOffset(plan, opening, wanted);
+        }
       }
     });
   }
@@ -1080,8 +1085,7 @@ export class Editor2D {
           const length = distance(a, b);
           const along = closestOnSegment(world, a, b).t * length;
           const offset = e.altKey ? along : Math.round(along / GRID_STEP) * GRID_STEP;
-          const half = Math.min(opening.width, length) / 2;
-          opening.offset = clamp(offset, half, length - half);
+          opening.offset = freeOffset(plan, opening, offset);
         });
         break;
       case "roof-corner": {
@@ -1467,9 +1471,15 @@ export class Editor2D {
       const wall = findWall(plan, hit.wall.id)!;
       const [a, b] = wallEnds(plan, wall);
       const opening = addOpening(plan, wall.id, kind, hit.t * distance(a, b));
-      // A door opens to the side of the wall where the user clicked.
+      // The opening goes to the nearest free place on the wall, so that it does not overlap
+      // another opening.
+      opening.offset = freeOffset(plan, opening, opening.offset);
+      // A door opens to the side of the wall where the user clicked. A window opens into the
+      // room, like most windows.
       const side = perpendicular(sub(b, a));
-      opening.swing = dot(sub(world, hit.point), side) < 0 ? -1 : 1;
+      const clicked = dot(sub(world, hit.point), side) < 0 ? -1 : 1;
+      opening.swing = kind === "window" ? (roomSide(plan, opening) ?? clicked) : clicked;
+      if (kind === "window" && opening.width > WIDE_WINDOW) opening.leaves = 2;
       id = opening.id;
     });
     this.select({ kind: "opening", id });
@@ -1494,6 +1504,15 @@ export class Editor2D {
   }
 
   // ----- Drawing -----
+
+  /** The ids of the objects of the plan with a collision. A change gives a new plan object. */
+  private conflictCache: { plan: Plan; ids: Set<string> } | null = null;
+  private conflicts(plan: Plan): Set<string> {
+    if (this.conflictCache?.plan !== plan) {
+      this.conflictCache = { plan, ids: conflictIds(planConflicts(plan)) };
+    }
+    return this.conflictCache.ids;
+  }
 
   render(): void {
     const plan = this.doc.plan;
@@ -1688,16 +1707,20 @@ export class Editor2D {
       const element = svg(
         "g",
         {
-          class: `opening ${opening.kind}${this.isSelected("opening", opening.id) ? " selected" : ""}`,
+          class: `opening ${opening.kind}${this.isSelected("opening", opening.id) ? " selected" : ""}${this.conflicts(plan).has(opening.id) ? " conflict" : ""}`,
           "data-kind": "opening",
           "data-id": opening.id,
         },
         group,
       );
       svg("polygon", { points: points(shape.gap), class: "gap" }, element);
-      if (shape.kind === "door") {
-        const { hinge, leaf, arc } = shape;
-        svg("line", { x1: hinge.x, y1: hinge.y, x2: leaf.x, y2: leaf.y, class: "leaf" }, element);
+      for (const [start, end] of shape.glass) {
+        svg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "glass" }, element);
+      }
+      for (const [start, end] of shape.leaves) {
+        svg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "leaf" }, element);
+      }
+      for (const arc of shape.arcs) {
         svg(
           "path",
           {
@@ -1706,9 +1729,6 @@ export class Editor2D {
           },
           element,
         );
-      } else {
-        const [start, end] = shape.glass;
-        svg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "glass" }, element);
       }
     }
   }
@@ -1839,7 +1859,7 @@ export class Editor2D {
       const element = svg(
         "g",
         {
-          class: selected ? "piece selected" : "piece",
+          class: `piece${selected ? " selected" : ""}${this.conflicts(plan).has(piece.id) ? " conflict" : ""}`,
           "data-kind": "furniture",
           "data-id": piece.id,
         },

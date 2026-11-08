@@ -219,14 +219,32 @@ export const ENERGY: Record<string, string> = {
   "Add a variant…": "Variante hinzufügen…",
   "Copy of the plan": "Kopie des Plans",
   New: "Neu",
-  "A variant starts from the plan. Add measures to it, or put it into the plan with the check mark, change it in the other topics, and save it back with the disk. The cost is an estimate from usual prices of the region, without the scaffold. Type the price of a real offer to replace it. The payback time counts the interest and the change of the energy prices. For Germany, the app estimates the federal subsidy (BEG EM, 2025, without the bonus for the income and the iSFP). For Austria, the programs of the federal government and the states change often: see umweltfoerderung.at and your state, and type the amount. Check all rules before you decide.":
-    "Eine Variante beginnt beim Plan. Fügen Sie ihr Maßnahmen hinzu, oder übernehmen Sie sie mit dem Häkchen in den Plan, ändern Sie sie in den anderen Bereichen und speichern Sie sie mit der Diskette zurück. Die Kosten sind eine Schätzung aus üblichen Preisen der Region, ohne Gerüst. Geben Sie den Preis eines echten Angebots ein, um sie zu ersetzen. Die Amortisation berücksichtigt die Zinsen und die Änderung der Energiepreise. Für Deutschland schätzt die App die Bundesförderung (BEG EM, 2025, ohne Einkommensbonus und iSFP). In Österreich ändern sich die Förderprogramme von Bund und Ländern oft: Sehen Sie auf umweltfoerderung.at und bei Ihrem Bundesland nach, und geben Sie den Betrag ein. Prüfen Sie alle Bedingungen, bevor Sie entscheiden.",
+  "A variant starts from the plan. Add measures to it, or open it and change it in all topics, also its walls and rooms: the changes go into the variant, and the plan stays. The check mark makes a variant the new plan. The cost is an estimate from usual prices of the region, without the scaffold. Type the price of a real offer to replace it. The payback time counts the interest and the change of the energy prices. For Germany, the app estimates the federal subsidy (BEG EM, 2025, without the bonus for the income and the iSFP). For Austria, the programs of the federal government and the states change often: see umweltfoerderung.at and your state, and type the amount. Check all rules before you decide.":
+    "Eine Variante beginnt beim Plan. Fügen Sie ihr Maßnahmen hinzu, oder öffnen Sie sie und ändern Sie sie in allen Bereichen, auch ihre Wände und Räume: Die Änderungen gehen in die Variante, und der Plan bleibt. Das Häkchen macht eine Variante zum neuen Plan. Die Kosten sind eine Schätzung aus üblichen Preisen der Region, ohne Gerüst. Geben Sie den Preis eines echten Angebots ein, um sie zu ersetzen. Die Amortisation berücksichtigt die Zinsen und die Änderung der Energiepreise. Für Deutschland schätzt die App die Bundesförderung (BEG EM, 2025, ohne Einkommensbonus und iSFP). In Österreich ändern sich die Förderprogramme von Bund und Ländern oft: Sehen Sie auf umweltfoerderung.at und bei Ihrem Bundesland nach, und geben Sie den Betrag ein. Prüfen Sie alle Bedingungen, bevor Sie entscheiden.",
   "Name of the variant": "Name der Variante",
   "The plan has this variant": "Der Plan hat diese Variante",
-  "Use this variant in the plan": "Diese Variante in den Plan übernehmen",
+  "Make this variant the plan": "Diese Variante zum Plan machen",
+  "Open this variant to see and change it": "Diese Variante öffnen, um sie zu sehen und zu ändern",
+  "Back to the plan": "Zurück zum Plan",
+  'You see and edit the variant "{name}". The plan does not change.':
+    "Sie sehen und bearbeiten die Variante „{name}“. Der Plan ändert sich nicht.",
+  "You see and edit the plan.": "Sie sehen und bearbeiten den Plan.",
+  'You see and edit the variant "{name}". The numbers below compare with the plan.':
+    "Sie sehen und bearbeiten die Variante „{name}“. Die Zahlen unten vergleichen mit dem Plan.",
+  "Another floor plan": "Anderer Grundriss",
+  "Floor plan {count}": "Grundriss {count}",
+  "Own floor plan: {rooms} rooms, {area} m² (the plan: {plan} rooms)":
+    "Eigener Grundriss: {rooms} Räume, {area} m² (der Plan: {plan} Räume)",
+  "A wall to remove can carry a load. Ask a structural engineer before you plan it.":
+    "Eine Wand, die wegfällt, kann tragend sein. Fragen Sie einen Statiker, bevor Sie das planen.",
+  "Remove walls, {area} m²": "Wände abbrechen, {area} m²",
+  "New inner walls, {area} m²": "Neue Innenwände, {area} m²",
+  "Cuts for new openings: {count}": "Wanddurchbrüche für neue Öffnungen: {count}",
+  "New doors: {count}": "Neue Türen: {count}",
+  "New windows, {area} m²": "Neue Fenster, {area} m²",
+  "Close openings, {area} m²": "Öffnungen schließen, {area} m²",
   'The plan now has the variant "{name}". Undo goes back.':
     "Der Plan hat jetzt die Variante „{name}“. Rückgängig stellt den alten Stand her.",
-  "Save the plan into this variant": "Den Plan in diese Variante speichern",
   "Delete the variant": "Variante löschen",
   "Cost €": "Kosten €",
   "{amount} (estimate)": "{amount} (Schätzung)",

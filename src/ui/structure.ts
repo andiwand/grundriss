@@ -8,6 +8,7 @@ import { halfHipHeight, presetSides } from "../model/roofshape";
 import type { Room } from "../model/rooms";
 import { findRooms, planOutline } from "../model/rooms";
 import type { Dormer, Roof, RoofKind, RoofSide, RoofWindow, Story } from "../model/types";
+import { renderConflicts } from "./conflicts";
 import { doc, editor, shell, showStatus } from "./context";
 import {
   button,
@@ -77,6 +78,7 @@ export function renderStructurePanel(): void {
     [`${fmt(area, 1)} m²`, t("area")],
   ]);
   paragraph(t("The area is inside the center lines of the walls."), "note");
+  renderConflicts();
   // Before the first wall, the background comes first, because the tracing starts with it.
   if (plan.walls.length === 0) {
     renderBackgroundPanel();

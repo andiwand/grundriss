@@ -52,6 +52,28 @@ test("shows each topic with its panel", async ({ page }) => {
   await expect(page.locator("#contents")).toBeVisible();
 });
 
+test("opens a variant with another floor plan, and goes back to the plan", async ({ page }) => {
+  await openApp(page);
+  test.skip(await isPhone(page), "The test deletes a wall with the keyboard.");
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  await page.locator('[data-topic-tab="renovation"]').click();
+  await page.locator('select[aria-label="Add a variant"]').selectOption("layout");
+  // The new variant is open in the structure, and the switch shows it.
+  await expect(page.locator("#variant-switch")).toHaveClass(/open/);
+  await expect(page.locator('[data-topic-tab="structure"]')).toHaveClass(/active/);
+  const labels = page.locator("#plan-2d .room-label");
+  const rooms = await labels.count();
+  // A wall of the variant goes away, so a room is no longer closed.
+  // A click near the end of the wall, away from its window.
+  const box = (await page.locator('#plan-2d [data-kind="wall"]').first().boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.1, box.y + box.height / 2);
+  await page.keyboard.press("Delete");
+  await expect.poll(() => labels.count()).toBeLessThan(rooms);
+  await page.locator("#variant-switch").selectOption("");
+  await expect(page.locator("#variant-switch")).not.toHaveClass(/open/);
+  await expect(labels).toHaveCount(rooms);
+});
+
 test("exports the report and the quantities", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();

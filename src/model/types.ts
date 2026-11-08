@@ -57,6 +57,13 @@ export type Hinge = "a" | "b";
 export type Swing = 1 | -1;
 
 /**
+ * How a door or a window opens. A hinged leaf turns on its hinge, a sliding leaf moves along the
+ * wall, and a fixed opening does not open: a fixed window is fixed glass, and a fixed door is an
+ * opening without a leaf.
+ */
+export type OpeningStyle = "hinged" | "sliding" | "fixed";
+
+/**
  * A door or a window in a wall. The opening belongs to the wall, so it moves with the wall.
  * The offset is the distance from the vertex `a` of the wall to the center of the opening.
  */
@@ -70,9 +77,16 @@ export interface Opening {
   width: number;
   height: number;
   sill: number;
-  /** Only for a door. */
+  /** How the opening opens. */
+  style: OpeningStyle;
+  /** The number of leaves: 2 for a double door or a window with two casements. */
+  leaves: 1 | 2;
+  /**
+   * The end of a single hinged leaf. A single sliding leaf slides to this end. Two leaves have
+   * their hinges at the two ends.
+   */
   hinge: Hinge;
-  /** Only for a door. */
+  /** The side to which a hinged leaf opens, and the side of a sliding leaf. */
   swing: Swing;
 }
 
@@ -339,18 +353,36 @@ export interface Household {
 }
 
 /**
- * A variant of the building for the energy and the renovation: the envelope, the heating, the
- * heated stories, the household with its battery, and the PV fields. `unheated` has the ids of
- * the unheated stories. `cost` is the investment in currency, or null for the estimate of
- * `renovation.ts`, and `subsidy` the part that a subsidy pays.
+ * The floor plan of a variant: copies of the stories and the roofs. The copies have no background
+ * image, because all variants use the background of the plan. `heated` of the copies is true; the
+ * variant has the unheated stories in `unheated`.
  */
-export interface Variant {
-  id: Id;
-  name: string;
+export interface Layout {
+  stories: Story[];
+  roofs: Roof[];
+}
+
+/**
+ * The state of a variant: the envelope, the heating, the heated stories, the household with its
+ * battery, the PV fields, and the floor plan. `unheated` has the ids of the unheated stories.
+ * `layout` is null if the variant has the floor plan of the plan.
+ */
+export interface VariantState {
   envelope: Envelope;
   unheated: Id[];
   household: Household;
   pv: PvArray[];
+  layout: Layout | null;
+}
+
+/**
+ * A variant of the building, for example a renovation or another floor plan. `cost` is the
+ * investment in currency, or null for the estimate of `renovation.ts`, and `subsidy` the part
+ * that a subsidy pays.
+ */
+export interface Variant extends VariantState {
+  id: Id;
+  name: string;
   cost: number | null;
   subsidy: number;
 }
@@ -618,8 +650,15 @@ export interface Building {
   household: Household;
   /** The prices and the interest of the renovation. */
   finance: Finance;
-  /** The variants of the energy, to compare with the plan. */
+  /** The variants of the energy, the renovation, and the floor plan, to compare with the plan. */
   variants: Variant[];
+  /**
+   * The variant that the building shows now, so that the user edits it, or null for the plan.
+   * While a variant is open, `base` keeps the state of the plan (see `switchVariant`). A file
+   * stores the plan in the building and the open variant in its variant, without `base`.
+   */
+  variant: Id | null;
+  base: VariantState | null;
   pv: PvArray[];
   /** The place of the building, or null. */
   location: Location | null;

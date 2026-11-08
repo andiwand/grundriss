@@ -18,6 +18,7 @@ import {
 } from "../model/building";
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
 import { wallSideColor } from "../model/colors";
+import { openingShape } from "../model/drawing";
 import { distance, perpendicular } from "../model/geometry";
 import { wallEnds } from "../model/plan";
 import { pvPanels } from "../model/pv";
@@ -31,6 +32,7 @@ import type {
   Fixture,
   Furniture,
   Id,
+  Item,
   Point,
   Roof,
   Run,
@@ -74,6 +76,8 @@ const materials = {
     roughness: 0.1,
   }),
   stair: new THREE.MeshStandardMaterial({ color: 0xb98b5e, roughness: 0.75 }),
+  leaf: new THREE.MeshStandardMaterial({ color: 0xe9e4da, roughness: 0.6 }),
+  frame: new THREE.MeshStandardMaterial({ color: 0xf7f7f5, roughness: 0.5 }),
   chimney: new THREE.MeshStandardMaterial({ color: 0xa0523d, roughness: 0.95 }),
   roofWindow: new THREE.MeshStandardMaterial({
     color: 0x2b3a4a,
@@ -118,6 +122,32 @@ const materials = {
     opacity: 0.5,
   }),
 };
+
+/** The colors of a selected object and of an object under the mouse. */
+const HIGHLIGHT: Record<Highlight, { color: number; amount: number }> = {
+  selected: { color: 0x2f6bff, amount: 0.45 },
+  hover: { color: 0x2f6bff, amount: 0.2 },
+};
+const highlights = new Map<string, THREE.Material>();
+
+/** A copy of the material with the color of the highlight. The copies are shared. */
+function highlighted(material: THREE.Material, state: Highlight): THREE.Material {
+  const key = `${material.uuid}:${state}`;
+  let result = highlights.get(key);
+  if (!result) {
+    const { color, amount } = HIGHLIGHT[state];
+    const copy = material.clone();
+    if (copy instanceof THREE.MeshStandardMaterial) {
+      copy.emissive = new THREE.Color(color);
+      copy.emissiveIntensity = amount;
+    } else if ("color" in copy && copy.color instanceof THREE.Color) {
+      copy.color.lerp(new THREE.Color(color), amount);
+    }
+    highlights.set(key, copy);
+    result = copy;
+  }
+  return result;
+}
 
 /** The materials of the generic furniture, one for each finish. */
 const finishes: Record<Finish, THREE.Material> = {
@@ -164,7 +194,41 @@ const ALL_LAYERS: ServiceLayers = {
   pv: true,
 };
 
+/** An object of the plan under the pointer in the 3D view. */
+export interface Pick {
+  item: Item;
+  storyId: Id;
+  /** The point on the object, in the world. */
+  point: THREE.Vector3;
+}
+
+/**
+ * The functions of the editing in the 3D view (see src/ui/edit3d.ts). The view only finds the
+ * objects under the pointer and gives the rays of a drag. It does not change the building.
+ */
+export interface EditHandlers {
+  /** A click or a tap on an object, or on nothing. */
+  click(pick: Pick | null, e: PointerEvent): void;
+  /** The mouse is over an object, or over nothing. */
+  hover(pick: Pick | null): void;
+  /** A press on an object. True if the editing takes the drag, so that the view does not turn. */
+  press(pick: Pick, e: PointerEvent): boolean;
+  /** The pointer moves while the editing has the drag. */
+  drag(ray: THREE.Ray, e: PointerEvent): void;
+  /** The drag ends. */
+  release(): void;
+}
+
+type Highlight = "selected" | "hover";
+
+/** A movement of the pointer shorter than this, in pixels, is a click and not a drag. */
+const CLICK_DISTANCE = 6;
+
 export class View3D {
+  /** The editing, or null for a view that only shows the building. */
+  edit: EditHandlers | null = null;
+  private selected: Item[] = [];
+  private hovered: Item | null = null;
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
@@ -205,6 +269,9 @@ export class View3D {
     // The wheel zooms to the point under the cursor, and a right drag pans in the screen plane.
     this.controls.zoomToCursor = true;
     this.controls.screenSpacePanning = true;
+    // The editing comes first, so that a press on a selected object moves it and does not turn
+    // the view.
+    this.setupEditing();
     this.setupPivotRotation();
     new ResizeObserver(() => this.resize()).observe(container);
   }
@@ -300,6 +367,151 @@ export class View3D {
     element.addEventListener("pointercancel", end);
   }
 
+  /** The ray from the camera through the point of the pointer. */
+  private rayAt(e: { clientX: number; clientY: number }): THREE.Ray {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    return raycaster.ray;
+  }
+
+  /**
+   * The object of the plan under the pointer. The nearest visible mesh decides: a floor or a roof
+   * in front of an object hides it. The transparent ceilings of rooms do not hide anything.
+   */
+  pickAt(e: { clientX: number; clientY: number }): Pick | null {
+    const raycaster = new THREE.Raycaster();
+    raycaster.ray.copy(this.rayAt(e));
+    const hit = raycaster
+      .intersectObject(this.content, true)
+      .find(
+        (h) =>
+          h.object instanceof THREE.Mesh &&
+          h.object.visible &&
+          h.object.material !== materials.ceiling,
+      );
+    if (!hit) return null;
+    let item: Item | null = null;
+    for (let object: THREE.Object3D | null = hit.object; object; object = object.parent) {
+      item ??= (object.userData.item as Item | undefined) ?? null;
+      const storyId = object.userData.storyId as Id | undefined;
+      if (storyId) return item ? { item, storyId, point: hit.point.clone() } : null;
+    }
+    return null;
+  }
+
+  /** The selected objects and the object under the mouse get a color in the view. */
+  setSelection(items: Item[]): void {
+    this.selected = items;
+    this.applyHighlight();
+  }
+
+  private setHovered(item: Item | null): void {
+    if (item?.id === this.hovered?.id && item?.kind === this.hovered?.kind) return;
+    this.hovered = item;
+    this.applyHighlight();
+  }
+
+  private applyHighlight(): void {
+    const has = (list: Item[], item: Item) =>
+      list.some((i) => i.kind === item.kind && i.id === item.id);
+    const visit = (object: THREE.Object3D, state: Highlight | null) => {
+      const item = object.userData.item as Item | undefined;
+      if (item) {
+        state = has(this.selected, item)
+          ? "selected"
+          : this.hovered && has([this.hovered], item)
+            ? "hover"
+            : null;
+      }
+      if (object instanceof THREE.Mesh) {
+        object.userData.material ??= object.material;
+        const original = object.userData.material as THREE.Material | THREE.Material[];
+        object.material = state
+          ? Array.isArray(original)
+            ? original.map((m) => highlighted(m, state!))
+            : highlighted(original, state)
+          : original;
+      }
+      for (const child of object.children) visit(child, state);
+    };
+    visit(this.content, null);
+    this.requestRender();
+  }
+
+  /**
+   * The pointer events of the editing: a click selects, the mouse highlights the object under
+   * it, and a press on an object that the editing takes starts a drag. The listeners run in the
+   * capture phase, before the rotation of the view and the controls.
+   */
+  private setupEditing(): void {
+    const element = this.renderer.domElement;
+    let down: { x: number; y: number; id: number } | null = null;
+    let dragging: number | null = null;
+    let hoverEvent: PointerEvent | null = null;
+    element.addEventListener(
+      "pointerdown",
+      (e) => {
+        down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+        if (!this.edit || e.button !== 0 || e.ctrlKey || e.metaKey || dragging !== null) return;
+        const pick = this.pickAt(e);
+        if (pick && this.edit.press(pick, e)) {
+          e.stopImmediatePropagation();
+          element.setPointerCapture(e.pointerId);
+          dragging = e.pointerId;
+        }
+      },
+      { capture: true },
+    );
+    element.addEventListener(
+      "pointermove",
+      (e) => {
+        if (dragging === e.pointerId) {
+          e.stopImmediatePropagation();
+          this.edit?.drag(this.rayAt(e), e);
+          return;
+        }
+        if (!this.edit || e.pointerType !== "mouse" || e.buttons !== 0) return;
+        // One test for each frame is enough for the hover.
+        if (!hoverEvent) {
+          requestAnimationFrame(() => {
+            const event = hoverEvent;
+            hoverEvent = null;
+            if (!event) return;
+            const pick = this.pickAt(event);
+            this.setHovered(pick?.item ?? null);
+            this.edit?.hover(pick);
+          });
+        }
+        hoverEvent = e;
+      },
+      { capture: true },
+    );
+    element.addEventListener("pointerleave", () => {
+      hoverEvent = null;
+      this.setHovered(null);
+    });
+    const end = (e: PointerEvent) => {
+      const click =
+        e.type === "pointerup" &&
+        down?.id === e.pointerId &&
+        Math.hypot(e.clientX - down.x, e.clientY - down.y) < CLICK_DISTANCE;
+      down = null;
+      if (dragging === e.pointerId) {
+        dragging = null;
+        e.stopImmediatePropagation();
+        this.edit?.release();
+      }
+      if (click) this.edit?.click(this.pickAt(e), e);
+    };
+    element.addEventListener("pointerup", end, { capture: true });
+    element.addEventListener("pointercancel", end, { capture: true });
+  }
+
   /** The meshes of the visible building, without the grid, the lights, and the north arrow. */
   get model(): THREE.Object3D {
     return this.content;
@@ -325,6 +537,7 @@ export class View3D {
     );
     const layers = view.layers ?? ALL_LAYERS;
     this.content.add(buildGroup(building, visible, roofs, layers, () => this.modelLoaded()));
+    this.applyHighlight();
     this.placeNorth(building);
     this.requestRender();
   }
@@ -430,9 +643,12 @@ function buildGroup(
   for (const story of stories) {
     const storyGroup = new THREE.Group();
     storyGroup.name = story.name;
+    storyGroup.userData.storyId = story.id;
     addStory(storyGroup, building, story, story !== lowest);
     for (const piece of story.furniture) {
-      storyGroup.add(furnitureObject(building, story, piece, onLoad));
+      const object = furnitureObject(building, story, piece, onLoad);
+      object.userData.item = { kind: "furniture", id: piece.id };
+      storyGroup.add(object);
     }
     addServices(storyGroup, story, layers);
     group.add(storyGroup);
@@ -612,13 +828,17 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
     const shape = stairShape(stair, rise);
     shape.steps.forEach((step, i) => {
       const mesh = prism(step, base, base + (i + 1) * shape.stepHeight, materials.stair, true);
-      if (mesh) group.add(mesh);
+      if (!mesh) return;
+      mesh.userData.item = { kind: "stair", id: stair.id };
+      group.add(mesh);
     });
   }
   for (const chimney of story.chimneys) {
     const { bottom, top } = chimneyExtent(building, story, chimney);
     const mesh = prism(chimneyOutline(chimney), bottom, top, materials.chimney, true);
-    if (mesh) group.add(mesh);
+    if (!mesh) continue;
+    mesh.userData.item = { kind: "chimney", id: chimney.id };
+    group.add(mesh);
   }
 }
 
@@ -773,6 +993,7 @@ function addWall(
   const openings = story.openings
     .filter((o) => o.wallId === wall.id)
     .map((o) => ({
+      opening: o,
       kind: o.kind,
       s0: Math.max(start, o.offset - o.width / 2),
       s1: Math.min(end, o.offset + o.width / 2),
@@ -947,22 +1168,62 @@ function addWall(
   }
 
   const mesh = body.build();
-  if (mesh) group.add(mesh);
+  if (mesh) {
+    mesh.userData.item = { kind: "wall", id: wall.id };
+    group.add(mesh);
+  }
 
-  // The glass of the windows, in the middle of the wall.
+  // The glass of the windows, and the leaves of the doors and the windows: the same lines as
+  // the 2D symbol (`openingShape`), from the sill to the head. A hinged door shows open by 90
+  // degrees, so that the 3D view shows the direction. A hinged window shows closed: a bar where
+  // two casements meet.
   for (const h of openings) {
-    if (h.kind !== "window") continue;
     const head = Math.min(h.head, top(h.s0), top(h.s1));
     if (head - h.sill < 1e-4) continue;
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(h.s1 - h.s0, head - h.sill, GLASS_THICKNESS),
-      materials.glass,
-    );
-    const middle = (h.s0 + h.s1) / 2;
-    glass.position.set(a.x + d.x * middle, base + (h.sill + head) / 2, a.y + d.y * middle);
-    glass.rotation.y = -Math.atan2(d.y, d.x);
-    group.add(glass);
+    const shape = openingShape(story, h.opening);
+    if (!shape) continue;
+    const item = { kind: "opening", id: h.opening.id };
+    const piece = (p: Point, q: Point, thickness: number, material: THREE.Material) => {
+      const mesh = segmentBox(p, q, base + h.sill, base + head, thickness, material);
+      if (!mesh) return;
+      mesh.userData.item = item;
+      group.add(mesh);
+    };
+    for (const [p, q] of shape.glass) piece(p, q, GLASS_THICKNESS, materials.glass);
+    if (h.kind === "door") {
+      for (const [p, q] of shape.leaves) piece(p, q, LEAF_THICKNESS, materials.leaf);
+    } else if (h.opening.style === "hinged" && h.opening.leaves === 2) {
+      const middle = (h.s0 + h.s1) / 2;
+      const bar = MULLION / 2;
+      piece(at(middle - bar, 0, 0), at(middle + bar, 0, 0), wall.thickness * 0.4, materials.frame);
+    }
   }
+}
+
+/** The thickness of the leaf of a door, and the width of the bar between two casements. */
+const LEAF_THICKNESS = 0.04;
+const MULLION = 0.08;
+
+/** A box along the plan line from p to q, from the height y0 to y1. */
+function segmentBox(
+  p: Point | THREE.Vector3,
+  q: Point | THREE.Vector3,
+  y0: number,
+  y1: number,
+  thickness: number,
+  material: THREE.Material,
+): THREE.Mesh | null {
+  // A Vector3 has the plan y in z.
+  const flat = (v: Point | THREE.Vector3): Point =>
+    v instanceof THREE.Vector3 ? { x: v.x, y: v.z } : v;
+  const a = flat(p);
+  const b = flat(q);
+  const length = distance(a, b);
+  if (length < 1e-4 || y1 - y0 < 1e-4) return null;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(length, y1 - y0, thickness), material);
+  mesh.position.set((a.x + b.x) / 2, (y0 + y1) / 2, (a.y + b.y) / 2);
+  mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+  return mesh;
 }
 
 /**
@@ -1374,7 +1635,10 @@ function upNormal(polygon: Vec3[]): Vec3 {
 function addServices(group: THREE.Group, story: Story, layers: ServiceLayers): void {
   const shown = (system: Fixture["system"]) => layers[system];
   for (const fixture of story.fixtures) {
-    if (shown(fixture.system)) group.add(fixtureObject(story, fixture));
+    if (!shown(fixture.system)) continue;
+    const object = fixtureObject(story, fixture);
+    object.userData.item = { kind: "fixture", id: fixture.id };
+    group.add(object);
   }
   for (const run of story.runs) {
     if (!shown(run.system)) continue;

@@ -5,18 +5,22 @@ import { fmt } from "../model/format";
 import { heatingEnergy } from "../model/heating";
 import { costItemText, estimateItems, subsidyEstimate, variantEconomy } from "../model/renovation";
 import type { Building, Variant } from "../model/types";
+import { layoutChanges } from "../model/layout";
+import { findRooms } from "../model/rooms";
 import {
   addMeasure,
   applyVariant,
+  hasOwnLayout,
   MEASURES,
   measuresFor,
   measureVariant,
+  planBuilding,
   sameAsPlan,
-  updateVariant,
+  switchVariant,
   variantOf,
   withVariant,
 } from "../model/variants";
-import { cached, doc, shell, showStatus } from "./context";
+import { $, cached, doc, editor, shell, showStatus } from "./context";
 import {
   button,
   euro,
@@ -31,15 +35,65 @@ import {
 } from "./panel";
 
 /**
+ * Opens the variant with the id, or the plan for null. The changes in all topics then go into the
+ * variant.
+ */
+export function openVariant(id: string | null): void {
+  const name = doc.building.variants.find((v) => v.id === id)?.name ?? "";
+  doc.editBuilding((b) => switchVariant(b, id));
+  editor.select(null);
+  showStatus(
+    id
+      ? t('You see and edit the variant "{name}". The plan does not change.', { name })
+      : t("You see and edit the plan."),
+  );
+}
+
+/** The switch of the variants in the top bar. It shows only if the plan has variants. */
+export function renderVariantSwitch(): void {
+  const select = $<HTMLSelectElement>("#variant-switch");
+  const building = doc.building;
+  if (!select.dataset.ready) {
+    select.dataset.ready = "1";
+    select.addEventListener("change", () => openVariant(select.value || null));
+  }
+  select.hidden = building.variants.length === 0;
+  document.body.classList.toggle("has-variants", !select.hidden);
+  const options: [string, string][] = [
+    ["", t("Plan")],
+    ...building.variants.map((v) => [v.id, v.name] as [string, string]),
+  ];
+  const key = JSON.stringify(options);
+  // A new list only after a change of the variants, so that an open list does not close.
+  if (select.dataset.key !== key) {
+    select.dataset.key = key;
+    select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+  }
+  select.value = building.variant ?? "";
+  select.classList.toggle("open", building.variant !== null);
+}
+
+/**
  * The renovation: the variants with their measures, their cost, and their economy against the
  * plan. Each variant is a copy of the envelope, the heating, the heated stories, the household,
- * and the PV.
+ * the PV, and, if the user changes it, the floor plan.
  */
 export function renderRenovationTopic(): void {
   const building = doc.building;
   heading(t("Renovation"), "coins");
-  const plan = cached("balance", () => energyBalance(doc.building));
+  const open = building.variants.find((v) => v.id === building.variant);
+  if (open) {
+    paragraph(
+      t('You see and edit the variant "{name}". The numbers below compare with the plan.', {
+        name: open.name,
+      }),
+      "note variant-open",
+    );
+    button(t("Back to the plan"), () => openVariant(null), { icon: "back" });
+  }
+  const plan = cached("plan-balance", () => energyBalance(planBuilding(doc.building)));
   if (!plan) {
+    // The variants and their cost work without the climate, but not the energy cost.
     paragraph(
       t(
         "The renovation compares the energy cost per year, so it needs the climate. Load it in the Location group of Energy.",
@@ -47,16 +101,16 @@ export function renderRenovationTopic(): void {
       "note",
     );
     button(t("Open Energy"), () => shell.setTopic("energy"), { icon: "gauge" });
-    return;
+  } else {
+    const heat = cached("plan-heating", () => heatingEnergy(planBuilding(doc.building)));
+    stats([
+      [euro(plan.cost), t("energy cost per year now")],
+      [`${fmt(plan.co2 / 1000, 1)} t`, t("CO₂ per year")],
+      heat
+        ? [`${fmt(heat.perArea, 0)} kWh/m² · ${heat.efficiencyClass}`, t("heat demand")]
+        : ["–", t("heat demand: draw rooms")],
+    ]);
   }
-  const heat = cached("heating", () => heatingEnergy(doc.building));
-  stats([
-    [euro(plan.cost), t("energy cost per year now")],
-    [`${fmt(plan.co2 / 1000, 1)} t`, t("CO₂ per year")],
-    heat
-      ? [`${fmt(heat.perArea, 0)} kWh/m² · ${heat.efficiencyClass}`, t("heat demand")]
-      : ["–", t("heat demand: draw rooms")],
-  ]);
   const finance = building.finance;
   const setFinance = (edit: (f: typeof finance) => void) =>
     doc.editBuilding((b) => edit(b.finance));
@@ -96,12 +150,26 @@ export function renderRenovationTopic(): void {
   add.append(
     new Option(t("Add a variant…"), "", true, true),
     new Option(t("Copy of the plan"), "copy"),
+    new Option(t("Another floor plan"), "layout"),
   );
-  for (const measure of MEASURES.filter((m) => m.available(building))) {
+  for (const measure of MEASURES.filter((m) => m.available(planBuilding(building)))) {
     add.append(new Option(t(measure.name), measure.id));
   }
   add.addEventListener("change", () => {
     const measure = MEASURES.find((m) => m.id === add.value);
+    if (add.value === "layout") {
+      // A new floor plan opens at once in the structure, where the user changes the walls.
+      let id = "";
+      const count = building.variants.length + 1;
+      doc.editBuilding((b) => {
+        const variant = variantOf(b, t("Floor plan {count}", { count }));
+        b.variants.push(variant);
+        id = variant.id;
+      });
+      openVariant(id);
+      shell.setTopic("structure");
+      return;
+    }
     doc.editBuilding((b) =>
       b.variants.push(
         measure
@@ -113,14 +181,14 @@ export function renderRenovationTopic(): void {
   field(t("New"), add);
   paragraph(
     t(
-      "A variant starts from the plan. Add measures to it, or put it into the plan with the check mark, change it in the other topics, and save it back with the disk. The cost is an estimate from usual prices of the region, without the scaffold. Type the price of a real offer to replace it. The payback time counts the interest and the change of the energy prices. For Germany, the app estimates the federal subsidy (BEG EM, 2025, without the bonus for the income and the iSFP). For Austria, the programs of the federal government and the states change often: see umweltfoerderung.at and your state, and type the amount. Check all rules before you decide.",
+      "A variant starts from the plan. Add measures to it, or open it and change it in all topics, also its walls and rooms: the changes go into the variant, and the plan stays. The check mark makes a variant the new plan. The cost is an estimate from usual prices of the region, without the scaffold. Type the price of a real offer to replace it. The payback time counts the interest and the change of the energy prices. For Germany, the app estimates the federal subsidy (BEG EM, 2025, without the bonus for the income and the iSFP). For Austria, the programs of the federal government and the states change often: see umweltfoerderung.at and your state, and type the amount. Check all rules before you decide.",
     ),
     "note",
   );
 }
 
 /** The card of one variant: its name, its actions, its measures, its cost, and its economy. */
-function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
+function variantCard(variant: Variant, plan: EnergyBalance | null): HTMLElement {
   const building = doc.building;
   const card = document.createElement("div");
   card.className = "variant";
@@ -135,13 +203,22 @@ function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
     if (value) editVariant(variant.id, (v) => (v.name = value));
   });
   const same = sameAsPlan(building, variant);
+  const isOpen = building.variant === variant.id;
+  card.classList.toggle("open", isOpen);
   const action = (iconName: IconName, title: string, act: () => void, disabled = false) =>
     iconButton(iconName, title, act, { disabled });
+  const openButton = action(
+    "view3d",
+    isOpen ? t("Back to the plan") : t("Open this variant to see and change it"),
+    () => openVariant(isOpen ? null : variant.id),
+  );
+  openButton.classList.toggle("active", isOpen);
   top.append(
     name,
+    openButton,
     action(
       "check",
-      same ? t("The plan has this variant") : t("Use this variant in the plan"),
+      same ? t("The plan has this variant") : t("Make this variant the plan"),
       () => {
         doc.editBuilding((b) =>
           applyVariant(
@@ -149,20 +226,18 @@ function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
             b.variants.find((v) => v.id === variant.id)!,
           ),
         );
+        editor.select(null);
         showStatus(
           t('The plan now has the variant "{name}". Undo goes back.', { name: variant.name }),
         );
       },
       same,
     ),
-    action(
-      "save",
-      t("Save the plan into this variant"),
-      () => editVariant(variant.id, (v, b) => updateVariant(v, b)),
-      same,
-    ),
     action("trash", t("Delete the variant"), () =>
-      doc.editBuilding((b) => (b.variants = b.variants.filter((v) => v.id !== variant.id))),
+      doc.editBuilding((b) => {
+        if (b.variant === variant.id) switchVariant(b, null);
+        b.variants = b.variants.filter((v) => v.id !== variant.id);
+      }),
     ),
   );
   card.append(top);
@@ -256,6 +331,30 @@ function variantCard(variant: Variant, plan: EnergyBalance): HTMLElement {
         : "";
     verdict.append(`${payback}${co2}`);
     card.append(values, verdict);
+  }
+
+  // A variant with its own floor plan: its rooms, and a warning for walls that can carry a load.
+  if (hasOwnLayout(building, variant)) {
+    const target = withVariant(building, variant);
+    const rooms = target.stories.flatMap((s) => findRooms(s));
+    const planRooms = planBuilding(building).stories.flatMap((s) => findRooms(s)).length;
+    const area = rooms.reduce((sum, r) => sum + r.area, 0);
+    const layout = document.createElement("div");
+    layout.className = "variant-values";
+    layout.textContent = t("Own floor plan: {rooms} rooms, {area} m² (the plan: {plan} rooms)", {
+      rooms: rooms.length,
+      area: fmt(area, 1),
+      plan: planRooms,
+    });
+    card.append(layout);
+    if (layoutChanges(planBuilding(building), target).bearing) {
+      const warning = document.createElement("div");
+      warning.className = "variant-warning";
+      warning.textContent = t(
+        "A wall to remove can carry a load. Ask a structural engineer before you plan it.",
+      );
+      card.append(warning);
+    }
   }
 
   // The items of the estimate, and a list to add one more measure.

@@ -6,7 +6,7 @@ import { fmt } from "./format";
 import { add, distance, perpendicular, scale, sub } from "./geometry";
 import { chimneyOutline, stairShape, type StairShape } from "./building";
 import { findWall, wallEnds, wallExtents } from "./plan";
-import type { Chimney, Dimension, Opening, Plan, Point, Stair, Wall } from "./types";
+import type { Chimney, Dimension, Opening, OpeningKind, Plan, Point, Stair, Wall } from "./types";
 
 /** The four corners of the body of a wall, in order around the body. */
 export function wallOutline(plan: Plan, wall: Wall): Point[] {
@@ -31,27 +31,27 @@ export interface Arc {
   sweep: 0 | 1;
 }
 
-export interface DoorShape {
-  kind: "door";
+/**
+ * The symbol of a door or a window. A window has its glass on the center line of the wall. A
+ * hinged leaf shows open by 90 degrees, with the path of its free end. A sliding leaf shows at
+ * its open place, along the face of the wall. The leaves of a window are thin in the drawing.
+ */
+export interface OpeningShape {
+  kind: OpeningKind;
   /** The hole in the wall. */
   gap: Point[];
-  hinge: Point;
-  /** The free end of the leaf, which is open by 90 degrees. */
-  leaf: Point;
-  /** The path of the free end of the leaf, from `leaf` to the closed position. */
-  arc: Arc;
+  /** The lines of the glass of a window. A sliding window has two panes. */
+  glass: [Point, Point][];
+  /** The leaves: from the hinge to the free end, or the place of a sliding leaf. */
+  leaves: [Point, Point][];
+  /** The paths of the free ends of the hinged leaves, from the open to the closed position. */
+  arcs: Arc[];
 }
-
-export interface WindowShape {
-  kind: "window";
-  gap: Point[];
-  /** The line of the glass, on the center line of the wall. */
-  glass: [Point, Point];
-}
-
-export type OpeningShape = DoorShape | WindowShape;
 
 const cross = (u: Point, v: Point) => u.x * v.y - u.y * v.x;
+
+/** The distance of a sliding leaf from the face of the wall, and of the panes of a window. */
+const SLIDE_GAP = 0.03;
 
 /** The symbol of a door or a window. It gives null if the wall is missing or has no length. */
 export function openingShape(plan: Plan, opening: Opening): OpeningShape | null {
@@ -63,30 +63,74 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
   const dir = scale(sub(b, a), 1 / length);
   const side = perpendicular(dir);
   const half = wall.thickness / 2;
-  const start = add(a, scale(dir, opening.offset - opening.width / 2));
-  const end = add(a, scale(dir, opening.offset + opening.width / 2));
-  const across = scale(side, half + 0.01);
-  const gap = [add(start, across), add(end, across), sub(end, across), sub(start, across)];
+  /** The point at s along the wall from `a`, at o across it (+ is the side of `side`). */
+  const at = (s: number, o: number) => add(a, add(scale(dir, s), scale(side, o)));
+  const s0 = opening.offset - opening.width / 2;
+  const s1 = opening.offset + opening.width / 2;
+  const gap = [
+    at(s0, half + 0.01),
+    at(s1, half + 0.01),
+    at(s1, -half - 0.01),
+    at(s0, -half - 0.01),
+  ];
+  const shape: OpeningShape = { kind: opening.kind, gap, glass: [], leaves: [], arcs: [] };
+  const window = opening.kind === "window";
+  const face = opening.swing * half;
+  const two = opening.leaves === 2;
 
-  if (opening.kind === "window") return { kind: "window", gap, glass: [start, end] };
+  if (window) {
+    if (opening.style === "sliding") {
+      // Two panes next to each other, a bit apart across the wall, which overlap in the middle.
+      const overlap = opening.width * 0.05;
+      shape.glass.push(
+        [at(s0, -SLIDE_GAP / 2), at(opening.offset + overlap, -SLIDE_GAP / 2)],
+        [at(opening.offset - overlap, SLIDE_GAP / 2), at(s1, SLIDE_GAP / 2)],
+      );
+      return shape;
+    }
+    shape.glass.push([at(s0, 0), at(s1, 0)]);
+  }
+  if (opening.style === "fixed") return shape;
 
-  // The hinge and the closed position of the free end are on the face of the swing side.
-  const face = scale(side, opening.swing * half);
-  const [hingeCenter, closedCenter] = opening.hinge === "a" ? [start, end] : [end, start];
-  const hinge = add(hingeCenter, face);
-  const closed = add(closedCenter, face);
-  const open = scale(side, opening.swing * opening.width);
-  const leaf = add(hinge, open);
-  // The arc turns from the open leaf to the closed leaf. The sign of the cross product gives
-  // the direction of the turn.
-  const sweep = cross(open, sub(closed, hinge)) > 0 ? 1 : 0;
-  return {
-    kind: "door",
-    gap,
-    hinge,
-    leaf,
-    arc: { center: hinge, radius: opening.width, from: leaf, to: closed, sweep },
-  };
+  if (opening.style === "sliding") {
+    // A sliding leaf moves along the wall, on the face of the swing side. Two leaves move apart.
+    const o = face + opening.swing * SLIDE_GAP;
+    const parts: [number, number, number][] = two
+      ? [
+          [s0, opening.offset, -1],
+          [opening.offset, s1, 1],
+        ]
+      : [[s0, s1, opening.hinge === "a" ? -1 : 1]];
+    for (const [p0, p1, way] of parts) {
+      const move = way * (p1 - p0);
+      shape.leaves.push([at(p0 + move, o), at(p1 + move, o)]);
+    }
+    return shape;
+  }
+
+  // Hinged leaves: the hinge and the closed position of the free end are on the face of the swing
+  // side. Two leaves have their hinges at the two ends and meet in the middle.
+  const hinged: [number, number][] = two
+    ? [
+        [s0, opening.offset],
+        [s1, opening.offset],
+      ]
+    : opening.hinge === "a"
+      ? [[s0, s1]]
+      : [[s1, s0]];
+  for (const [h, c] of hinged) {
+    const hinge = at(h, face);
+    const closed = at(c, face);
+    const width = Math.abs(c - h);
+    const open = scale(side, opening.swing * width);
+    const leaf = add(hinge, open);
+    // The arc turns from the open leaf to the closed leaf. The sign of the cross product gives
+    // the direction of the turn.
+    const sweep = cross(open, sub(closed, hinge)) > 0 ? 1 : 0;
+    shape.leaves.push([hinge, leaf]);
+    shape.arcs.push({ center: hinge, radius: width, from: leaf, to: closed, sweep });
+  }
+  return shape;
 }
 
 export interface DimensionShape {
@@ -151,7 +195,7 @@ export function planBounds(
   for (const vertex of plan.vertices) points.push(vertex);
   for (const opening of plan.openings) {
     const shape = openingShape(plan, opening);
-    if (shape?.kind === "door") points.push(shape.leaf);
+    if (shape) for (const leaf of shape.leaves) points.push(...leaf);
   }
   for (const dimension of plan.dimensions) {
     const shape = dimensionShape(dimension);

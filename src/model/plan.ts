@@ -285,6 +285,8 @@ export function addOpening(plan: Plan, wallId: Id, kind: OpeningKind, offset: nu
     kind,
     offset,
     ...OPENING_DEFAULTS[kind],
+    style: "hinged",
+    leaves: 1,
     hinge: "a",
     swing: 1,
   };

@@ -56,6 +56,7 @@ export const APP: Record<string, string> = {
   Straighten: "Entzerren",
   "Draw walls (W)": "Wände zeichnen (W)",
   Wall: "Wand",
+  "The variant that you see and edit": "Die Variante, die Sie sehen und bearbeiten",
   "Put a door in a wall (D)": "Tür in eine Wand setzen (D)",
   Door: "Tür",
   "Put a window in a wall (N)": "Fenster in eine Wand setzen (N)",

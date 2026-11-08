@@ -55,7 +55,15 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - Walls are a graph: vertices are corners, and walls are edges between two vertices. Walls meet
   only at vertices. The editor splits a wall where a new wall starts or ends on it.
 - Doors and windows (`Opening`) belong to a wall, with an offset from the vertex `a` of the
-  wall. So they move with the wall.
+  wall. So they move with the wall. `style` (hinged, sliding, fixed) and `leaves` say how they
+  open; `openingShape` in `drawing.ts` gives the symbol for the editor, the exports, and the 3D
+  view. `openings.ts` keeps an opening in the free part of its wall and out of the others
+  (`freeOffset`); the editor and the 3D view use it for each placement and move.
+- `conflicts.ts` finds objects that collide on one story. The 2D editor marks them, and
+  `src/ui/conflicts.ts` lists them in the panel.
+- The 3D view only reads the building. Its meshes have `userData.item` and their story group
+  `userData.storyId`; `View3D.pickAt` finds the object under the pointer, and `View3D.edit`
+  (set by `src/ui/edit3d.ts`) gets the clicks and the drags and changes the document.
 - Dimension lines (`Dimension`) have their own two points. They do not follow the walls.
 - The selection of the editor is a list of `Item` (a kind and an id). The functions in
   `src/model/plan.ts` copy, paste, move, and remove items.
@@ -66,8 +74,14 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   water, heating, electric, or comms. `parsePlan` takes the system from the known type or kind. The insulation is
   in `Building.envelope`, and a wall can override it with its own `layers`. A story can be
   unheated (`Story.heated`); `energy.ts` then uses `Envelope.ceiling` for the slab to it.
-  `Building.variants` are copies of the envelope, the heated stories, the household, and the
-  PV; `variants.ts` makes them and calculates on a copy of the building. PV fields
+  `Building.variants` are copies of the envelope, the heated stories, the household, the PV,
+  and, if the user changes it, the floor plan (`Variant.layout`: copies of the stories and the
+  roofs, without backgrounds). `variants.ts` makes them and calculates on a copy of the
+  building. One variant can be open (`Building.variant`): the building then shows it, all
+  topics edit it, and `Building.base` keeps the plan. `switchVariant` saves the open state into
+  its variant. Code that compares with the plan uses `planBuilding`, not `doc.building`. A file
+  has the plan in the building and the open variant in its variant (`serializeBuilding`), so an
+  old app reads the plan. PV fields
   (`Building.pv`) are on the faces of `roofSurfaces`. `energy.ts`, `pv.ts`, and
   `quantities.ts` calculate from the model and store nothing.
 - `Building.location` is the place of the building, and `Building.climate` is a typical year of
@@ -116,7 +130,10 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/colors.ts`      | The colors of the wall sides (own, room, or facade) and the defaults of the colors.      |
 | `src/model/walljoin.ts`    | The ends of the two faces of a wall at its joins: flush, miter, or T.                    |
 | `src/model/heating.ts`     | The heating per year: a monthly balance, the heating system, hot water, cost, CO₂.       |
-| `src/model/variants.ts`    | The variants: the measures, apply, and the comparison with the plan.                     |
+| `src/model/variants.ts`    | The variants: the measures, the open variant, apply, and the comparison with the plan.   |
+| `src/model/layout.ts`      | The changes of the floor plan of a variant: walls to remove and to build, new openings.  |
+| `src/model/openings.ts`    | The place of a door or a window: the free part of its wall, and the side of the room.    |
+| `src/model/conflicts.ts`   | The collisions of openings, furniture, walls, stairs, and chimneys on one story.         |
 | `src/model/balance.ts`     | The hourly balance of electricity: household, heating, PV, battery, and the cost.        |
 | `src/model/renovation.ts`  | The cost of a variant, its saving per year, and its payback time.                        |
 | `src/io/climate.ts`        | The place search and the climate download from Open-Meteo, and the typical year.         |
@@ -144,6 +161,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/projects.ts`       | The Projects page, the autosave, the trash, the backup, and the lock of a project.       |
 | `src/ui/contents.ts`       | The tree of the Overview.                                                                |
 | `src/ui/tracing.ts`        | The assisted tracing of a background.                                                    |
+| `src/ui/conflicts.ts`      | The list of the collisions in the panel.                                                 |
+| `src/ui/edit3d.ts`         | The editing in the 3D view: select, hover, and move.                                     |
 | `src/ui/notes.ts`          | The notes and photos of the objects, and the circuit field.                              |
 | `src/ui/compact.ts`        | The layout for a phone: the bar at the bottom, the sheet, and the Done button.           |
 | `src/ui/shortcuts.ts`      | The help of the keyboard shortcuts.                                                      |

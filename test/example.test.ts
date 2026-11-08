@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { planConflicts } from "../src/model/conflicts";
 import { buildingHeatLoss } from "../src/model/energy";
 import { pvSummary } from "../src/model/pv";
 import { furnitureOutline } from "../src/model/furniture";
@@ -58,6 +59,10 @@ describe("the house of the website", () => {
         }
       }
     }
+  });
+
+  it("has no collisions of furniture, doors, and windows", () => {
+    for (const story of house.stories) expect(planConflicts(story)).toEqual([]);
   });
 
   it("gives parts of the house", () => {

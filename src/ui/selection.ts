@@ -48,6 +48,7 @@ import type {
 } from "../model/types";
 import { $, app, cached, doc, editor, panel, shell, showStatus } from "./context";
 import { renderEnergyTopic } from "./energy";
+import { renderConflicts } from "./conflicts";
 import { renderCircuit, renderNotes, type NoteChange } from "./notes";
 import {
   button,
@@ -507,6 +508,7 @@ function renderFurniture(plan: Story, id: Id): void {
       }),
     { icon: "fit" },
   );
+  renderConflicts({ kind: "furniture", id });
   itemActions(piece, edit, { duplicate: true });
 }
 
@@ -667,14 +669,44 @@ function renderOpening(plan: Story, id: Id): void {
   numberOf(t("Height"), opening, "height", edit, { min: 0.1 });
   numberOf(t("Sill"), opening, "sill", edit);
   numberOf(t("Position"), opening, "offset", edit);
-  if (opening.kind === "door") {
-    button(t("Flip hinge"), () => edit((o) => (o.hinge = o.hinge === "a" ? "b" : "a")), {
-      icon: "flipHinge",
-    });
-    button(t("Flip swing"), () => edit((o) => (o.swing = o.swing === 1 ? -1 : 1)), {
-      icon: "flipSwing",
-    });
+  const door = opening.kind === "door";
+  selectField(
+    t("Opens"),
+    opening.style,
+    [
+      ["hinged", door ? t("Hinged leaf") : t("Casement")],
+      ["sliding", t("Sliding")],
+      ["fixed", door ? t("No leaf") : t("Fixed glazing")],
+    ],
+    (style) => edit((o) => (o.style = style)),
+  );
+  // A sliding window always has two panes, and a fixed opening has no leaf.
+  if (opening.style === "hinged" || (door && opening.style === "sliding")) {
+    selectField(
+      t("Leaves"),
+      String(opening.leaves),
+      [
+        ["1", door ? t("One leaf") : t("One casement")],
+        ["2", door ? t("Two leaves") : t("Two casements")],
+      ],
+      (leaves) => edit((o) => (o.leaves = leaves === "2" ? 2 : 1)),
+    );
   }
+  if (opening.style !== "fixed") {
+    if (opening.leaves === 1) {
+      button(
+        opening.style === "sliding" ? t("Slide to the other side") : t("Flip hinge"),
+        () => edit((o) => (o.hinge = o.hinge === "a" ? "b" : "a")),
+        { icon: "flipHinge" },
+      );
+    }
+    button(
+      opening.style === "sliding" ? t("Other face of the wall") : t("Flip swing"),
+      () => edit((o) => (o.swing = o.swing === 1 ? -1 : 1)),
+      { icon: "flipSwing" },
+    );
+  }
+  renderConflicts({ kind: "opening", id });
   itemActions(opening, edit, { remove: () => doc.edit((plan) => removeOpening(plan, id)) });
 }
 

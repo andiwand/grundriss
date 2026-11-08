@@ -29,9 +29,10 @@ import { fmt } from "./format";
 import { HEATING_KINDS } from "./heating";
 import { material } from "./insulation";
 import { pvSummary } from "./pv";
+import { layoutChanges } from "./layout";
 import { envelopeAreas } from "./takeoff";
 import type { Building, Finance, HeatingKind, Layer, Variant } from "./types";
-import { sameData, withVariant } from "./variants";
+import { planBuilding, sameData, withVariant } from "./variants";
 
 /** The prices of a region: insulation in €/m² (a base and each cm), windows in €/m², the rest in €. */
 export interface PriceSet {
@@ -42,6 +43,12 @@ export interface PriceSet {
   /** PV in € per kWp, and a battery in € per kWh. */
   pv: number;
   battery: number;
+  /**
+   * The floor plan: to remove a wall and to build a new inner wall in €/m², a cut for a new
+   * opening in a wall with its lintel in €, a new inner door with its frame in €, and to close an
+   * opening in €/m².
+   */
+  layout: { remove: number; wall: number; cut: number; door: number; close: number };
 }
 
 /** Usual prices in Austria and in Germany, 2025, rough values. */
@@ -65,6 +72,7 @@ export const PRICES: Record<Finance["region"], PriceSet> = {
     hotWater: 2500,
     pv: 1400,
     battery: 700,
+    layout: { remove: 90, wall: 110, cut: 1500, door: 900, close: 150 },
   },
   DE: {
     insulation: {
@@ -85,6 +93,7 @@ export const PRICES: Record<Finance["region"], PriceSet> = {
     hotWater: 3000,
     pv: 1500,
     battery: 800,
+    layout: { remove: 100, wall: 120, cut: 1800, door: 1000, close: 170 },
   },
 };
 
@@ -92,7 +101,7 @@ export const PRICES: Record<Finance["region"], PriceSet> = {
 export const pricesOf = (building: Building): PriceSet => PRICES[building.finance.region];
 
 /** The kinds of the items of a cost, for the subsidy. */
-export type CostKind = "envelope" | "heating" | "hotWater" | "pv" | "battery";
+export type CostKind = "envelope" | "heating" | "hotWater" | "pv" | "battery" | "layout";
 
 export interface CostItem {
   /** The English text of the item, with placeholders for `values` (see `costItemText`). */
@@ -113,7 +122,13 @@ export function costItemText(
 ): string {
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(item.values ?? {})) {
-    values[key] = typeof value === "number" ? fmt(value, 1) : t(value.name);
+    // A count has no decimals.
+    values[key] =
+      typeof value === "number"
+        ? Number.isInteger(value)
+          ? String(value)
+          : fmt(value, 1)
+        : t(value.name);
   }
   return t(item.name, values);
 }
@@ -134,6 +149,7 @@ const insulationCm = (layers: Layer[]) =>
 /** The items of the estimate of the cost of the variant against the plan. */
 export function estimateItems(building: Building, variant: Variant): CostItem[] {
   const target = withVariant(building, variant);
+  const plan = planBuilding(building);
   const envelope = envelopeAreas(target);
   // Walls with their own layers do not change with the envelope of the variant.
   const areas = {
@@ -143,10 +159,22 @@ export function estimateItems(building: Building, variant: Variant): CostItem[] 
     floor: envelope.floor,
     window: envelope.windows,
   };
-  const before = building.envelope;
-  const after = variant.envelope;
+  const before = plan.envelope;
+  const after = target.envelope;
   const items: CostItem[] = [];
   const prices = pricesOf(building);
+  const changes = layoutChanges(plan, target);
+  const layout = (name: string, amount: number, price: number, unit: "area" | "count") => {
+    if (amount < (unit === "area" ? 0.01 : 1)) return;
+    const values: Record<string, number> = unit === "area" ? { area: amount } : { count: amount };
+    items.push({ name, values, cost: amount * price, kind: "layout" });
+  };
+  layout("Remove walls, {area} m²", changes.removed, prices.layout.remove, "area");
+  layout("New inner walls, {area} m²", changes.added, prices.layout.wall, "area");
+  layout("Cuts for new openings: {count}", changes.cuts, prices.layout.cut, "count");
+  layout("New doors: {count}", changes.doors, prices.layout.door, "count");
+  layout("New windows, {area} m²", changes.windows, prices.window, "area");
+  layout("Close openings, {area} m²", changes.closed, prices.layout.close, "area");
   const insulation = (key: keyof PriceSet["insulation"], name: string, area: number) => {
     if (sameData(before[key], after[key]) || area <= 0) return;
     const added = Math.max(0, insulationCm(after[key]) - insulationCm(before[key]));
@@ -171,11 +199,11 @@ export function estimateItems(building: Building, variant: Variant): CostItem[] 
   if (after.hotWater.heater !== before.hotWater.heater) {
     items.push({ name: "New hot water heater", cost: prices.hotWater, kind: "hotWater" });
   }
-  const peak = pvSummary(target).peak - pvSummary(building).peak;
+  const peak = pvSummary(target).peak - pvSummary(plan).peak;
   if (peak > 0.01) {
     items.push({ name: "PV, {peak} kWp", values: { peak }, cost: peak * prices.pv, kind: "pv" });
   }
-  const battery = variant.household.battery - building.household.battery;
+  const battery = target.household.battery - plan.household.battery;
   if (battery > 0.01) {
     items.push({
       name: "Battery, {capacity} kWh",
@@ -251,10 +279,11 @@ export function subsidyEstimate(building: Building, variant: Variant): Subsidy |
   const result: Subsidy = { amount: 0, items: [] };
   const heating = items.filter((i) => i.kind === "heating");
   if (heating.length > 0) {
-    const kind = variant.envelope.heating.kind;
+    const system = withVariant(building, variant).envelope.heating;
+    const kind = system.kind;
     let rate = kind === "heat-pump" || kind === "wood" || kind === "district" ? 0.3 : 0;
-    if (rate > 0 && FOSSIL.includes(building.envelope.heating.kind)) rate += 0.2;
-    if (kind === "heat-pump" && variant.envelope.heating.source === "ground") rate += 0.05;
+    if (rate > 0 && FOSSIL.includes(planBuilding(building).envelope.heating.kind)) rate += 0.2;
+    if (kind === "heat-pump" && system.source === "ground") rate += 0.05;
     rate = Math.min(0.7, rate);
     const cost = Math.min(
       30000,
@@ -278,7 +307,7 @@ export function subsidyEstimate(building: Building, variant: Variant): Subsidy |
 export function variantEconomy(
   building: Building,
   variant: Variant,
-  plan: EnergyBalance | null = energyBalance(building),
+  plan: EnergyBalance | null = energyBalance(planBuilding(building)),
 ): Economy | null {
   const balance = energyBalance(withVariant(building, variant));
   if (!plan || !balance) return null;

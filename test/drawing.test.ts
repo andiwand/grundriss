@@ -36,14 +36,16 @@ describe("drawing shapes", () => {
   it("draws a door with the hinge at a and the swing to the right side like the editor", () => {
     const { plan, wall } = wallPlan();
     const door = addOpening(plan, wall.id, "door", 2);
-    const shape = openingShape(plan, door);
-    if (shape?.kind !== "door") throw new Error("no door");
+    const shape = openingShape(plan, door)!;
+    const [[hinge, leaf]] = shape.leaves;
+    const [arc] = shape.arcs;
     // The width is 0.9, so the opening goes from 1.55 to 2.45.
-    close(shape.hinge, 1.55, 0.1);
-    close(shape.leaf, 1.55, 1.0);
-    close(shape.arc.to, 2.45, 0.1);
-    expect(shape.arc.sweep).toBe(0);
-    expect(shape.arc.radius).toBeCloseTo(0.9);
+    close(hinge, 1.55, 0.1);
+    close(leaf, 1.55, 1.0);
+    close(arc.to, 2.45, 0.1);
+    expect(arc.sweep).toBe(0);
+    expect(arc.radius).toBeCloseTo(0.9);
+    expect(shape.glass).toHaveLength(0);
   });
 
   it("moves the hinge and the swing", () => {
@@ -51,27 +53,54 @@ describe("drawing shapes", () => {
     const door = addOpening(plan, wall.id, "door", 2);
     door.hinge = "b";
     door.swing = -1;
-    const shape = openingShape(plan, door);
-    if (shape?.kind !== "door") throw new Error("no door");
-    close(shape.hinge, 2.45, -0.1);
-    close(shape.leaf, 2.45, -1.0);
-    close(shape.arc.to, 1.55, -0.1);
+    const shape = openingShape(plan, door)!;
+    close(shape.leaves[0][0], 2.45, -0.1);
+    close(shape.leaves[0][1], 2.45, -1.0);
+    close(shape.arcs[0].to, 1.55, -0.1);
     // Both turns flip, so the sweep stays the same.
-    expect(shape.arc.sweep).toBe(0);
+    expect(shape.arcs[0].sweep).toBe(0);
     door.swing = 1;
-    const other = openingShape(plan, door);
-    if (other?.kind !== "door") throw new Error("no door");
-    expect(other.arc.sweep).toBe(1);
+    expect(openingShape(plan, door)!.arcs[0].sweep).toBe(1);
   });
 
-  it("draws a window as a gap with glass", () => {
+  it("draws a double door with two leaves that meet in the middle", () => {
+    const { plan, wall } = wallPlan();
+    const door = addOpening(plan, wall.id, "door", 2);
+    door.leaves = 2;
+    const shape = openingShape(plan, door)!;
+    expect(shape.leaves).toHaveLength(2);
+    close(shape.leaves[0][0], 1.55, 0.1);
+    close(shape.leaves[1][0], 2.45, 0.1);
+    close(shape.arcs[0].to, 2, 0.1);
+    close(shape.arcs[1].to, 2, 0.1);
+    expect(shape.arcs[0].radius).toBeCloseTo(0.45);
+  });
+
+  it("draws a sliding door along the face, and a door without a leaf", () => {
+    const { plan, wall } = wallPlan();
+    const door = addOpening(plan, wall.id, "door", 2);
+    door.style = "sliding";
+    // The leaf slides to the end a, along the face of the swing side.
+    const [[start, end]] = openingShape(plan, door)!.leaves;
+    close(start, 0.65, 0.13);
+    close(end, 1.55, 0.13);
+    expect(openingShape(plan, door)!.arcs).toHaveLength(0);
+    door.style = "fixed";
+    expect(openingShape(plan, door)!.leaves).toHaveLength(0);
+  });
+
+  it("draws a window as a gap with glass and a thin hinged leaf", () => {
     const { plan, wall } = wallPlan();
     const window = addOpening(plan, wall.id, "window", 2);
-    const shape = openingShape(plan, window);
-    if (shape?.kind !== "window") throw new Error("no window");
-    close(shape.glass[0], 1.4, 0);
-    close(shape.glass[1], 2.6, 0);
+    const shape = openingShape(plan, window)!;
+    close(shape.glass[0][0], 1.4, 0);
+    close(shape.glass[0][1], 2.6, 0);
     expect(shape.gap).toHaveLength(4);
+    expect(shape.leaves).toHaveLength(1);
+    window.style = "fixed";
+    expect(openingShape(plan, window)!.leaves).toHaveLength(0);
+    window.style = "sliding";
+    expect(openingShape(plan, window)!.glass).toHaveLength(2);
   });
 
   it("gives a dimension line with readable text", () => {
