@@ -4,6 +4,14 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server plans without the network: the app keeps a copy of each plan of a server that it opened,
+  and opens it to view when the server does not answer. The Projects page shows the copies.
+- Images once: the server and the history of the browser keep each large image (a background, a
+  model, a photo) once, also if many revisions use it, so that they need much less space.
+- Server: links that ended go away by themselves. The server settings list all share links with
+  the plan of each link.
+- `compose.yaml` starts the server with Caddy for https.
+
 ## 0.3.0 – 2026-11-08
 
 - Versions: a click on the name of the plan lists its versions. A plan of a server shows all its

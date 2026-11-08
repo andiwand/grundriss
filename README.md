@@ -136,6 +136,10 @@ password. It opens the app with the server: all plans, the **server settings**, 
 - **Server and browser.** On the Projects page, the plans of each server show under its name.
   **Connect a server** adds a link. A plan of the browser goes to a server, and a plan of a
   server to the browser, as a copy or as a move.
+- **Without the network**, the app opens the copy of a plan of a server that it keeps in the
+  browser, only to view. The Projects page shows these copies under the server.
+- **Links that end** go away by themselves: the server removes them at the start and every hour.
+  Root sees all users and all share links, with the plan of each link, in the server settings.
 - The installed app of GitHub Pages connects to a server too, if the server has https and
   allows the app with `GRUNDRISS_ORIGINS` or `GRUNDRISS_APP_URL`.
 
@@ -155,6 +159,9 @@ The settings are environment variables:
 
 Without these settings, the server answers 404 to each address outside a valid link, also `/`.
 The image `ghcr.io/andiwand/grundriss:latest` is the last release; `:main` is the newest state.
+[`compose.yaml`](compose.yaml) starts the server with Caddy for https, and shows the settings for
+nginx-proxy. Each large image of a plan is stored once on the server and in the history of the
+browser, also if many revisions use it.
 
 ### Versions
 

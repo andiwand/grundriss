@@ -47,9 +47,10 @@ without a message. The server is private and self-hosted; a public service comes
 
 Each step is useful alone.
 
-Step 1 and the list of the revisions in the app are done too. **Still open:** a copy of each
-connected plan for offline use; the images of a plan stored once by their hash, also in the
-history of the browser, which now keeps the images in each of its 20 versions.
+Step 1, the list of the revisions in the app, the copy of each connected plan for offline use, the
+images stored once by their hash (`src/model/blobs.ts`), the removal of links that ended, the
+list of all share links, `compose.yaml`, and a browser test against a real server
+(`e2e/sharing.e2e.ts`) are done too. Edits without the network are still open.
 
 ### Step 1: revisions, without a server
 

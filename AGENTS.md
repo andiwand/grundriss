@@ -170,6 +170,10 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/projects.ts`       | The Projects page, the autosave, the trash, the backup, and the lock of a project.       |
 | `src/ui/contents.ts`       | The tree of the Overview.                                                                |
 | `src/ui/tracing.ts`        | The assisted tracing of a background.                                                    |
+| `src/model/blobs.ts`       | The large data URLs of a plan, stored once by hash in the stores of the revisions.       |
+| `src/io/file-revision.ts`  | The check of the revision of a file before the app replaces it.                          |
+| `e2e/sharing.e2e.ts`       | The browser test with a real server (Playwright starts it, see `playwright.config.ts`).  |
+| `compose.yaml`             | The server with Caddy for https, for self-hosting.                                       |
 | `src/ui/versions.ts`       | The versions of a plan: the history in the browser, or the revisions on a server.        |
 | `src/ui/dialog.ts`         | The helpers of the dialogs of the app.                                                   |
 | `src/ui/remote.ts`         | The plans on a server: connections, the session of a plan, share, users, copy and move.  |
