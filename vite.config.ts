@@ -40,9 +40,13 @@ function serviceWorker(): Plugin {
   };
 }
 
+const { version } = JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8"));
+
 export default defineConfig({
   // Relative paths, so the app works from any directory of a web server.
   base: "./",
+  // The version of the app, for the help dialog.
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [serviceWorker()],
   build: {
     target: "es2022",

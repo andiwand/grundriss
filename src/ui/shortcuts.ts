@@ -2,6 +2,9 @@
 
 import { t } from "../i18n";
 
+/** The version of the app from package.json (vite.config.ts). */
+declare const __APP_VERSION__: string;
+
 /** The shortcuts by group. "Mod" is Ctrl, or ⌘ on a Mac. */
 const SHORTCUTS: [string, [string, string][]][] = [
   [
@@ -93,6 +96,10 @@ export function showShortcuts(): void {
     columns.append(block);
   }
   dialog.append(columns);
+  const version = document.createElement("p");
+  version.className = "app-version";
+  version.textContent = t("Grundriss {version}", { version: __APP_VERSION__ });
+  dialog.append(version);
   const close = document.createElement("button");
   close.textContent = t("Close");
   close.addEventListener("click", () => dialog.close());

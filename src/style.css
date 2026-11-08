@@ -3008,6 +3008,12 @@ body.overview #layers-button {
   font-size: 18px;
 }
 
+.shortcuts-dialog .app-version {
+  margin: 12px 0 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
 .shortcuts-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

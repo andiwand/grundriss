@@ -4,6 +4,18 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.2.0 – 2026-11-08
+
+The first version with a number. The app shows it in the help of the shortcuts.
+
+- Server: a small self-hosted server keeps plans in one place, from the Docker image
+  `ghcr.io/andiwand/grundriss`. Each person and each shared plan has a link, and the link is the
+  access. Root sets the name of the server and adds users with their rights and an end date.
+  One person edits a plan at a time; the others view it, and see each change at once. A save
+  never replaces a newer version. See "Plans on your own server" in the README.
+- Share: a plan of a server gets links to view or to edit it, with an end date, from Share in
+  the top bar. Plans of the browser and of a server go both ways, as a copy or as a move.
+- Top bar: Share is next to Export, and the language is at the end of the bar.
 - Saving: a delayed file save marks only the saved snapshot as saved. It does not change a
   plan opened during the save. Autosave waits for the project lock and a successful write
   before the app leaves a changed plan without a warning.
