@@ -34,79 +34,136 @@
 - A layout for phones and tablets, with touch input, and a German interface.
 - Browser tests with Playwright, and `src/main.ts` in modules of `src/ui/`.
 
-## Next: collaboration with a server
+## Next: revisions and a self-hosted server
 
-Today the app has no server, and a plan goes to other people only as a file. Live work together
-needs a server, because two browsers cannot find each other on the internet without one. Even a
-direct connection between browsers (WebRTC) needs a server to start the connection, and often a
-relay server for networks that block it.
+Today a plan goes to other people only as a file, and nothing stops two copies from going out of
+sync. The first goal is not live editing, but this: a plan has one current state, each save
+knows which state it starts from, and a save never overwrites the work of another person
+without a message. The server is private and self-hosted; a public service comes later.
 
-The goal: a user uploads a plan, and gets a link. Other people open the link and see the plan.
-With the right to edit, they change it at the same time, and each one sees the changes of the
-others live.
+Each step is useful alone.
 
-Steps, each one useful alone:
+### Step 1: revisions, without a server
 
-1. **Share a copy.** Upload a `.grundriss` package and get a link to a read-only copy. The
-   server stores files only. A link can also hold a small plan without a server, compressed in
-   the URL, but the background image and the models are too large for it.
-2. **Live view.** The owner edits, and the others see each change at once. The server sends the
-   changes of a project to all its viewers (WebSocket).
-3. **Live editing.** All people can edit. Two changes at the same time must merge without loss.
-   A CRDT does this: Yjs or Automerge. `PlanDocument` then keeps the building in the CRDT, and
-   each transaction becomes one change of the CRDT. Undo stays per user, so that an undo does
-   not take back the change of another user. The others show their selection and their pointer.
-4. **Accounts and rights.** Owners, editors, and viewers. Links that expire.
+- **A small header in the file.** A `.grundriss` file gets `revision`: an id, the id of the
+  revision that it starts from (`parent`), the time of the save, and the name of the device. It
+  is a new field that old versions ignore, so it needs no new `FILE_VERSION`. With it, each
+  copy can find a conflict: "this file starts from revision 12, but the target has 14 now".
+  The file holds only this header, not the history, because each revision of a plan with a
+  background image is large.
+- **A history in the browser.** IndexedDB keeps the revisions of each project next to its
+  current state: one at each save to a file, and one every few minutes while the user edits.
+  A "Versions" list of the project opens or restores an old revision. A limit (for example 50
+  revisions or 200 MB) removes the oldest ones.
+- **A check on save to a file.** If the file on the disk has another revision than the one that
+  the app opened, the app does not overwrite it. It offers to load that version or to save the
+  plan as a copy. This needs the File System Access API (Chrome and Edge).
 
-Questions to decide:
+### Step 2: the server
 
-- **Hosting.** An own small server (Node with `y-websocket`, files in object storage), or a
-  service, for example Cloudflare Durable Objects, PartyKit, or Liveblocks. The app on GitHub
-  Pages stays as it is; the server is only for the shared projects.
-- **Privacy.** A floor plan of a home is personal data (GDPR). The server must be in the EU, and
-  a user must be able to delete a project. End-to-end encryption with the key in the link is
-  possible for steps 1 and 2.
-- **Offline first.** The app must work as before without the server. A shared project keeps a
-  copy in IndexedDB, and the changes go to the server when the network is back. A CRDT supports
-  this.
-- **Large data.** The background image and the models go to a store for files, not into the
-  live document.
+One program in TypeScript (Node), in this repository, from one container image. It uses the
+code of the app to read and check a `.grundriss` file. It stores the data in SQLite and the
+files of the revisions on its disk.
 
-### The server component
+**The token is in the path.** Each token is a place on the server: `https://<server>/<token>/`
+is the app with the access of that token, and `https://<server>/<token>/api/…` is its API. The
+link is the access, so a person opens it like any address, and `curl` works without a header.
+The API also takes `Authorization: Bearer <token>`, for scripts. A token is 128 random bits;
+the server stores only its hash, and shows the token once, when it makes it. Root removes a
+token, and its whole path is gone at once. A token can have an end date.
 
-One server program for two uses:
+The path is in the access logs of the server and of a proxy, and in the history of the browser.
+On a private server these are the logs of the owner. The server masks the tokens in its own log,
+and sends `Referrer-Policy: no-referrer`, so that a link to another site does not send the path.
 
-- **The service.** We run it in the EU for all users. This is the part that costs money (see
-  the business model).
-- **Self-hosting.** A person or an organization runs the same program on its own machine, from
-  one container image (`docker compose up`), with SQLite, a local file store, and one
-  configuration file. This costs little if it is a goal from the start. It is also an answer
-  for users who do not want their plan on our server.
+**Modes.** A setting chooses what the server does:
 
-The server is in TypeScript (Node), in this repository. It then uses the same code as the app
-to read, check, and migrate a `.grundriss` file, so the file format has one implementation. The
-app gets a setting for the server address, so that it can connect to the service or to a
-self-hosted server.
+- `full`: it serves the build of the app under each valid token (`/<token>/`) and the API
+  under `/<token>/api/`.
+- `api`: it serves only the API (`/<token>/api/`). The app connects from another place (step 4).
 
-The service needs a small server and a file store in the EU, for example at Hetzner or
-Scaleway. At the start, this costs about 10 to 20 € each month.
+In both modes, each request outside a valid token gets 404, also `/`, so the server shows
+nothing to a scan.
 
-### Accounts
+**One kind of token, with a scope.** Each token opens the same app; only its scope differs. The
+app asks `/<token>/api/me` for the scope, and shows what the token allows.
 
-We do not write the login ourselves. Passwords, password resets, 2FA, and protection against
-abuse are much work, and a mistake in them is dangerous. The steps:
+- **Root.** On the first start, the server makes the root token and prints it to the log once.
+  Root sees and writes all plans, and makes and removes tokens. The app opens with the list of
+  all plans.
+- **User tokens.** Root makes a token for each person, with its settings: can the person make
+  plans, does the person see only the own plans or all plans, and can the person write or only
+  read. A plan that a user makes is visible only to that user and to root, until the user
+  shares it. The app opens with the list of the plans that the token sees.
+- **Plan tokens.** The owner of a plan (or root) makes a token for this one plan, to read or to
+  write: this is the share link. The app opens the plan at once, without a list, and without the
+  edit tools if the token only reads.
 
-1. **No accounts.** A shared plan does not need an account. The upload gives two secret links:
-   one to view the plan, and one for the owner to replace or delete it. A payment for one plan
-   also works without an account: the buyer pays, and gets the links by email. Many private
-   users never need more.
-2. **Login with a link by email, no passwords.** When a subscription or a team needs accounts,
-   a library in our own server (for example Better Auth) does the login. The data of the users
-   stays in our database. We only need a service that sends the emails (for example Postmark,
-   or Brevo in the EU).
-3. **An external login service, if necessary.** Zitadel or Keycloak are open source, and run
-   self-hosted or as a service in the EU. They also support the login of a company (OIDC or
-   SAML). Clerk and Auth0 are simpler, but they are in the US.
+A plan has its own id, which is not a token. So one plan can have many plan tokens, for example
+one to read for the bank and one to write for the architect, and each one ends or goes away
+alone. The data: `tokens` (the hash, the kind, a label, the owner, the plan of a plan token, the
+settings, the end date), `plans` (the id, the owner, the name, the current revision, the
+lease), and `revisions` (the id, the plan, the parent, the time, the token that saved it, the
+file).
+
+**Revisions and the edit lease.**
+
+- Each save sends the revision that it starts from. If another save came first, the server
+  refuses the save (409), and the app offers to load the new version or to save a copy. So no
+  save gets lost, also in rare cases.
+- One client at a time edits a plan: it takes the edit lease of the plan for about 60 seconds,
+  and renews it while its tab is open. The others see who edits, and read only. If the lease
+  ends, for example because a laptop sleeps, another client can take it.
+- The server keeps the revisions, so a user can go back to an old one. Large images go into
+  the store once by their hash later, so that each revision does not copy them.
+
+**The API** under `/<token>/api/`, about this size: the scope of the token (`me`); list the plans
+that the token sees; make a plan; read the current revision; save a new revision with its parent;
+list and read the revisions; take, renew, and give back the lease; make, list, and remove tokens
+(root, and the owner of a plan for its plan tokens); and a stream of new revisions (server-sent
+events), so that the readers see each save at once.
+
+### Step 3: connected projects in the app
+
+- A project in IndexedDB is local, or connected: it then has the address of the token on the
+  server (`https://<server>/<token>`), the id of the plan, and the last known revision. The
+  Projects page shows both, with a mark on the connected ones.
+- A connection is the address of a token. With a plan token, the app adds that plan. With a user
+  token or root, it adds the server as a place with its list of plans, next to the plans of the
+  browser. In mode `full`, the app reads the address from its own URL.
+- The editor with the lease saves each change to the server, after a short wait, like the
+  autosave today. The others get the new revisions from the stream and show them.
+- The app keeps a copy of each connected plan in IndexedDB. Without the network, it opens the
+  copy to read. Edits without the network can come later: the revision check then makes a copy
+  if the server went on.
+- The PWA: in mode `full`, the app installs from the path of a token. The scope of a service
+  worker follows the path, so the installed app belongs to that token, with its own storage. For
+  one person with one user token, that is the right thing. The service worker caches the app as
+  today.
+
+### Step 4: the public app connects to a private server
+
+The normal PWA (on GitHub Pages) connects to a server in modes `full` and `api` too: the user
+pastes the address of a token, or opens a link of the form
+`…/grundriss/app/#connect=https://<server>/<token>`. GitHub Pages serves only its own files, so
+the address goes in the fragment, which the browser does not send to any server. Because that
+app runs on https, the browser lets it call the server only if the server has https and allows
+the origin of the app (CORS, a setting of the server). Chrome also limits calls from public
+sites to addresses in a local network. So the app that the server serves (mode `full`) is the
+sure way, and the README explains the setup for the other way.
+
+### Later
+
+- **A public service.** We run the same server for all users, in the EU, with the business model
+  below. A floor plan of a home is personal data (GDPR), so a user must be able to delete a plan,
+  and the service needs a privacy policy.
+- **Live editing.** All people edit at the same time, and their changes merge without loss with a
+  CRDT (Yjs or Automerge). `PlanDocument` then keeps the building in the CRDT, undo stays per
+  user, and the others show their selection. The lease of step 2 keeps it simple until people ask
+  for this.
+- **Accounts.** The tokens of step 2 are enough for a private server. A public service may need a
+  login: a link by email with a library in our server (for example Better Auth), or an external
+  service (Zitadel or Keycloak in the EU), never our own passwords.
 
 ## Business model
 
