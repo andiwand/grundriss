@@ -315,21 +315,31 @@ body:not(.no-plan) .brand:hover .brand-back {
 /* The variant that the plan shows: an accent color while a variant is open, so that the user
    knows that the changes go into the variant. */
 .variant-switch {
-  max-width: 160px;
-  padding: 4px 8px;
+  max-width: 180px;
+  height: 28px;
+  padding: 0 28px 0 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--surface-2);
+  /* An own arrow with its own space, so that a long name does not run into it. */
+  appearance: none;
+  background: var(--surface-2)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
   color: var(--ink-2);
   font: inherit;
   font-size: 13px;
+  /* The same weight in both states, so that the width does not change when a variant opens. */
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
 }
 
 .variant-switch.open {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background-color: var(--accent-soft);
   color: var(--accent);
-  font-weight: 600;
 }
 
 #file-title {
