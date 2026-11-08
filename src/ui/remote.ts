@@ -8,7 +8,14 @@
 // from the last known revision, so it never replaces a revision that this tab did not see.
 
 import { locale, t } from "../i18n";
-import { newProjectId } from "../io/projects";
+import {
+  newProjectId,
+  listRemoteCopies,
+  loadRemoteCopy,
+  removeRemoteCopies,
+  type RemoteCopy,
+  saveRemoteCopy,
+} from "../io/projects";
 import { icon, type IconName } from "../icons";
 import {
   API_VERSION,
@@ -109,6 +116,8 @@ async function addConnection(address: string): Promise<{ connection: Connection;
 
 function removeConnection(address: string): void {
   saveConnections(connections().filter((c) => c.address !== address));
+  // The copies of its plans belong to the connection.
+  void removeRemoteCopies(address).catch(() => undefined);
 }
 
 /** Updates the stored name and rights of a connection after a call of `me`. */
@@ -126,6 +135,10 @@ const errorText = (error: unknown) => (error instanceof Error ? t(error.message)
 /** The text of the rights of a token, for the lists. */
 function rightsText(token: TokenInfo): string {
   const parts = [token.write ? t("can edit") : t("can view")];
+  // A share link in the list of all links names its plan.
+  if (token.kind === "plan" && token.planName) {
+    parts.unshift(t("plan {name}", { name: token.planName }));
+  }
   if (token.kind === "user") {
     if (token.createPlans) parts.push(t("makes plans"));
     if (token.seeAll) parts.push(t("sees all plans"));
@@ -171,6 +184,15 @@ interface Session {
   renew: number;
   taking: Promise<void> | null;
   loading: number;
+  /** True for the copy of the browser, without the network: only to view. */
+  offline: boolean;
+}
+
+/** Keeps the state of the plan in the browser, for use without the network. */
+function storeCopy(current: Session, name: string, data: string): void {
+  void saveRemoteCopy(current.address, current.planId, name, current.revision, data).catch(
+    () => undefined,
+  );
 }
 
 let session: Session | null = null;
@@ -212,8 +234,10 @@ export async function openRemote(address: string, planId: string): Promise<void>
       renew: 0,
       taking: null,
       loading: 0,
+      offline: false,
     };
     session = current;
+    storeCopy(current, plan.name, plan.data);
     if (current.write) current.renew = window.setInterval(() => void renewLease(current), RENEW);
     await startEditing(current);
     if (session !== current) return;
@@ -232,9 +256,62 @@ export async function openRemote(address: string, planId: string): Promise<void>
     );
     shell.enterPlan("structure");
   } catch (error) {
+    // Without the network, the copy of the browser opens to view.
+    if (error instanceof ServerError && error.status === 0 && request === opening) {
+      if (await openOffline(address, planId, client)) return;
+    }
     showStatus(errorText(error), true);
   }
   updateRemoteState();
+}
+
+/** Opens the copy of a plan of a server that the browser keeps, only to view. */
+async function openOffline(
+  address: string,
+  planId: string,
+  client: ServerClient,
+): Promise<boolean> {
+  const copy = await loadRemoteCopy(address, planId).catch(() => undefined);
+  if (!copy) return false;
+  const connection = connections().find((c) => c.address === address);
+  endSession();
+  doc.readOnly = true;
+  load(parseBuilding(copy.data), `${copy.name}.grundriss`, null, "remote");
+  session = {
+    address,
+    client,
+    planId,
+    serverName: connection?.name ?? "",
+    me: {
+      api: API_VERSION,
+      version: "",
+      server: connection?.name ?? "",
+      mode: "full",
+      token: connection?.token ?? ({ kind: "plan", write: false } as TokenInfo),
+    },
+    revision: copy.revision,
+    write: false,
+    editing: false,
+    holder: null,
+    saved: doc.building,
+    saving: null,
+    failed: false,
+    events: null,
+    renew: 0,
+    taking: null,
+    loading: 0,
+    offline: true,
+  };
+  showStatus(
+    t("No connection to {server}. You see the copy of this browser from {time}, only to view.", {
+      server: connection?.name ?? "",
+      time: ago(copy.time),
+    }),
+    true,
+  );
+  shell.enterPlan("structure");
+  updateRemoteState();
+  return true;
 }
 
 /** Takes the edit lease, if the token can write and nobody else has it. */
@@ -362,6 +439,7 @@ async function reload(current: Session, discard = false): Promise<boolean> {
     doc.setActiveStory(story);
     current.saved = doc.building;
     current.revision = plan.revision;
+    storeCopy(current, plan.name, plan.data);
     app.fileName = `${plan.name}.grundriss`;
     updateTitle();
     updateRemoteState();
@@ -391,6 +469,7 @@ async function save(): Promise<void> {
       current.revision = plan.revision;
       current.saved = building;
       current.failed = false;
+      storeCopy(current, plan.name, data);
       // The plan is safe on the server, so the title shows no unsaved changes.
       if (session === current) doc.markSaved(building);
     } catch (error) {
@@ -496,15 +575,17 @@ function updateRemoteState(): void {
   state.hidden = !current;
   document.body.classList.toggle("remote-plan", !!current);
   if (!current) return;
-  const [iconName, text, tone]: [IconName, string, string] = current.editing
-    ? current.saving
-      ? ["cloud", t("Saving…"), ""]
-      : current.failed
-        ? ["alert", t("Not saved"), "bad"]
-        : ["cloud", current.serverName, ""]
-    : current.holder
-      ? ["users", t("{holder} edits", { holder: current.holder }), "busy"]
-      : ["cloud", t("View only"), "busy"];
+  const [iconName, text, tone]: [IconName, string, string] = current.offline
+    ? ["cloud", t("Offline copy"), "busy"]
+    : current.editing
+      ? current.saving
+        ? ["cloud", t("Saving…"), ""]
+        : current.failed
+          ? ["alert", t("Not saved"), "bad"]
+          : ["cloud", current.serverName, ""]
+      : current.holder
+        ? ["users", t("{holder} edits", { holder: current.holder }), "busy"]
+        : ["cloud", t("View only"), "busy"];
   state.innerHTML = icon(iconName);
   state.append(text);
   state.className = `remote-state plan-tools ${tone}`;
@@ -641,6 +722,26 @@ function planDialog(): void {
   const current = session;
   if (!current) return;
   const { element, body } = dialog(projectName());
+  if (current.offline) {
+    note(
+      body,
+      t(
+        "No connection to {server}. This is the copy of this browser, revision {revision}, only to view.",
+        { server: current.serverName, revision: current.revision },
+      ),
+    );
+    body.append(
+      actionButton(
+        t("Connect again"),
+        () => {
+          element.close();
+          void openRemote(current.address, current.planId);
+        },
+        true,
+      ),
+    );
+    return;
+  }
   note(
     body,
     t("On {server}, revision {revision}.", {
@@ -892,6 +993,13 @@ async function settingsDialog(connection: Connection): Promise<void> {
   );
   body.append(form, list);
   await fillTokens(list, client, undefined, "user");
+  // All share links that this token can see: root sees all of them.
+  const linksHeading = document.createElement("h3");
+  linksHeading.textContent = t("Share links");
+  const links = document.createElement("div");
+  links.className = "token-list";
+  body.append(linksHeading, links);
+  await fillTokens(links, client, undefined, "plan");
 }
 
 /** Two radio buttons: copy or move. It gives true for move. */
@@ -1085,14 +1193,48 @@ function renderServers(list: HTMLElement): void {
         }
         grid.append(...plans.map((plan) => remoteCard(connection, client, plan)));
       },
-      (error) => {
+      async (error) => {
         const warning = document.createElement("p");
         warning.className = "project-warning";
         warning.textContent = errorText(error);
-        grid.replaceWith(warning);
+        grid.before(warning);
+        // Without the network, the copies of this browser open to view.
+        if (!(error instanceof ServerError && error.status === 0)) return grid.remove();
+        const copies = await listRemoteCopies(connection.address).catch(() => []);
+        if (copies.length === 0) return grid.remove();
+        grid.append(...copies.map((copy) => offlineCard(connection, copy)));
       },
     );
   }
+}
+
+/** The card of the copy of a plan of a server, without the network. */
+function offlineCard(connection: Connection, copy: RemoteCopy): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "project remote";
+  const open = document.createElement("button");
+  open.className = "project-open";
+  open.title = t("Open {name}", { name: copy.name });
+  const picture = document.createElement("div");
+  picture.className = "project-picture";
+  picture.innerHTML = icon("cloud");
+  const text = document.createElement("span");
+  text.className = "project-text";
+  const name = document.createElement("strong");
+  name.textContent = copy.name;
+  const time = document.createElement("small");
+  time.textContent = t("Copy from {time}", { time: ago(copy.time) });
+  const marks = document.createElement("span");
+  marks.className = "project-marks";
+  const mark = document.createElement("span");
+  mark.className = "remote-mark busy";
+  mark.textContent = t("Offline copy");
+  marks.append(mark);
+  text.append(name, time, marks);
+  open.append(picture, text);
+  open.addEventListener("click", () => void openRemote(connection.address, copy.planId));
+  card.append(open);
+  return card;
 }
 
 /** The card of a plan of a server, with its state and its tools. */

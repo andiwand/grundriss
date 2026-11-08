@@ -211,4 +211,14 @@ export const PROJECTS: Record<string, string> = {
     "{name} wurde auf dem Datenträger geändert, seit Sie die Datei geöffnet haben ({time}). OK speichert Ihren Plan als neue Datei, und die andere Version bleibt. Abbrechen speichert nicht.",
   "The name of the plan file. Click for its versions.":
     "Der Name der Plandatei. Klicken für ihre Versionen.",
+  // remote.ts: the copies without the network, and the list of the share links.
+  "plan {name}": "Plan {name}",
+  "No connection to {server}. You see the copy of this browser from {time}, only to view.":
+    "Keine Verbindung zu {server}. Sie sehen die Kopie dieses Browsers von {time}, nur zum Ansehen.",
+  "Offline copy": "Offline-Kopie",
+  "No connection to {server}. This is the copy of this browser, revision {revision}, only to view.":
+    "Keine Verbindung zu {server}. Das ist die Kopie dieses Browsers, Version {revision}, nur zum Ansehen.",
+  "Connect again": "Erneut verbinden",
+  "Share links": "Freigabe-Links",
+  "Copy from {time}": "Kopie von {time}",
 };

@@ -16,6 +16,8 @@ export interface TokenInfo {
   makeUsers: boolean;
   expires: number | null;
   created: number;
+  /** The name of the plan of a share link, in the list of the tokens. */
+  planName?: string | null;
 }
 
 export interface Me {

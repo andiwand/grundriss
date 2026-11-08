@@ -12,13 +12,22 @@
 // Version 3 adds the history of each project: "revisions" has the list entries (the project, the
 // time, the kind, the size), and "revisionData" has their plans, so that the list loads fast. A
 // project keeps its newest MAX_REVISIONS revisions.
+//
+// Version 4 keeps the large images of the history once, in "blobs" (src/model/blobs.ts), and the
+// copies of the plans of servers for use without the network: "remoteCopies" and
+// "remoteCopyData". An image goes away when no revision and no copy uses it.
+
+import { blobRefs, dehydrate, hydrate } from "../model/blobs";
 
 const DB_NAME = "grundriss";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const PROJECTS = "projects";
 const PLANS = "plans";
 const REVISIONS = "revisions";
 const REVISION_DATA = "revisionData";
+const BLOBS = "blobs";
+const REMOTE_COPIES = "remoteCopies";
+const REMOTE_COPY_DATA = "remoteCopyData";
 /** The number of revisions that each project keeps. */
 export const MAX_REVISIONS = 20;
 /** A deleted project stays in the trash for this many days. */
@@ -69,6 +78,14 @@ function database(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(REVISION_DATA)) {
         db.createObjectStore(REVISION_DATA, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS, { keyPath: "hash" });
+      if (!db.objectStoreNames.contains(REMOTE_COPIES)) {
+        const store = db.createObjectStore(REMOTE_COPIES, { keyPath: "key" });
+        store.createIndex("address", "address");
+      }
+      if (!db.objectStoreNames.contains(REMOTE_COPY_DATA)) {
+        db.createObjectStore(REMOTE_COPY_DATA, { keyPath: "key" });
       }
       // Version 1 kept the plan in the list entry. Move it to the store of the plans.
       if (event.oldVersion === 1) {
@@ -216,6 +233,7 @@ export async function purgeProject(id: string): Promise<void> {
     }
     return () => undefined;
   });
+  if (keys.length > 0) await collectBlobs();
 }
 
 // ----- The history of a project -----
@@ -230,6 +248,57 @@ export interface LocalRevision {
   time: number;
   kind: RevisionKind;
   size: number;
+  /** The hashes of the images that the revision uses. */
+  blobs?: string[];
+}
+
+/** Puts the images of a dehydrated plan into the store of the blobs, in a transaction. */
+function putBlobs(t: IDBTransaction, blobs: Map<string, string>): void {
+  const store = t.objectStore(BLOBS);
+  for (const [hash, data] of blobs) {
+    const request = store.getKey(hash);
+    // An image that the store has already stays as it is, so it is not written again.
+    request.onsuccess = () => {
+      if (request.result === undefined) store.put({ hash, data });
+    };
+  }
+}
+
+/** The plan with its images, from the JSON of the store. */
+async function withBlobs(json: string): Promise<string> {
+  const refs = blobRefs(json);
+  if (refs.length === 0) return json;
+  const values = await run([BLOBS], "readonly", (t) => {
+    const store = t.objectStore(BLOBS);
+    const found = new Map<string, string>();
+    for (const hash of refs) {
+      const request = store.get(hash) as IDBRequest<{ hash: string; data: string } | undefined>;
+      request.onsuccess = () => request.result && found.set(hash, request.result.data);
+    }
+    return () => found;
+  });
+  return hydrate(json, (hash) => values.get(hash));
+}
+
+/** Removes the images that no revision and no copy of a server plan uses any more. */
+export async function collectBlobs(): Promise<void> {
+  await run([REVISIONS, REMOTE_COPIES, BLOBS], "readwrite", (t) => {
+    const used = new Set<string>();
+    const revisions = t.objectStore(REVISIONS).getAll() as IDBRequest<LocalRevision[]>;
+    const copies = t.objectStore(REMOTE_COPIES).getAll() as IDBRequest<RemoteCopy[]>;
+    copies.onsuccess = () => {
+      for (const record of [...revisions.result, ...copies.result]) {
+        for (const hash of record.blobs ?? []) used.add(hash);
+      }
+      const keys = t.objectStore(BLOBS).getAllKeys();
+      keys.onsuccess = () => {
+        for (const key of keys.result) {
+          if (!used.has(String(key))) t.objectStore(BLOBS).delete(key);
+        }
+      };
+    };
+    return () => undefined;
+  });
 }
 
 /** The revisions of a project, the newest first. Without their plans. */
@@ -253,7 +322,7 @@ export async function loadRevision(key: string): Promise<string | undefined> {
         { key: string; data: string } | undefined
       >,
   );
-  return record?.data;
+  return record ? withBlobs(record.data) : undefined;
 }
 
 /**
@@ -266,24 +335,108 @@ export async function addRevision(
   kind: RevisionKind,
   time = Date.now(),
 ): Promise<LocalRevision> {
+  const { json, blobs } = dehydrate(data);
   const revision: LocalRevision = {
     key: `${projectId}:${time}:${Math.random().toString(36).slice(2, 6)}`,
     projectId,
     time,
     kind,
     size: data.length,
+    blobs: [...blobs.keys()],
   };
   const old = (await listRevisions(projectId)).slice(MAX_REVISIONS - 1).map((r) => r.key);
-  await run([REVISIONS, REVISION_DATA], "readwrite", (t) => {
+  await run([REVISIONS, REVISION_DATA, BLOBS], "readwrite", (t) => {
+    putBlobs(t, blobs);
     t.objectStore(REVISIONS).put(revision);
-    t.objectStore(REVISION_DATA).put({ key: revision.key, data });
+    t.objectStore(REVISION_DATA).put({ key: revision.key, data: json });
     for (const key of old) {
       t.objectStore(REVISIONS).delete(key);
       t.objectStore(REVISION_DATA).delete(key);
     }
     return () => undefined;
   });
+  if (old.length > 0) await collectBlobs();
   return revision;
+}
+
+// ----- The copies of the plans of servers -----
+
+/** The list entry of the copy of a plan of a server, for use without the network. */
+export interface RemoteCopy {
+  /** The address of the token and the id of the plan. */
+  key: string;
+  address: string;
+  planId: string;
+  name: string;
+  revision: string;
+  time: number;
+  blobs?: string[];
+}
+
+/** Keeps the state of a plan of a server, so that the app can open it without the network. */
+export async function saveRemoteCopy(
+  address: string,
+  planId: string,
+  name: string,
+  revision: string,
+  data: string,
+): Promise<void> {
+  const { json, blobs } = dehydrate(data);
+  const copy: RemoteCopy = {
+    key: `${address}|${planId}`,
+    address,
+    planId,
+    name,
+    revision,
+    time: Date.now(),
+    blobs: [...blobs.keys()],
+  };
+  await run([REMOTE_COPIES, REMOTE_COPY_DATA, BLOBS], "readwrite", (t) => {
+    putBlobs(t, blobs);
+    t.objectStore(REMOTE_COPIES).put(copy);
+    t.objectStore(REMOTE_COPY_DATA).put({ key: copy.key, data: json });
+    return () => undefined;
+  });
+}
+
+/** The copies of the plans of a server, the newest first. Without their plans. */
+export async function listRemoteCopies(address: string): Promise<RemoteCopy[]> {
+  const list = await run(
+    [REMOTE_COPIES],
+    "readonly",
+    (t) =>
+      t.objectStore(REMOTE_COPIES).index("address").getAll(address) as IDBRequest<RemoteCopy[]>,
+  );
+  return list.sort((a, b) => b.time - a.time);
+}
+
+/** The copy of a plan of a server with its plan, or undefined. */
+export async function loadRemoteCopy(
+  address: string,
+  planId: string,
+): Promise<(RemoteCopy & { data: string }) | undefined> {
+  const key = `${address}|${planId}`;
+  const [copy, record] = await run([REMOTE_COPIES, REMOTE_COPY_DATA], "readonly", (t) => {
+    const a = t.objectStore(REMOTE_COPIES).get(key) as IDBRequest<RemoteCopy | undefined>;
+    const b = t.objectStore(REMOTE_COPY_DATA).get(key) as IDBRequest<
+      { key: string; data: string } | undefined
+    >;
+    return () => [a.result, b.result] as const;
+  });
+  return copy && record ? { ...copy, data: await withBlobs(record.data) } : undefined;
+}
+
+/** Removes the copies of the plans of a server, for example when its connection goes. */
+export async function removeRemoteCopies(address: string): Promise<void> {
+  const keys = (await listRemoteCopies(address)).map((c) => c.key);
+  await run([REMOTE_COPIES, REMOTE_COPY_DATA], "readwrite", (t) => {
+    for (const key of keys) {
+      t.objectStore(REMOTE_COPIES).delete(key);
+      t.objectStore(REMOTE_COPY_DATA).delete(key);
+    }
+    return () => undefined;
+  });
+  await collectBlobs();
 }
 
 /** Removes the projects that are in the trash for more than TRASH_DAYS. */
