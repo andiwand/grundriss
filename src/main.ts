@@ -61,6 +61,7 @@ import { buildingToPdf } from "./export/pdf";
 
 import { planToSvg } from "./export/svg";
 
+import { checkFileRevision } from "./io/file-revision";
 import { EXPORT_TYPES, pickFile, readImage, saveBlob, savePlanFile } from "./io/files";
 
 import { isPackageName, readBuildingFile, writePackage } from "./io/package";
@@ -485,19 +486,6 @@ function deviceName(): string {
   return data?.platform || navigator.platform || "";
 }
 
-/**
- * The id of the revision of the file on the disk, null for a file without a revision, or
- * undefined if the app cannot read it.
- */
-async function revisionOnDisk(handle: FileSystemFileHandle): Promise<string | null | undefined> {
-  try {
-    const file = await handle.getFile();
-    return readBuildingFile(new Uint8Array(await file.arrayBuffer())).revision?.id ?? null;
-  } catch {
-    return undefined;
-  }
-}
-
 async function saveFile(saveAs: boolean): Promise<void> {
   try {
     doc.commit();
@@ -507,9 +495,9 @@ async function saveFile(saveAs: boolean): Promise<void> {
     // The file on the disk must still be the revision that this plan knows. Else another
     // person or device saved it in the meantime, and the app does not replace that save.
     if (handle) {
-      const onDisk = await revisionOnDisk(handle);
-      if (onDisk !== undefined && onDisk !== (building.revision?.id ?? null)) {
-        const other = readableTime(await handle.getFile().then((f) => f.lastModified));
+      const check = await checkFileRevision(handle, building.revision?.id ?? null);
+      if (check.state === "changed") {
+        const other = readableTime(check.modified);
         const asNew = confirm(
           t(
             "{name} changed on the disk since you opened it ({time}). OK saves your plan as a new file, and the other version stays. Cancel does not save.",
