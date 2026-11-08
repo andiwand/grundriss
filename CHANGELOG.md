@@ -4,6 +4,7 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Website: shorter, plainer texts in English and German.
 - Renovation: "Compare" shows the plan and all variants in one table, with the cost, the
   subsidy, the energy cost, the saving, the payback, the cost over 20 years, the heat demand,
   the CO₂, the PV, and the rooms. The best value of each row is green.
