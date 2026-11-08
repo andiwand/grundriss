@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { makeHouse } from "../src/model/example";
 import { defaultHeating } from "../src/model/heating";
 import {
+  costItems,
   estimateItems,
+  lifetimeCost,
   paybackYears,
+  summaryOf,
   PRICES,
   subsidyEstimate,
   variantCost,
@@ -12,8 +15,8 @@ import {
 
 const HEATING_COSTS = PRICES.AT.heating;
 const BATTERY_PRICE = PRICES.AT.battery;
-import type { Building, Climate } from "../src/model/types";
-import { MEASURES, measureVariant, variantOf } from "../src/model/variants";
+import type { Building, Climate, Variant } from "../src/model/types";
+import { addMeasure, MEASURES, measureVariant, variantOf } from "../src/model/variants";
 import vienna from "./fixtures/vienna-climate.json";
 
 function house(edit: (b: Building) => void = () => {}): Building {
@@ -23,6 +26,8 @@ function house(edit: (b: Building) => void = () => {}): Building {
   return building;
 }
 const measure = (id: string) => MEASURES.find((m) => m.id === id)!;
+const addBattery = (building: Building, variant: Variant) =>
+  addMeasure(building, variant, measure("battery"));
 
 describe("renovation", () => {
   it("estimates nothing for a copy of the plan", () => {
@@ -48,6 +53,40 @@ describe("renovation", () => {
 
     const battery = measureVariant(building, measure("battery"));
     expect(variantCost(building, battery)).toBeCloseTo(10 * BATTERY_PRICE);
+  });
+
+  it("uses an own price of an item, and the estimate again without it", () => {
+    const building = house((b) => (b.envelope.heating = defaultHeating("gas")));
+    const variant = measureVariant(building, measure("heat-pump"));
+    addBattery(building, variant);
+    const [heating] = costItems(building, variant);
+    expect(heating.own).toBe(false);
+    variant.itemCosts[heating.name] = 21000;
+    const items = costItems(building, variant);
+    expect(items[0]).toMatchObject({
+      cost: 21000,
+      estimate: HEATING_COSTS["heat-pump"],
+      own: true,
+    });
+    expect(variantCost(building, variant)).toBeCloseTo(21000 + 10 * BATTERY_PRICE);
+    delete variant.itemCosts[heating.name];
+    expect(variantCost(building, variant)).toBeCloseTo(
+      HEATING_COSTS["heat-pump"] + 10 * BATTERY_PRICE,
+    );
+  });
+
+  it("sums the cost over the lifetime, and compares the plan with a variant", () => {
+    const finance = { region: "AT" as const, interest: 0, priceIncrease: 0 };
+    expect(lifetimeCost(1000, 100, finance)).toBeCloseTo(3000);
+    const building = house((b) => (b.envelope.heating = defaultHeating("oil")));
+    const variant = measureVariant(building, measure("heat-pump"));
+    const plan = summaryOf(building, null);
+    const pump = summaryOf(building, variant);
+    expect(plan.cost).toBe(0);
+    expect(plan.saving).toBeNull();
+    expect(pump.heating).toBe("heat-pump");
+    expect(pump.saving).toBeCloseTo(plan.energyCost! - pump.energyCost!);
+    expect(pump.rooms).toBe(plan.rooms);
   });
 
   it("gives the saving per year and the payback time after the subsidy", () => {

@@ -526,6 +526,24 @@ body.wide #area.view-3d #plan-3d {
   grid-area: 1 / 1;
 }
 
+/* The comparison of the variants takes the place of the view too. The panel is as wide as the
+   table, in the middle, so that a few variants do not give a very wide card. */
+body.comparing #area #panel {
+  grid-area: 1 / 1 / 2 / 4;
+}
+
+body.comparing:not(.compact) #area #panel {
+  justify-self: center;
+  /* src/ui/renovation.ts sets the width from the number of columns of the table. */
+  width: min(100%, var(--compare-width, 900px));
+}
+
+body.comparing #area #plan-2d,
+body.comparing #area #plan-3d,
+body.comparing .empty-state {
+  display: none;
+}
+
 body.wide .empty-state {
   grid-column: 1;
 }
@@ -786,6 +804,20 @@ body.wide .empty-state {
   align-items: center;
   gap: 8px;
   color: var(--ink-2);
+}
+
+#panel .field.choice {
+  grid-template-columns: 1fr minmax(112px, 50%);
+}
+
+/* In a wide panel, a field keeps its value near its label, so the eye does not cross the panel.
+   The labels have one width, so all values start at the same line. */
+body.wide:not(.compact) #panel .field {
+  grid-template-columns: 180px 112px;
+}
+
+body.wide:not(.compact) #panel .field.choice {
+  grid-template-columns: 180px 220px;
 }
 
 .input {
@@ -2682,11 +2714,108 @@ body.overview #layers-button {
 
 #panel .variant-item {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   padding: 2px 0 0 12px;
   color: var(--ink-2);
   font-size: 12px;
+}
+
+#panel .variant-item > span {
+  flex: 1;
+}
+
+/* An own price: the field shows it, and the placeholder shows the estimate. */
+#panel .variant-item input {
+  width: 84px;
+  height: 26px;
+  padding: 0 6px;
+  text-align: right;
+  font-size: 12px;
+}
+
+#panel .money-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#panel .money-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+#panel .icon-button.reset {
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+
+#panel .renovation-views {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+
+/* The comparison of the variants. */
+/* The frame of the table. A table wider than the panel scrolls across. */
+#panel .compare-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+#panel table.compare {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+#panel table.compare th,
+#panel table.compare td {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+#panel table.compare thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+#panel table.compare thead th.open {
+  color: var(--accent);
+}
+
+#panel table.compare tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+#panel table.compare tbody tr:last-child > * {
+  border-bottom: none;
+}
+
+#panel .compare-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#panel .compare-block p {
+  margin: 0;
+}
+
+#panel table.compare td.best {
+  color: var(--good);
+  font-weight: 600;
 }
 
 /* The trash of the projects: one line for each project, with its actions. */

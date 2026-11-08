@@ -239,6 +239,7 @@ export function parseBuilding(text: string): Building {
           : list(v, "pv").map((d, j) => parsePv(d, `${where}, PV field ${j}`)),
       layout,
       cost: v.cost == null ? null : Math.max(0, number(v, "cost", where)),
+      itemCosts: parseItemCosts(v.itemCosts),
       subsidy: Math.max(0, finite(v.subsidy, 0)),
     };
   });
@@ -552,6 +553,16 @@ function parseFinance(data: unknown): Finance {
       Math.max(-0.5, finite(data.priceIncrease, defaults.priceIncrease)),
     ),
   };
+}
+
+/** Reads the own prices of the items of a variant: names with numbers of 0 or more. */
+function parseItemCosts(data: unknown): Record<string, number> {
+  const result: Record<string, number> = {};
+  if (!isObject(data)) return result;
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) result[key] = value;
+  }
+  return result;
 }
 
 /** Reads the stories and the roofs of a building, or of the floor plan of a variant. */

@@ -346,6 +346,15 @@ too often for an estimate: see umweltfoerderung.at and the programs of your stat
 time is the first year where the savings pay the cost after the subsidy. The saving of each
 year grows with **Energy prices**, and **Interest** discounts it.
 
+Each item of the estimate has a field for your own price, for example from an offer; the arrow
+next to it goes back to the estimate. The total cost of a variant works the same way.
+
+**Compare** shows the plan and all variants in one table: the investment, the subsidy, the
+energy cost and the saving per year, the payback, the cost over 20 years (the investment and the
+energy cost of 20 years, with the interest and the change of the energy prices), the heat demand,
+the CO₂, the self-sufficiency, the heating, PV, the battery, and the rooms. The best value of
+each row is green.
+
 **Open** a variant (the cube on its card, or the switch next to the file name in the top bar) to
 see and change it in all topics: its insulation and heating, but also its walls, doors, rooms,
 and furniture. The changes go into the variant, and the plan stays as it is. **Add a variant →

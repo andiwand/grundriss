@@ -4,6 +4,11 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Renovation: "Compare" shows the plan and all variants in one table, with the cost, the
+  subsidy, the energy cost, the saving, the payback, the cost over 20 years, the heat demand,
+  the CO₂, the PV, and the rooms. The best value of each row is green.
+- Renovation: each item of the estimate takes an own price, for example from an offer. A
+  button next to an own price, and next to an own total, goes back to the estimate.
 - Doors and windows: each one has a way to open (a hinged leaf, sliding, or fixed: a door
   without a leaf, or fixed glass) and one or two leaves. A window opens into the room, and a
   window wider than 1 m has two leaves. The 2D plan, the exports, and the 3D view show the

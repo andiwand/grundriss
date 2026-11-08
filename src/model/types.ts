@@ -377,13 +377,15 @@ export interface VariantState {
 
 /**
  * A variant of the building, for example a renovation or another floor plan. `cost` is the
- * investment in currency, or null for the estimate of `renovation.ts`, and `subsidy` the part
- * that a subsidy pays.
+ * investment in currency, or null for the sum of the items of the estimate of `renovation.ts`.
+ * `itemCosts` has the own prices of items of the estimate, for example from an offer, by the
+ * English name of the item. `subsidy` is the part that a subsidy pays.
  */
 export interface Variant extends VariantState {
   id: Id;
   name: string;
   cost: number | null;
+  itemCosts: Record<string, number>;
   subsidy: number;
 }
 

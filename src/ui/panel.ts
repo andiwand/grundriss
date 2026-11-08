@@ -75,6 +75,8 @@ export function button(
 export function field(text: string, control: HTMLElement, unit?: string): void {
   const label = document.createElement("label");
   label.className = "field";
+  // A list shows a text, so it gets a wider column than a number.
+  if (control instanceof HTMLSelectElement) label.classList.add("choice");
   label.append(text);
   const box = document.createElement("span");
   box.className = "input";

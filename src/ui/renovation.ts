@@ -2,8 +2,17 @@ import { t } from "../i18n";
 import { type IconName } from "../icons";
 import { energyBalance, type EnergyBalance } from "../model/balance";
 import { fmt } from "../model/format";
-import { heatingEnergy } from "../model/heating";
-import { costItemText, estimateItems, subsidyEstimate, variantEconomy } from "../model/renovation";
+import { HEATING_KINDS, heatingEnergy } from "../model/heating";
+import {
+  costItems,
+  costItemText,
+  LIFETIME,
+  PAYBACK_LIMIT,
+  subsidyEstimate,
+  summaryOf,
+  variantEconomy,
+  type Summary,
+} from "../model/renovation";
 import type { Building, Variant } from "../model/types";
 import { layoutChanges } from "../model/layout";
 import { findRooms } from "../model/rooms";
@@ -20,7 +29,7 @@ import {
   variantOf,
   withVariant,
 } from "../model/variants";
-import { $, cached, doc, editor, shell, showStatus } from "./context";
+import { $, cached, doc, editor, panel, shell, showStatus } from "./context";
 import {
   button,
   euro,
@@ -81,6 +90,29 @@ export function renderVariantSwitch(): void {
 export function renderRenovationTopic(): void {
   const building = doc.building;
   heading(t("Renovation"), "coins");
+  // With variants, a switch shows the cards or the comparison. The comparison takes the place
+  // of the view too, so that the table has room for many variants.
+  if (building.variants.length > 0) {
+    const views = document.createElement("div");
+    views.className = "segmented renovation-views";
+    for (const [value, label] of [
+      [false, t("Variants")],
+      [true, t("Compare")],
+    ] as const) {
+      const element = document.createElement("button");
+      element.textContent = label;
+      element.classList.toggle("active", comparing === value);
+      element.addEventListener("click", () => {
+        comparing = value;
+        shell.renderPanel();
+      });
+      views.append(element);
+    }
+    section.append(views);
+  }
+  const compare = comparing && building.variants.length > 0;
+  document.body.classList.toggle("comparing", compare);
+  if (compare) return renderComparison();
   const open = building.variants.find((v) => v.id === building.variant);
   if (open) {
     paragraph(
@@ -243,10 +275,10 @@ function variantCard(variant: Variant, plan: EnergyBalance | null): HTMLElement 
   card.append(top);
 
   const economy = variantEconomy(building, variant, plan);
-  const items = estimateItems(building, variant);
+  const items = costItems(building, variant);
   const estimate = items.reduce((sum, i) => sum + i.cost, 0);
 
-  // The cost and the subsidy: two small fields. An empty cost uses the estimate.
+  // The cost and the subsidy: two small fields. An empty cost uses the sum of the items.
   const money = document.createElement("div");
   money.className = "variant-money";
   const moneyField = (
@@ -254,29 +286,24 @@ function variantCard(variant: Variant, plan: EnergyBalance | null): HTMLElement 
     value: number | null,
     placeholder: string,
     change: (value: number | null) => void,
+    reset?: string,
   ) => {
     const element = document.createElement("label");
     element.append(label);
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.step = "100";
-    input.placeholder = placeholder;
-    input.value = value == null ? "" : String(Math.round(value));
-    input.addEventListener("change", () => {
-      const text = input.value.trim();
-      const parsed = Number(text);
-      if (text === "") change(null);
-      else if (Number.isFinite(parsed) && parsed >= 0) change(parsed);
-    });
-    element.append(input);
+    const row = document.createElement("span");
+    row.className = "money-input";
+    row.append(amountInput(value, placeholder, change));
+    // An own value has a button that goes back to the estimate.
+    if (reset && value != null) row.append(resetButton(reset, () => change(null)));
+    element.append(row);
     money.append(element);
   };
   moneyField(
     t("Cost €"),
     variant.cost,
-    t("{amount} (estimate)", { amount: Math.round(estimate) }),
+    t("{amount} (sum)", { amount: Math.round(estimate) }),
     (v) => editVariant(variant.id, (x) => (x.cost = v)),
+    t("Use the sum of the items: {amount}", { amount: euro(estimate) }),
   );
   moneyField(t("Subsidy €"), variant.subsidy || null, "0", (v) =>
     editVariant(variant.id, (x) => (x.subsidy = v ?? 0)),
@@ -358,20 +385,42 @@ function variantCard(variant: Variant, plan: EnergyBalance | null): HTMLElement 
   }
 
   // The items of the estimate, and a list to add one more measure.
+  // Each item has a field for an own price, for example from an offer. Empty uses the estimate.
   const details = document.createElement("details");
   details.className = "variant-details";
+  details.open = openDetails.has(variant.id);
+  details.addEventListener("toggle", () => {
+    if (details.open) openDetails.add(variant.id);
+    else openDetails.delete(variant.id);
+  });
   const summary = document.createElement("summary");
   summary.textContent =
-    items.length === 0 ? t("No changes against the plan") : `${t("Estimate")} · ${euro(estimate)}`;
+    items.length === 0 ? t("No changes against the plan") : `${t("Items")} · ${euro(estimate)}`;
   details.append(summary);
   for (const item of items) {
     const row = document.createElement("div");
     row.className = "variant-item";
     const label = document.createElement("span");
     label.textContent = costItemText(item, t);
-    const cost = document.createElement("span");
-    cost.textContent = euro(item.cost);
-    row.append(label, cost);
+    const setCost = (value: number | null) =>
+      editVariant(variant.id, (v) => {
+        if (value === null) delete v.itemCosts[item.name];
+        else v.itemCosts[item.name] = value;
+      });
+    const input = amountInput(
+      item.own ? item.cost : null,
+      String(Math.round(item.estimate)),
+      setCost,
+    );
+    input.setAttribute("aria-label", t("Price of {item} in €", { item: costItemText(item, t) }));
+    row.append(label, input);
+    if (item.own) {
+      row.append(
+        resetButton(t("Use the estimate: {amount}", { amount: euro(item.estimate) }), () =>
+          setCost(null),
+        ),
+      );
+    }
     details.append(row);
   }
   card.append(details);
@@ -389,6 +438,211 @@ function variantCard(variant: Variant, plan: EnergyBalance | null): HTMLElement 
     card.append(add);
   }
   return card;
+}
+
+/** True if the topic shows the comparison of the variants in place of their cards. */
+let comparing = false;
+
+/** A row of the comparison: a value of each summary, and which value is the best. */
+interface CompareRow {
+  label: string;
+  text: (s: Summary) => string;
+  /** The number to compare, or null. Without it, the row marks no best value. */
+  score?: (s: Summary) => number | null;
+  better?: "low" | "high";
+}
+
+/**
+ * The comparison of the plan and the variants in a table: the cost, the energy, and the floor
+ * plan. The best value of each row has a mark.
+ */
+function renderComparison(): void {
+  const building = doc.building;
+  const columns: { name: string; id: string | null; summary: Summary }[] = [
+    {
+      name: t("Plan"),
+      id: null,
+      summary: cached("summary:plan", () => summaryOf(doc.building, null)),
+    },
+    ...building.variants.map((v) => ({
+      name: v.name,
+      id: v.id,
+      summary: cached(`summary:${v.id}`, () => summaryOf(doc.building, v)),
+    })),
+  ];
+  const none = "–";
+  const money = (v: number | null) => (v === null ? none : euro(v));
+  // A payback of null: no saving, or more than PAYBACK_LIMIT years.
+  const years = (v: number | null, s: Summary) =>
+    s === columns[0].summary || s.saving === null
+      ? none
+      : v === null
+        ? s.saving > 0
+          ? t("more than {years} years", { years: PAYBACK_LIMIT })
+          : t("never")
+        : v < 1
+          ? t("< 1 year")
+          : t("{years} years", { years: Math.round(v) });
+  const isPlan = (s: Summary) => s === columns[0].summary;
+  const rows: CompareRow[] = [
+    {
+      label: t("Investment"),
+      text: (s) => (isPlan(s) ? none : euro(s.cost)),
+      score: (s) => (isPlan(s) ? null : s.cost),
+      better: "low",
+    },
+    { label: t("Subsidy"), text: (s) => (isPlan(s) ? none : euro(s.subsidy)) },
+    {
+      label: t("After the subsidy"),
+      text: (s) => (isPlan(s) ? none : euro(s.net)),
+      score: (s) => (isPlan(s) ? null : s.net),
+      better: "low",
+    },
+    {
+      label: t("Energy cost per year"),
+      text: (s) => money(s.energyCost),
+      score: (s) => s.energyCost,
+      better: "low",
+    },
+    {
+      label: t("Saving per year"),
+      text: (s) => (isPlan(s) ? none : money(s.saving)),
+      score: (s) => (isPlan(s) ? null : s.saving),
+      better: "high",
+    },
+    {
+      label: t("Payback"),
+      text: (s) => years(s.payback, s),
+      score: (s) => (isPlan(s) ? null : s.payback),
+      better: "low",
+    },
+    {
+      label: t("Cost over {years} years", { years: LIFETIME }),
+      text: (s) => money(s.lifetime),
+      score: (s) => s.lifetime,
+      better: "low",
+    },
+    {
+      label: t("Heat demand"),
+      text: (s) =>
+        s.perArea === null ? none : `${fmt(s.perArea, 0)} kWh/m² · ${s.efficiencyClass}`,
+      score: (s) => s.perArea,
+      better: "low",
+    },
+    {
+      label: t("CO₂ per year"),
+      text: (s) => (s.co2 === null ? none : `${fmt(s.co2 / 1000, 1)} t`),
+      score: (s) => s.co2,
+      better: "low",
+    },
+    {
+      label: t("Self-sufficiency"),
+      text: (s) => (s.selfSufficiency === null ? none : `${fmt(s.selfSufficiency * 100, 0)} %`),
+      score: (s) => s.selfSufficiency,
+      better: "high",
+    },
+    { label: t("Heating"), text: (s) => t(HEATING_KINDS[s.heating].name) },
+    { label: t("PV"), text: (s) => (s.pvPeak > 0 ? `${fmt(s.pvPeak, 1)} kWp` : none) },
+    { label: t("Battery"), text: (s) => (s.battery > 0 ? `${fmt(s.battery, 1)} kWh` : none) },
+    {
+      label: t("Floor plan"),
+      text: (s) => t("{rooms} rooms · {area} m²", { rooms: s.rooms, area: fmt(s.area, 1) }),
+    },
+  ];
+
+  const wrap = document.createElement("div");
+  wrap.className = "compare-wrap";
+  const table = document.createElement("table");
+  table.className = "compare";
+  const head = table.createTHead().insertRow();
+  head.append(document.createElement("th"));
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = column.name;
+    if (column.id !== null && column.id === building.variant) th.classList.add("open");
+    head.append(th);
+  }
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = row.label;
+    tr.append(th);
+    // The best value: the lowest or the highest score, if the scores differ.
+    const scores = columns.map((c) => row.score?.(c.summary) ?? null);
+    const known = scores.filter((v): v is number => v !== null);
+    let best: number | null = null;
+    if (row.better && known.length > 1 && Math.max(...known) - Math.min(...known) > 1e-6) {
+      best = row.better === "low" ? Math.min(...known) : Math.max(...known);
+    }
+    columns.forEach((column, i) => {
+      const td = tr.insertCell();
+      td.textContent = row.text(column.summary);
+      if (best !== null && scores[i] !== null && Math.abs(scores[i]! - best) < 1e-6) {
+        td.classList.add("best");
+      }
+    });
+  }
+  wrap.append(table);
+  // The panel gets about the width of the table: the labels and a column for each summary.
+  panel.style.setProperty("--compare-width", `${260 + 180 * columns.length}px`);
+  // The notes go into the block of the table, so that they wrap at the width of the table.
+  const block = document.createElement("div");
+  block.className = "compare-block";
+  block.append(wrap);
+  section.append(block);
+  const note = (text: string) => {
+    const element = document.createElement("p");
+    element.className = "note";
+    element.textContent = text;
+    block.append(element);
+  };
+  if (columns[0].summary.energyCost === null) {
+    note(
+      t(
+        "The renovation compares the energy cost per year, so it needs the climate. Load it in the Location group of Energy.",
+      ),
+    );
+  }
+  note(
+    t(
+      "The cost over {years} years is the investment after the subsidy and the energy cost of {years} years in the money of today, with the interest and the change of the energy prices of the Variants view. The best value of each row is green.",
+      { years: LIFETIME },
+    ),
+  );
+}
+
+/** The variants whose list of items is open. The panel keeps it open after a change. */
+const openDetails = new Set<string>();
+
+/** A field for an amount in €. Empty gives null. */
+function amountInput(
+  value: number | null,
+  placeholder: string,
+  change: (value: number | null) => void,
+): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.step = "100";
+  input.placeholder = placeholder;
+  input.value = value == null ? "" : String(Math.round(value));
+  input.addEventListener("change", () => {
+    const text = input.value.trim();
+    const parsed = Number(text);
+    if (text === "") change(null);
+    else if (Number.isFinite(parsed) && parsed >= 0) change(parsed);
+  });
+  return input;
+}
+
+/** A small button that drops an own value and goes back to the estimate. */
+function resetButton(title: string, action: () => void): HTMLButtonElement {
+  const button = iconButton("undo", title, action);
+  button.classList.add("reset");
+  return button;
 }
 
 /** Changes one variant of the building. */

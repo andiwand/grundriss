@@ -26,9 +26,10 @@
 
 import { energyBalance, type EnergyBalance } from "./balance";
 import { fmt } from "./format";
-import { HEATING_KINDS } from "./heating";
+import { HEATING_KINDS, heatingEnergy } from "./heating";
 import { material } from "./insulation";
 import { pvSummary } from "./pv";
+import { findRooms } from "./rooms";
 import { layoutChanges } from "./layout";
 import { envelopeAreas } from "./takeoff";
 import type { Building, Finance, HeatingKind, Layer, Variant } from "./types";
@@ -215,9 +216,24 @@ export function estimateItems(building: Building, variant: Variant): CostItem[] 
   return items;
 }
 
-/** The cost of the variant: its own cost, or the sum of the estimate. */
+/** An item of the cost of a variant: the estimate, and the own price of the user if it has one. */
+export interface PricedItem extends CostItem {
+  /** The estimate from the prices of the region. `cost` is the own price or the estimate. */
+  estimate: number;
+  own: boolean;
+}
+
+/** The items of the cost of the variant, with the own prices of the user. */
+export function costItems(building: Building, variant: Variant): PricedItem[] {
+  return estimateItems(building, variant).map((item) => {
+    const own = variant.itemCosts[item.name];
+    return { ...item, estimate: item.cost, cost: own ?? item.cost, own: own != null };
+  });
+}
+
+/** The cost of the variant: its own cost, or the sum of its items. */
 export function variantCost(building: Building, variant: Variant): number {
-  return variant.cost ?? estimateItems(building, variant).reduce((sum, i) => sum + i.cost, 0);
+  return variant.cost ?? costItems(building, variant).reduce((sum, i) => sum + i.cost, 0);
 }
 
 export interface Economy {
@@ -275,7 +291,7 @@ export interface Subsidy {
  */
 export function subsidyEstimate(building: Building, variant: Variant): Subsidy | null {
   if (building.finance.region !== "DE") return null;
-  const items = estimateItems(building, variant);
+  const items = costItems(building, variant);
   const result: Subsidy = { amount: 0, items: [] };
   const heating = items.filter((i) => i.kind === "heating");
   if (heating.length > 0) {
@@ -322,5 +338,76 @@ export function variantEconomy(
     saving,
     co2Saving: plan.co2 - balance.co2,
     payback: paybackYears(net, saving, building.finance.interest, building.finance.priceIncrease),
+  };
+}
+
+/** The years of the cost over a lifetime in the comparison. */
+export const LIFETIME = 20;
+
+/**
+ * The cost over LIFETIME years in today's money: the investment after the subsidy, and the
+ * energy cost of each year, which grows with the energy prices and is discounted by the interest.
+ */
+export function lifetimeCost(net: number, energyCost: number, finance: Finance): number {
+  let sum = net;
+  for (let year = 1; year <= LIFETIME; year++) {
+    sum +=
+      (energyCost * (1 + finance.priceIncrease) ** (year - 1)) / (1 + finance.interest) ** year;
+  }
+  return sum;
+}
+
+/** The values of the plan or of a variant for the comparison. Null values need the climate. */
+export interface Summary {
+  cost: number;
+  subsidy: number;
+  net: number;
+  energyCost: number | null;
+  saving: number | null;
+  payback: number | null;
+  lifetime: number | null;
+  /** The heat demand in kWh/m² per year and its class, or null without rooms. */
+  perArea: number | null;
+  efficiencyClass: string | null;
+  co2: number | null;
+  heating: HeatingKind;
+  pvPeak: number;
+  battery: number;
+  selfSufficiency: number | null;
+  /** The rooms and their area on the center lines in m². */
+  rooms: number;
+  area: number;
+}
+
+/** The summary of the plan (variant null) or of a variant, against the plan. */
+export function summaryOf(building: Building, variant: Variant | null): Summary {
+  const plan = planBuilding(building);
+  const target = variant ? withVariant(building, variant) : plan;
+  const planBalance = energyBalance(plan);
+  const balance = variant ? energyBalance(target) : planBalance;
+  const cost = variant ? variantCost(building, variant) : 0;
+  const subsidy = variant ? Math.min(cost, variant.subsidy) : 0;
+  const net = Math.max(0, cost - subsidy);
+  const saving = balance && planBalance ? planBalance.cost - balance.cost : null;
+  const heat = heatingEnergy(target);
+  const rooms = target.stories.flatMap((s) => findRooms(s));
+  const { interest, priceIncrease } = building.finance;
+  return {
+    cost,
+    subsidy,
+    net,
+    energyCost: balance?.cost ?? null,
+    saving: variant ? saving : null,
+    payback: variant && saving !== null ? paybackYears(net, saving, interest, priceIncrease) : null,
+    lifetime: balance ? lifetimeCost(net, balance.cost, building.finance) : null,
+    perArea: heat?.perArea ?? null,
+    efficiencyClass: heat?.efficiencyClass ?? null,
+    co2: balance?.co2 ?? null,
+    heating: target.envelope.heating.kind,
+    pvPeak: pvSummary(target).peak,
+    battery: target.household.battery,
+    selfSufficiency: balance?.selfSufficiency ?? null,
+    rooms: rooms.length,
+    area: rooms.reduce((sum, r) => sum + r.area, 0),
   };
 }

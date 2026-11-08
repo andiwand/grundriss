@@ -74,6 +74,7 @@ export function variantOf(building: Building, name: string): Variant {
     pv: copy(plan.pv),
     layout: null,
     cost: null,
+    itemCosts: {},
     subsidy: 0,
   };
 }
