@@ -156,6 +156,18 @@ The settings are environment variables:
 Without these settings, the server answers 404 to each address outside a valid link, also `/`.
 The image `ghcr.io/andiwand/grundriss:latest` is the last release; `:main` is the newest state.
 
+### Versions
+
+A click on the name of the plan in the top bar shows its versions, and the clock on a plan of
+the Projects page too. A plan in the browser keeps a version at each save to a file and one every
+5 minutes while you edit, the newest 20. A plan on a server shows all its revisions. **Restore**
+gives the plan the state of a version, and undo takes it back; before a restore, the browser keeps
+the state of now as a version too. **Open as a copy** makes a new plan in this browser.
+
+A saved file knows its revision. Before the app replaces a file (Chrome and Edge), it checks that
+nobody saved the file in the meantime, for example on another device of a shared folder. Then it
+does not replace the file, and offers to save the plan as a new file.
+
 ### Install the app
 
 Grundriss is a Progressive Web App. In Chrome or Edge, click **Install** in the top bar, or use

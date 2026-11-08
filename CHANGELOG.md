@@ -4,6 +4,13 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Versions: a click on the name of the plan lists its versions. A plan of a server shows all its
+  revisions; a plan of the browser shows its history, with a version at each save to a file and
+  one every 5 minutes while you edit (the newest 20). A version opens as a copy, or comes back
+  with Restore; undo takes a restore back. The Projects page has the versions of each plan too.
+- Files: a saved file knows its revision. Before the app replaces a file, it checks that nobody
+  saved the file in the meantime; else it offers to save the plan as a new file.
+
 - Server: edit leases belong to both the token and the browser session. Saves check access and
   the lease after the upload completes. Removed tokens stop receiving live events.
 - Server: a failed disk write rolls back the state in memory. Invalid request bodies return a
