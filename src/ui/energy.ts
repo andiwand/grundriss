@@ -1,3 +1,4 @@
+import { icon } from "../icons";
 import { t } from "../i18n";
 import {
   ATTRIBUTION,
@@ -93,7 +94,6 @@ export function resetLocation(): void {
   climateRequest = null;
   locationOpen = null;
   placeQuery = "";
-  placeResults = [];
   locationBusy = null;
   locationMessage = null;
 }
@@ -102,8 +102,6 @@ export function resetLocation(): void {
 let locationOpen: boolean | null = null;
 
 let placeQuery = "";
-
-let placeResults: Place[] = [];
 
 /** The text of the request that runs, or null. */
 let locationBusy: string | null = null;
@@ -146,33 +144,128 @@ function editLocation(edit: (location: PlanLocation) => void) {
   });
 }
 
-/** Searches places by name. This sends the name to open-meteo.com. */
-async function findPlaces(query: string): Promise<void> {
-  placeQuery = query;
-  if (locationBusy) return;
-  if (query.trim().length < 2) {
-    locationMessage = { text: t("Type at least two letters of the place."), error: true };
-    renderPanel();
-    return;
-  }
-  locationBusy = t("Searching the place…");
-  locationMessage = null;
-  renderPanel();
-  try {
-    placeResults = await searchPlaces(query);
-    if (placeResults.length === 0) {
-      locationMessage = {
-        text: t('Found no place for "{query}".', { query: query.trim() }),
-        error: false,
-      };
+/** The pause after the last key before the search asks for places, in ms. */
+const SEARCH_DELAY = 350;
+/** The search starts at this number of letters. */
+const SEARCH_MIN = 3;
+
+/**
+ * The search of the place: a wide field that lists places while the user types. The arrow keys
+ * move in the list, Enter takes a place, and Esc closes the list. Each search sends the typed
+ * text to open-meteo.com, after a short pause and from three letters on. The field keeps its
+ * state in the DOM, so typing does not draw the panel again.
+ */
+function placeSearch(): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "place-search";
+  const input = document.createElement("input");
+  input.type = "search";
+  input.placeholder = t("Search a town or a village");
+  input.setAttribute("aria-label", t("Search a town or a village"));
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  input.autocomplete = "off";
+  input.value = placeQuery;
+  const list = document.createElement("ul");
+  list.className = "place-list";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+  const status = document.createElement("div");
+  status.className = "place-status";
+  box.innerHTML = icon("search");
+  box.append(input, list, status);
+
+  let places: Place[] = [];
+  let active = -1;
+  let timer = 0;
+  let request: AbortController | null = null;
+
+  const show = (items: Place[], message = "") => {
+    places = items;
+    active = items.length > 0 ? 0 : -1;
+    list.replaceChildren(
+      ...items.map((place, i) => {
+        const item = document.createElement("li");
+        item.setAttribute("role", "option");
+        const name = document.createElement("strong");
+        name.textContent = place.name;
+        const rest = document.createElement("span");
+        rest.textContent = place.label.startsWith(place.name)
+          ? place.label.slice(place.name.length).replace(/^,\s*/, "")
+          : place.label;
+        item.append(name, rest);
+        // The pointer down, not the click: the field loses its focus before a click.
+        item.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          choose(i);
+        });
+        return item;
+      }),
+    );
+    list.hidden = items.length === 0;
+    input.setAttribute("aria-expanded", String(!list.hidden));
+    status.textContent = message;
+    mark();
+  };
+  const mark = () =>
+    [...list.children].forEach((item, i) => item.classList.toggle("active", i === active));
+  const choose = (i: number) => {
+    const place = places[i];
+    if (!place) return;
+    request?.abort();
+    placeQuery = "";
+    show([]);
+    locationMessage = null;
+    editLocation((l) => {
+      l.name = place.label;
+      l.latitude = place.latitude;
+      l.longitude = place.longitude;
+    });
+  };
+  const search = async (query: string) => {
+    request?.abort();
+    const controller = new AbortController();
+    request = controller;
+    status.textContent = t("Searching the place…");
+    try {
+      const found = await searchPlaces(query, { signal: controller.signal });
+      if (request !== controller) return;
+      show(found, found.length === 0 ? t('Found no place for "{query}".', { query }) : "");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      show([], t((error as Error).message));
     }
-  } catch (error) {
-    placeResults = [];
-    locationMessage = { text: t((error as Error).message), error: true };
-  } finally {
-    locationBusy = null;
-    renderPanel();
-  }
+  };
+  input.addEventListener("input", () => {
+    placeQuery = input.value;
+    window.clearTimeout(timer);
+    const query = input.value.trim();
+    if (query.length < SEARCH_MIN) {
+      request?.abort();
+      show([]);
+      return;
+    }
+    timer = window.setTimeout(() => void search(query), SEARCH_DELAY);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (places.length === 0) return;
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + places.length) % places.length;
+      mark();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (active >= 0) choose(active);
+      else if (input.value.trim().length >= SEARCH_MIN) void search(input.value.trim());
+    } else if (e.key === "Escape" && !list.hidden) {
+      e.stopPropagation();
+      show([]);
+    }
+  });
+  input.addEventListener("blur", () => (list.hidden = true));
+  input.addEventListener("focus", () => (list.hidden = places.length === 0));
+  return box;
 }
 
 /**
@@ -234,32 +327,9 @@ function renderLocationPanel(): void {
     : location
       ? t("Place · {name}", { name: `${fmt(location.latitude)}, ${fmt(location.longitude)}` })
       : t("Place");
-  group(title, locationOpen ?? !location, () => {
-    const search = document.createElement("input");
-    search.type = "search";
-    search.placeholder = t("Town or city");
-    search.value = placeQuery;
-    search.addEventListener("input", () => (placeQuery = search.value));
-    search.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") void findPlaces(search.value);
-    });
-    field(t("Search"), search);
-    button(t("Search"), () => void findPlaces(search.value), { icon: "search" });
-    for (const place of placeResults) {
-      button(
-        place.label,
-        () => {
-          placeResults = [];
-          locationMessage = null;
-          editLocation((l) => {
-            l.name = place.label;
-            l.latitude = place.latitude;
-            l.longitude = place.longitude;
-          });
-        },
-        { icon: "pin" },
-      );
-    }
+  // The search is the way to the place; the group below has the exact values and the map.
+  section.append(placeSearch());
+  group(title, locationOpen ?? false, () => {
     if (location) {
       textField(t("Name"), location.name, (value) => editLocation((l) => (l.name = value)), {
         allowEmpty: true,
@@ -309,7 +379,7 @@ function renderLocationPanel(): void {
   }
   paragraph(
     t(
-      "Search and Load climate send the place to open-meteo.com. The app sends nothing before you click. The plan stores the climate, so it works offline after that.",
+      "The search sends what you type to open-meteo.com, and Load climate sends the place. The plan stores the climate, so it works offline after that.",
     ),
     "note",
   );

@@ -3337,3 +3337,84 @@ body.compact #home {
 body.compact .home h2 {
   font-size: 22px;
 }
+
+/* The search of the place: a wide field with an icon, and a list of places under it. */
+#panel .place-search {
+  position: relative;
+}
+
+#panel .place-search > .icon {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+#panel .place-search input {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px 0 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+#panel .place-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+
+#panel .place-list {
+  position: absolute;
+  z-index: 20;
+  top: 40px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+#panel .place-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#panel .place-list li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+#panel .place-list li.active,
+#panel .place-list li:hover {
+  background: var(--accent-soft);
+}
+
+#panel .place-status:empty {
+  display: none;
+}
+
+#panel .place-status {
+  padding: 4px 2px 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}

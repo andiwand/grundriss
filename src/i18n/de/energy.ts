@@ -34,8 +34,9 @@ export const ENERGY: Record<string, string> = {
   Stop: "Abbrechen",
   "Load the climate again": "Klima erneut laden",
   "Load climate": "Klima laden",
-  "Search and Load climate send the place to open-meteo.com. The app sends nothing before you click. The plan stores the climate, so it works offline after that.":
-    "„Suchen“ und „Klima laden“ senden den Ort an open-meteo.com. Vor Ihrem Klick sendet die App nichts. Der Plan speichert das Klima, danach funktioniert es auch offline.",
+  "The search sends what you type to open-meteo.com, and Load climate sends the place. The plan stores the climate, so it works offline after that.":
+    "Die Suche sendet, was Sie tippen, an open-meteo.com, und Klima laden sendet den Ort. Der Plan speichert das Klima, danach geht es auch offline.",
+  "Search a town or a village": "Stadt oder Gemeinde suchen",
 
   // The climate.
   "The climate is for {place}. Load it again for the new location.":

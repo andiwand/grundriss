@@ -277,11 +277,12 @@ selection, the panel shows the energy of the building:
 
 ### Location and climate
 
-The **Location** group of **Energy** sets the place of the building: search a town, or type the latitude and
-the longitude. **Load climate** then downloads the hourly weather of the last 10 complete years
+The **Location** group of **Energy** sets the place of the building: type a town in the search
+field and pick it from the list (the arrow keys and Enter work too), or open **Place** and type
+the latitude and the longitude. **Load climate** then downloads the hourly weather of the last 10 complete years
 from [Open-Meteo](https://open-meteo.com) and stores a typical year in the plan (about 40 kB). So
-the plan works offline after that. The app sends the place to open-meteo.com only when you click
-**Search** or **Load climate**.
+the plan works offline after that. From the third letter on, the search sends what you type to
+open-meteo.com; **Load climate** sends the place.
 
 The **Layers** menu can show a map under the 2D plan: OpenStreetMap, or the aerial photo of
 [basemap.at](https://basemap.at) in Austria. The map lies at the location and turns with the
