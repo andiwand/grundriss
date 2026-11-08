@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addCellar, addStoryOnTop, emptyBuilding } from "../src/model/building";
 import { newRoof } from "../src/model/roof";
-import { parseBuilding, serializeBuilding } from "../src/model/file";
+import { newRevision, parseBuilding, serializeBuilding } from "../src/model/file";
 import type { Climate, Plan } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
 import { makeHouse } from "../src/model/example";
@@ -377,5 +377,26 @@ describe("versions", () => {
     const read = parseBuilding(JSON.stringify(data));
     expect(read.stories[0].heated).toBe(true);
     expect(read.variants).toEqual([]);
+  });
+});
+
+describe("the revision header", () => {
+  it("keeps the revision of a save, and starts the next one from it", () => {
+    const building = emptyBuilding();
+    const first = newRevision(undefined, "macOS", 1000);
+    expect(first.parent).toBeNull();
+    building.revision = first;
+    const read = parseBuilding(serializeBuilding(building));
+    expect(read.revision).toEqual(first);
+    const second = newRevision(read.revision, "Linux", 2000);
+    expect(second.parent).toBe(first.id);
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("reads a file without a header, and ignores a wrong one", () => {
+    const data = JSON.parse(serializeBuilding(emptyBuilding()));
+    expect(parseBuilding(JSON.stringify(data)).revision).toBeUndefined();
+    data.revision = { parent: "x" };
+    expect(parseBuilding(JSON.stringify(data)).revision).toBeUndefined();
   });
 });

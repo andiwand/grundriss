@@ -38,6 +38,8 @@ import {
   storageOk,
   storeProject,
   updateTitle,
+  keepFileRevision,
+  openVersions,
 } from "./ui/projects";
 import { renderVariantSwitch } from "./ui/renovation";
 import { renderPanel } from "./ui/selection";
@@ -67,7 +69,7 @@ import { renameProject } from "./io/projects";
 
 import { addCellar, addStoryOnTop, findStory } from "./model/building";
 
-import { serializeBuilding } from "./model/file";
+import { newRevision, serializeBuilding } from "./model/file";
 
 import type { Building, Point, ServiceSystem } from "./model/types";
 
@@ -477,31 +479,78 @@ function loadTopViews(): void {
 
 // ----- Files -----
 
+/** A short name of this device for the revision of a file, for example "macOS". */
+function deviceName(): string {
+  const data = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return data?.platform || navigator.platform || "";
+}
+
+/**
+ * The id of the revision of the file on the disk, null for a file without a revision, or
+ * undefined if the app cannot read it.
+ */
+async function revisionOnDisk(handle: FileSystemFileHandle): Promise<string | null | undefined> {
+  try {
+    const file = await handle.getFile();
+    return readBuildingFile(new Uint8Array(await file.arrayBuffer())).revision?.id ?? null;
+  } catch {
+    return undefined;
+  }
+}
+
 async function saveFile(saveAs: boolean): Promise<void> {
   try {
     doc.commit();
     const building = doc.building;
     const generation = doc.generation;
+    const handle = saveAs ? null : app.fileHandle;
+    // The file on the disk must still be the revision that this plan knows. Else another
+    // person or device saved it in the meantime, and the app does not replace that save.
+    if (handle) {
+      const onDisk = await revisionOnDisk(handle);
+      if (onDisk !== undefined && onDisk !== (building.revision?.id ?? null)) {
+        const other = readableTime(await handle.getFile().then((f) => f.lastModified));
+        const asNew = confirm(
+          t(
+            "{name} changed on the disk since you opened it ({time}). OK saves your plan as a new file, and the other version stays. Cancel does not save.",
+            { name: app.fileName, time: other },
+          ),
+        );
+        if (asNew) return saveFile(true);
+        return;
+      }
+    }
+    const revision = newRevision(building.revision, deviceName());
+    const written = { ...building, revision };
     const result = await savePlanFile(
       async (name) =>
         isPackageName(name)
-          ? new Blob([writePackage(building, await exportsOf(building)) as BlobPart], {
+          ? new Blob([writePackage(written, await exportsOf(written)) as BlobPart], {
               type: "application/zip",
             })
-          : new Blob([serializeBuilding(building)], { type: "application/json" }),
-      saveAs ? null : app.fileHandle,
+          : new Blob([serializeBuilding(written)], { type: "application/json" }),
+      handle,
       app.fileName,
     );
     if (!result || doc.generation !== generation) return;
     app.fileName = result.name;
     app.fileHandle = result.handle;
+    // The plan knows the revision of its file now. It is no change of the plan, so it has no
+    // entry in the history of the undo.
+    building.revision = revision;
     doc.markSaved(building);
+    void keepFileRevision(building);
     // The project in the browser takes the name of the file.
     if (projectId) void renameProject(projectId, projectName());
     showStatus(t("Saved {name}.", { name: app.fileName }));
   } catch (error) {
     showStatus(t(error instanceof Error ? error.message : String(error)), true);
   }
+}
+
+/** The time of a change in the language of the app, for a message. */
+function readableTime(time: number): string {
+  return new Date(time).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" });
 }
 
 // ----- Export -----
@@ -960,6 +1009,8 @@ document.addEventListener("visibilitychange", () => {
 doc.subscribe(scheduleAutosave);
 
 void startProjects();
+// A click on the name of the plan shows its versions.
+$("#file-name").addEventListener("click", openVersions);
 setupRemote();
 
 // ----- Installed app -----

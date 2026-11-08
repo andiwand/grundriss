@@ -8,11 +8,19 @@
 //
 // A deleted project goes to the trash first: its entry gets the time of the delete. The app
 // removes it for good after TRASH_DAYS.
+//
+// Version 3 adds the history of each project: "revisions" has the list entries (the project, the
+// time, the kind, the size), and "revisionData" has their plans, so that the list loads fast. A
+// project keeps its newest MAX_REVISIONS revisions.
 
 const DB_NAME = "grundriss";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const PROJECTS = "projects";
 const PLANS = "plans";
+const REVISIONS = "revisions";
+const REVISION_DATA = "revisionData";
+/** The number of revisions that each project keeps. */
+export const MAX_REVISIONS = 20;
 /** A deleted project stays in the trash for this many days. */
 export const TRASH_DAYS = 30;
 
@@ -55,6 +63,13 @@ function database(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(PROJECTS))
         db.createObjectStore(PROJECTS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(PLANS)) db.createObjectStore(PLANS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(REVISIONS)) {
+        const store = db.createObjectStore(REVISIONS, { keyPath: "key" });
+        store.createIndex("project", "projectId");
+      }
+      if (!db.objectStoreNames.contains(REVISION_DATA)) {
+        db.createObjectStore(REVISION_DATA, { keyPath: "key" });
+      }
       // Version 1 kept the plan in the list entry. Move it to the store of the plans.
       if (event.oldVersion === 1) {
         const projects = transaction.objectStore(PROJECTS);
@@ -189,13 +204,86 @@ export async function restoreProject(id: string): Promise<void> {
   await updateInfo(id, (info) => delete info.deleted);
 }
 
-/** Removes the project for good. */
+/** Removes the project for good, with its history. */
 export async function purgeProject(id: string): Promise<void> {
-  await run([PROJECTS, PLANS], "readwrite", (t) => {
+  const keys = (await listRevisions(id)).map((r) => r.key);
+  await run([PROJECTS, PLANS, REVISIONS, REVISION_DATA], "readwrite", (t) => {
     t.objectStore(PROJECTS).delete(id);
     t.objectStore(PLANS).delete(id);
+    for (const key of keys) {
+      t.objectStore(REVISIONS).delete(key);
+      t.objectStore(REVISION_DATA).delete(key);
+    }
     return () => undefined;
   });
+}
+
+// ----- The history of a project -----
+
+/** Why the app kept a revision: a save to a file, the autosave, or a restore of an old one. */
+export type RevisionKind = "file" | "auto" | "restore";
+
+/** The list entry of a revision of a project. */
+export interface LocalRevision {
+  key: string;
+  projectId: string;
+  time: number;
+  kind: RevisionKind;
+  size: number;
+}
+
+/** The revisions of a project, the newest first. Without their plans. */
+export async function listRevisions(projectId: string): Promise<LocalRevision[]> {
+  const list = await run(
+    [REVISIONS],
+    "readonly",
+    (t) =>
+      t.objectStore(REVISIONS).index("project").getAll(projectId) as IDBRequest<LocalRevision[]>,
+  );
+  return list.sort((a, b) => b.time - a.time);
+}
+
+/** The plan of a revision as the JSON of the file format. */
+export async function loadRevision(key: string): Promise<string | undefined> {
+  const record = await run(
+    [REVISION_DATA],
+    "readonly",
+    (t) =>
+      t.objectStore(REVISION_DATA).get(key) as IDBRequest<
+        { key: string; data: string } | undefined
+      >,
+  );
+  return record?.data;
+}
+
+/**
+ * Keeps a revision of a project, and removes the oldest ones over MAX_REVISIONS. It gives the
+ * list entry of the new revision.
+ */
+export async function addRevision(
+  projectId: string,
+  data: string,
+  kind: RevisionKind,
+  time = Date.now(),
+): Promise<LocalRevision> {
+  const revision: LocalRevision = {
+    key: `${projectId}:${time}:${Math.random().toString(36).slice(2, 6)}`,
+    projectId,
+    time,
+    kind,
+    size: data.length,
+  };
+  const old = (await listRevisions(projectId)).slice(MAX_REVISIONS - 1).map((r) => r.key);
+  await run([REVISIONS, REVISION_DATA], "readwrite", (t) => {
+    t.objectStore(REVISIONS).put(revision);
+    t.objectStore(REVISION_DATA).put({ key: revision.key, data });
+    for (const key of old) {
+      t.objectStore(REVISIONS).delete(key);
+      t.objectStore(REVISION_DATA).delete(key);
+    }
+    return () => undefined;
+  });
+  return revision;
 }
 
 /** Removes the projects that are in the trash for more than TRASH_DAYS. */

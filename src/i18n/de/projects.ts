@@ -187,4 +187,28 @@ export const PROJECTS: Record<string, string> = {
   "Copy or move to a server": "Auf einen Server kopieren oder verschieben",
   "Share the plan with a link, or put it on a server":
     "Den Plan mit einem Link teilen oder auf einen Server legen",
+  // versions.ts: the versions of a plan.
+  "Saved to a file": "In eine Datei gespeichert",
+  "Saved in the browser": "Im Browser gespeichert",
+  "Before a restore": "Vor einer Wiederherstellung",
+  "Revision {number}": "Version {number}",
+  'Versions of "{name}"': "Versionen von „{name}“",
+  "Restore gives the plan the state of a version; undo takes it back. Open as a copy makes a new plan in this browser.":
+    "Wiederherstellen gibt dem Plan den Stand einer Version; Rückgängig nimmt das zurück. Als Kopie öffnen legt einen neuen Plan in diesem Browser an.",
+  "Open as a copy makes a new plan in this browser.":
+    "Als Kopie öffnen legt einen neuen Plan in diesem Browser an.",
+  "No versions yet. The browser keeps one at each save to a file, and one every few minutes while you edit.":
+    "Noch keine Versionen. Der Browser behält eine bei jedem Speichern in eine Datei und alle paar Minuten eine, während Sie bearbeiten.",
+  "Open as a copy": "Als Kopie öffnen",
+  "The version is a new plan in this browser now.":
+    "Die Version ist jetzt ein neuer Plan in diesem Browser.",
+  'The plan has the state of "{version}" again.': "Der Plan hat wieder den Stand von „{version}“.",
+  "The plan has no versions yet. It saves to this browser after its first change.":
+    "Der Plan hat noch keine Versionen. Er wird nach seiner ersten Änderung in diesem Browser gespeichert.",
+  Versions: "Versionen",
+  "Versions…": "Versionen…",
+  "{name} changed on the disk since you opened it ({time}). OK saves your plan as a new file, and the other version stays. Cancel does not save.":
+    "{name} wurde auf dem Datenträger geändert, seit Sie die Datei geöffnet haben ({time}). OK speichert Ihren Plan als neue Datei, und die andere Version bleibt. Abbrechen speichert nicht.",
+  "The name of the plan file. Click for its versions.":
+    "Der Name der Plandatei. Klicken für ihre Versionen.",
 };

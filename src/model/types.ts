@@ -637,8 +637,25 @@ export interface Climate {
   temperature: string;
 }
 
+/**
+ * The revision of a plan file: the save that wrote it, and the save that it starts from. Before
+ * the app writes a file again, it compares the revision on the disk with the revision that it
+ * knows, so that it does not replace the save of another person or device.
+ */
+export interface RevisionHeader {
+  id: string;
+  /** The revision before this one, or null. */
+  parent: string | null;
+  /** The time of the save in ms since 1970. */
+  saved: number;
+  /** A short name of the device that saved, for example "macOS". */
+  device: string;
+}
+
 /** The whole document: the stories from the bottom to the top, the roofs, and the orientation. */
 export interface Building {
+  /** The revision of the last save to a file, or nothing before the first save. */
+  revision?: RevisionHeader;
   stories: Story[];
   roofs: Roof[];
   /** The direction of north in degrees, clockwise from the top of the plan (the -y axis). */

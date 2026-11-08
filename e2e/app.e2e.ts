@@ -92,6 +92,33 @@ test("compares the variants in a table", async ({ page }) => {
   await expect(page.locator(".compare-dialog")).toHaveCount(0);
 });
 
+test("keeps versions of a project and restores one", async ({ page }) => {
+  await openApp(page);
+  test.skip(await isPhone(page), "The test deletes with the keyboard.");
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  const walls = page.locator('#plan-2d [data-kind="wall"]');
+  const before = await walls.count();
+  // The first change saves the project, and its history gets a first version with all walls.
+  const box = (await walls.first().boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.1, box.y + box.height / 2);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => projectCount(page)).toBe(1);
+  // Then all walls go. The history keeps one version in 5 minutes, so it gets no new one.
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Delete");
+  await expect(walls).toHaveCount(0);
+  // The autosave runs after a short wait.
+  await page.waitForTimeout(1500);
+  await page.locator("#file-name").click();
+  const dialog = page.locator(".app-dialog");
+  await expect(dialog.locator(".token-row")).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Restore" }).click();
+  await expect(walls).toHaveCount(before);
+  // Undo takes the restore back.
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(walls).toHaveCount(0);
+});
+
 test("exports the report and the quantities", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
@@ -118,7 +145,7 @@ test("moves a project to the trash and restores it", async ({ page }) => {
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open("grundriss", 2);
+        const request = indexedDB.open("grundriss");
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;

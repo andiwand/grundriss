@@ -301,6 +301,7 @@ body:not(.no-plan) .brand:hover .brand-back {
 }
 
 .file-name {
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3728,4 +3729,19 @@ body.compact #share {
 .remote-mark.busy {
   background: var(--surface-2);
   color: var(--ink-2);
+}
+
+/* The buttons of a version stay on one line next to it. */
+.token-row .dialog-actions {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+/* The icon in the title of a version. */
+.token-row strong .icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  color: var(--ink-3);
 }

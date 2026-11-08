@@ -14,6 +14,8 @@ import {
   listProjects,
   loadProject,
   newProjectId,
+  addRevision,
+  listRevisions,
   projectsAvailable,
   projectsKept,
   purgeProject,
@@ -33,6 +35,7 @@ import { $, app, doc, editor, shell, showStatus } from "./context";
 import { resetLocation } from "./energy";
 import { iconButton } from "./panel";
 import { setSuggestions } from "./tracing";
+import { localSource, showVersions } from "./versions";
 
 /** The message of an error in the language of the app. A static message of the model or of the
  * I/O modules has a translation, because the English message is the key. */
@@ -65,11 +68,41 @@ export const remoteHooks = {
   home: (_list: HTMLElement): void => {},
   /** Opens the dialog to connect a server. */
   connect: (): void => {},
+  /** Opens the versions of the open plan of a server. */
+  versions: (): void => {},
   /** True if a server can take plans of this browser. */
   canUpload: (): boolean => false,
   /** Opens the dialog that copies or moves a project of this browser to a server. */
   toServer: (_project: { id: string; name: string } | null): void => {},
 };
+
+/** The autosave keeps a revision in the history at most this often, in ms. */
+const AUTO_REVISION = 5 * 60_000;
+/** The time of the last revision of each project in this tab. */
+const lastRevision = new Map<string, number>();
+
+/**
+ * Keeps a revision of the project in its history, if the last one is older than AUTO_REVISION.
+ * The first check of a project in this tab reads the time from the history.
+ */
+async function autoRevision(id: string, data: string): Promise<void> {
+  if (!lastRevision.has(id)) {
+    lastRevision.set(id, (await listRevisions(id))[0]?.time ?? 0);
+  }
+  if (Date.now() - lastRevision.get(id)! < AUTO_REVISION) return;
+  lastRevision.set(id, (await addRevision(id, data, "auto")).time);
+}
+
+/** Keeps the plan that the app saved to a file in the history of its project. */
+export async function keepFileRevision(building: Building): Promise<void> {
+  if (!projectId || !storageOk) return;
+  const id = projectId;
+  try {
+    lastRevision.set(id, (await addRevision(id, serializeBuilding(building), "file")).time);
+  } catch {
+    // The history is a help; the save of the file worked.
+  }
+}
 
 /** Saves a building as a new project in this browser, for example a copy of a plan of a server. */
 export async function addProject(building: Building, name: string): Promise<string> {
@@ -242,6 +275,8 @@ export async function storeProject(): Promise<void> {
     await locking;
     if (generation !== doc.generation || id !== projectId || readOnly) return;
     await saveProject(project);
+    // The history of the project: a revision now and then. Its failure does not stop the save.
+    void autoRevision(id, project.data).catch(() => undefined);
     if (generation === doc.generation && id === projectId) {
       storedBuilding = building;
       saveFailed = false;
@@ -296,6 +331,19 @@ export async function confirmDiscard(): Promise<boolean> {
   await storeProject();
   if (generation !== doc.generation) return false;
   return !hasUnsavedChanges() || confirm(t("The plan has unsaved changes. Discard them?"));
+}
+
+/**
+ * Opens the versions of the open plan: the revisions on its server, or the history of its project
+ * in this browser.
+ */
+export function openVersions(): void {
+  if (remoteHooks.active()) return remoteHooks.versions();
+  if (!projectId) {
+    showStatus(t("The plan has no versions yet. It saves to this browser after its first change."));
+    return;
+  }
+  void showVersions(localSource(projectId, projectName()));
 }
 
 /**
@@ -674,6 +722,7 @@ function projectCard(project: ProjectInfo): HTMLElement {
       iconButton(iconName, title, action, { danger, label: `${title}: ${project.name}` }),
     );
   tool("rename", t("Rename"), () => renameInPlace(card, project));
+  tool("history", t("Versions"), () => void showVersions(localSource(project.id, project.name)));
   if (remoteHooks.canUpload()) {
     tool("cloud", t("Copy or move to a server"), () =>
       remoteHooks.toServer({ id: project.id, name: project.name }),

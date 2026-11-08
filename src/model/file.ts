@@ -3,7 +3,7 @@
 //
 // A new field that old versions can ignore needs no new version. parsePlan gives it a default
 // value when a file does not have it. Examples: `hinge`, `swing`, `style`, and `leaves` of an
-// opening, and `dimensions`.
+// opening, `dimensions`, and the `revision` header of the building.
 //
 // `location` and `climate` are such fields: a file without them gets null for both.
 //
@@ -48,6 +48,7 @@ import type {
   Wall,
   Variant,
   Layout,
+  RevisionHeader,
   Ventilation,
 } from "./types";
 
@@ -269,6 +270,8 @@ export function parseBuilding(text: string): Building {
     location,
     climate,
   };
+  const revision = parseRevision(data.revision);
+  if (revision) building.revision = revision;
   // The file has the plan in the building. The open variant opens again.
   if (typeof data.variant === "string") switchVariant(building, data.variant);
   return building;
@@ -572,6 +575,27 @@ function parseFinance(data: unknown): Finance {
       Math.max(-0.5, finite(data.priceIncrease, defaults.priceIncrease)),
     ),
   };
+}
+
+/** Reads the revision header of a file, or nothing if it has none or a wrong one. */
+function parseRevision(data: unknown): RevisionHeader | undefined {
+  if (!isObject(data) || typeof data.id !== "string" || !data.id) return undefined;
+  return {
+    id: data.id,
+    parent: typeof data.parent === "string" ? data.parent : null,
+    saved: typeof data.saved === "number" && Number.isFinite(data.saved) ? data.saved : 0,
+    device: typeof data.device === "string" ? data.device.slice(0, 80) : "",
+  };
+}
+
+/** The header of a new revision that starts from `parent`. */
+export function newRevision(
+  parent: RevisionHeader | undefined,
+  device: string,
+  saved = Date.now(),
+): RevisionHeader {
+  const id = `${saved.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return { id, parent: parent?.id ?? null, saved, device };
 }
 
 /** Reads the own prices of the items of a variant: names with numbers of 0 or more. */

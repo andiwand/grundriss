@@ -23,6 +23,8 @@ import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
+import { actionButton, dialog, note, row } from "./dialog";
+import { remoteSource, showVersions } from "./versions";
 import { iconButton } from "./panel";
 import {
   addProject,
@@ -521,53 +523,6 @@ const canManageUsers = (token: TokenInfo | null) =>
 
 // ----- Dialogs -----
 
-/** A dialog with a title and a close button. Esc or a click outside closes it. */
-function dialog(title: string): { element: HTMLDialogElement; body: HTMLElement } {
-  const element = document.createElement("dialog");
-  element.className = "app-dialog";
-  const head = document.createElement("div");
-  head.className = "app-dialog-head";
-  const heading = document.createElement("h2");
-  heading.textContent = title;
-  head.append(
-    heading,
-    iconButton("close", t("Close"), () => element.close()),
-  );
-  const body = document.createElement("div");
-  body.className = "app-dialog-body";
-  element.append(head, body);
-  element.addEventListener("click", (e) => e.target === element && element.close());
-  element.addEventListener("close", () => element.remove());
-  document.body.append(element);
-  element.showModal();
-  return { element, body };
-}
-
-function row(parent: HTMLElement, label: string, control: HTMLElement): void {
-  const element = document.createElement("label");
-  element.className = "dialog-field";
-  const text = document.createElement("span");
-  text.textContent = label;
-  element.append(text, control);
-  parent.append(element);
-}
-
-function note(parent: HTMLElement, text: string, className = "dialog-note"): HTMLElement {
-  const element = document.createElement("p");
-  element.className = className;
-  element.textContent = text;
-  parent.append(element);
-  return element;
-}
-
-function actionButton(text: string, action: () => void, primary = false): HTMLButtonElement {
-  const element = document.createElement("button");
-  element.textContent = text;
-  if (primary) element.className = "primary";
-  element.addEventListener("click", action);
-  return element;
-}
-
 /** A list of the ends of a token: none, a few durations, or a date. */
 function expiryField(parent: HTMLElement): () => number | null {
   const select = document.createElement("select");
@@ -720,6 +675,10 @@ function planDialog(): void {
     );
   }
   actions.append(
+    actionButton(t("Versions…"), () => {
+      element.close();
+      remoteHooks.versions();
+    }),
     actionButton(t("Load again"), () => {
       if (unsaved(current) && !confirm(t("The plan has unsaved changes. Discard them?"))) return;
       element.close();
@@ -1224,6 +1183,13 @@ export function setupRemote(): void {
   remoteHooks.end = endSession;
   remoteHooks.home = renderServers;
   remoteHooks.connect = connectDialog;
+  remoteHooks.versions = () => {
+    if (session) {
+      void showVersions(
+        remoteSource(session.client, session.planId, projectName(), session.editing),
+      );
+    }
+  };
   remoteHooks.canUpload = () => connections().some((c) => canCreate(c.token));
   remoteHooks.toServer = uploadDialog;
   doc.onBlocked = () => {
