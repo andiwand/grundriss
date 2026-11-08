@@ -11,7 +11,7 @@ import { field, group, section } from "./panel";
 export const PHOTO_LIMIT = 1600;
 
 /** A change of a note: the function gets the old note and gives the new one, or nothing. */
-type NoteChange = (edit: (note: Note | undefined) => Note | undefined) => void;
+export type NoteChange = (edit: (note: Note | undefined) => Note | undefined) => void;
 
 /** A note without a text and without photos goes away. */
 const tidy = (note: Note): Note | undefined =>
