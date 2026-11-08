@@ -1,0 +1,8 @@
+.git
+node_modules
+dist
+server/dist
+server/data
+test-results
+playwright-report
+.e2e-build
