@@ -227,6 +227,11 @@ function setTopic(next: Topic): void {
 }
 
 function setTool(tool: Tool): void {
+  // The scale and the straightening need a background, also from a shortcut.
+  if ((tool === "calibrate" || tool === "rectify") && !doc.plan.background) {
+    showStatus(t("Load a background first."));
+    return;
+  }
   // A tool of another topic, for example from a shortcut, opens its topic first.
   const owner = TOOL_TOPIC[tool];
   if (owner && owner !== app.topic) setTopic(owner);

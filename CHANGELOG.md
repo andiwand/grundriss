@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Structure: Scale is disabled without a background image, like Straighten. The shortcut C then
+  only says that a background is needed first.
 - Renovation: one column in a panel of medium width, next to the 2D and 3D views. Each variant
   is a group with its key numbers, a table of the cost items with a field for your own price,
   its measures, and its name. "Compare" next to the heading opens the table of all variants in

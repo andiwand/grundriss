@@ -169,7 +169,10 @@ export function renderPanel(): void {
   if (renderTracing()) return;
   // The card is only for a new plan. A tool other than "select" hides it, so that it does not
   // block the clicks of that tool.
-  $<HTMLButtonElement>('[data-tool="rectify"]').disabled = !plan.background;
+  // The scale and the straightening work on a background, so they need one.
+  for (const tool of ["calibrate", "rectify"]) {
+    $<HTMLButtonElement>(`[data-tool="${tool}"]`).disabled = !plan.background;
+  }
   $("#empty-state").hidden =
     plan.walls.length > 0 || plan.background !== null || editor.tool !== "select";
 
