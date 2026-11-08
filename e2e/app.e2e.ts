@@ -79,6 +79,19 @@ test("compares the variants in a table", async ({ page }) => {
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await page.locator('[data-topic-tab="renovation"]').click();
   await page.locator('select[aria-label="Add a variant"]').selectOption("copy");
+  // On a phone, the sheet of the panel grows with an animation: the click waits until it stops.
+  if (await isPhone(page)) {
+    const top = async () => (await page.locator("#panel").boundingBox())!.y;
+    let last = NaN;
+    await expect
+      .poll(async () => {
+        const now = await top();
+        const still = Math.abs(now - last) < 0.5;
+        last = now;
+        return still;
+      })
+      .toBe(true);
+  }
   await page.locator("#panel .heading-action", { hasText: "Compare" }).click();
   // A dialog with a column for the plan and one for the variant. Esc closes it.
   await expect(page.locator(".compare-dialog table.compare thead th")).toHaveCount(3);
