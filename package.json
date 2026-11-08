@@ -1,7 +1,7 @@
 {
   "name": "grundriss",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Trace a scanned floor plan, edit it in 2D, and see it in 3D, in the browser",
   "license": "MPL-2.0",
