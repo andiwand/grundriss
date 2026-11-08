@@ -137,6 +137,43 @@ list and read the revisions; take, renew, and give back the lease; make, list, a
 (root, and the owner of a plan for its plan tokens); and a stream of new revisions (server-sent
 events), so that the readers see each save at once.
 
+### The Docker image and the versions
+
+The server goes out as a Docker image on the GitHub Container Registry
+(`ghcr.io/andiwand/grundriss`), for `linux/amd64` and `linux/arm64`, so that it also runs on a
+Raspberry Pi or a NAS. The image contains the server and the build of the app of the same
+version, so the server always serves a matching app.
+
+**The configuration** comes from environment variables, and the data from one volume:
+
+- `GRUNDRISS_MODE`: `full` (app and API) or `api` (only the API).
+- `GRUNDRISS_DATA`: the folder of the database and the revisions, a volume (default `/data`).
+- `PORT`: the port (default 8080). The server speaks HTTP; a reverse proxy (Caddy, Traefik)
+  adds https.
+- `GRUNDRISS_ORIGINS`: the origins that may call the API (CORS), for example the PWA on GitHub
+  Pages (step 4). Empty means only the same origin.
+- `GRUNDRISS_ROOT_TOKEN`: an own root token, for example from a secret of the host. Without it,
+  the server makes one on the first start and prints it to the log once.
+
+So one command starts a server:
+`docker run -v grundriss:/data -p 8080:8080 ghcr.io/andiwand/grundriss`. A `compose.yaml` in the
+repository shows the same with a reverse proxy.
+
+**The versions.** The project uses semantic versions, starting in 0.x, where a minor version can
+change the API. One version is for all parts: `package.json`, the app (it shows it in the help),
+the server, and the image.
+
+- **A release** is a tag `vX.Y.Z` on `main`. A workflow then builds the image with the tags
+  `X.Y.Z`, `X.Y`, and `latest`, and makes a GitHub release with the part of `CHANGELOG.md` for
+  this version. The section `## Unreleased` becomes `## X.Y.Z – date`.
+- **Each commit on `main`** also publishes an image, with the tags `main` and `sha-<commit>`, for
+  people who want the newest state. `latest` stays the last release.
+- **The API** has its version in the answer of `/<token>/api/me`. The app from GitHub Pages
+  checks it and says if the server is too old or too new for it. The file format keeps its own
+  `FILE_VERSION`.
+- The first release with a version tag can be now, before the server, so that the app and the
+  changelog get versions already.
+
 ### Step 3: connected projects in the app
 
 - A project in IndexedDB is local, or connected: it then has the address of the token on the
