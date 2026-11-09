@@ -33,7 +33,7 @@ import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
 import { actionButton, dialog, note, row } from "./dialog";
 import { remoteSource, showVersions } from "./versions";
-import { iconButton } from "./panel";
+import { checkbox, iconButton, pair, radioGroup, selectInput, textInput } from "./controls";
 import {
   addProject,
   ago,
@@ -612,25 +612,19 @@ const canManageUsers = (token: TokenInfo | null) =>
 
 /** A list of the ends of a token: none, a few durations, or a date. */
 function expiryField(parent: HTMLElement): () => number | null {
-  const select = document.createElement("select");
   const days = (n: number) => Date.now() + n * 86_400_000;
-  const options: [string, string][] = [
+  const select = selectInput([
     ["", t("No end")],
     ["1", t("1 day")],
     ["7", t("7 days")],
     ["30", t("30 days")],
     ["365", t("1 year")],
     ["date", t("A date…")],
-  ];
-  for (const [value, text] of options) select.append(new Option(text, value));
-  const date = document.createElement("input");
-  date.type = "date";
+  ]);
+  const date = textInput("", { type: "date" });
   date.hidden = true;
   select.addEventListener("change", () => (date.hidden = select.value !== "date"));
-  const box = document.createElement("span");
-  box.className = "dialog-pair";
-  box.append(select, date);
-  row(parent, t("Ends"), box);
+  row(parent, t("Ends"), pair(select, date));
   return () => {
     if (select.value === "") return null;
     if (select.value === "date") {
@@ -666,9 +660,8 @@ function showNewLink(parent: HTMLElement, client: ServerClient, token: string): 
     links.push([t("Link for this app"), here]);
   }
   for (const [label, value] of links) {
-    const field = document.createElement("input");
+    const field = textInput(value);
     field.readOnly = true;
-    field.value = value;
     field.addEventListener("focus", () => field.select());
     const copy = actionButton(t("Copy"), () => {
       void navigator.clipboard?.writeText(value).then(
@@ -676,10 +669,7 @@ function showNewLink(parent: HTMLElement, client: ServerClient, token: string): 
         () => field.select(),
       );
     });
-    const line = document.createElement("span");
-    line.className = "dialog-pair";
-    line.append(field, copy);
-    row(box, label, line);
+    row(box, label, pair(field, copy));
   }
   parent.prepend(box);
 }
@@ -693,9 +683,7 @@ function connectDialog(): void {
       "Paste the link that you got from the owner of a Grundriss server, for example https://example.org/abc…. The link is your access, so keep it like a password.",
     ),
   );
-  const input = document.createElement("input");
-  input.type = "url";
-  input.placeholder = "https://…";
+  const input = textInput("", { type: "url", placeholder: "https://…" });
   row(body, t("Link"), input);
   const message = note(body, "", "dialog-note warning");
   const connect = actionButton(
@@ -819,12 +807,12 @@ async function shareDialog(client: ServerClient, planId: string, name: string): 
   );
   const form = document.createElement("div");
   form.className = "dialog-form";
-  const label = document.createElement("input");
-  label.placeholder = t("For example: Architect");
+  const label = textInput("", { placeholder: t("For example: Architect") });
   row(form, t("For"), label);
-  const access = document.createElement("select");
-  access.append(new Option(t("Can view"), "read"));
-  if (me?.token.write) access.append(new Option(t("Can edit"), "write"));
+  const access = selectInput([
+    ["read", t("Can view")],
+    ...(me?.token.write ? [["write", t("Can edit")] as const] : []),
+  ]);
   row(form, t("Access"), access);
   const expires = expiryField(form);
   const message = note(form, "", "dialog-note warning");
@@ -911,8 +899,7 @@ async function settingsDialog(connection: Connection): Promise<void> {
   if (root) {
     try {
       const settings = await client.settings();
-      const name = document.createElement("input");
-      name.value = settings.name;
+      const name = textInput(settings.name);
       row(body, t("Name of the server"), name);
       name.addEventListener("change", async () => {
         try {
@@ -947,16 +934,10 @@ async function settingsDialog(connection: Connection): Promise<void> {
   );
   const form = document.createElement("div");
   form.className = "dialog-form";
-  const label = document.createElement("input");
-  label.placeholder = t("For example: Anna");
+  const label = textInput("", { placeholder: t("For example: Anna") });
   row(form, t("Name"), label);
   const check = (text: string, value: boolean) => {
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = value;
-    const element = document.createElement("label");
-    element.className = "dialog-check";
-    element.append(input, text);
+    const { element, input } = checkbox(text, value);
     form.append(element);
     return input;
   };
@@ -1008,27 +989,23 @@ async function settingsDialog(connection: Connection): Promise<void> {
   await fillTokens(links, client, undefined, "plan");
 }
 
-/** Two radio buttons: copy or move. It gives true for move. */
+/**
+ * Two radio buttons: copy or move. It gives true for move. Without the move, there is nothing to
+ * choose, so the dialog shows no radio buttons and always copies.
+ */
 function copyOrMove(parent: HTMLElement, moveText: string, canMove = true): () => boolean {
-  const name = `transfer-${Math.random().toString(36).slice(2)}`;
-  const box = document.createElement("div");
-  box.className = "dialog-form";
-  const option = (value: string, text: string, checked: boolean) => {
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = name;
-    input.value = value;
-    input.checked = checked;
-    const element = document.createElement("label");
-    element.className = "dialog-check";
-    element.append(input, text);
-    box.append(element);
-    return input;
-  };
-  option("copy", t("Copy: the plan stays here too"), true);
-  const move = canMove ? option("move", moveText, false) : null;
-  parent.append(box);
-  return () => move?.checked === true;
+  if (!canMove) return () => false;
+  const choice = radioGroup(
+    `transfer-${Math.random().toString(36).slice(2)}`,
+    [
+      ["copy", t("Copy: the plan stays here too")],
+      ["move", moveText],
+    ],
+    "copy",
+  );
+  choice.element.classList.add("dialog-form");
+  parent.append(choice.element);
+  return () => choice.value() === "move";
 }
 
 /**
@@ -1043,8 +1020,9 @@ function uploadDialog(project: { id: string; name: string } | null): void {
     body,
     t("On a server, each change saves to the server, and you can share the plan with links."),
   );
-  const select = document.createElement("select");
-  for (const c of targets) select.append(new Option(`${c.name} · ${kindText(c.token)}`, c.address));
+  const select = selectInput(
+    targets.map((c) => [c.address, `${c.name} · ${kindText(c.token)}`] as const),
+  );
   row(body, t("Server"), select);
   const localId = project?.id ?? projectId;
   const isMove = copyOrMove(

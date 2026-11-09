@@ -179,6 +179,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `compose.yaml`             | The server with Caddy for https, for self-hosting.                                       |
 | `src/ui/versions.ts`       | The versions of a plan: the history in the browser, or the revisions on a server.        |
 | `src/ui/dialog.ts`         | The helpers of the dialogs of the app.                                                   |
+| `src/ui/controls.ts`       | The controls: buttons, fields, lists, check boxes, and the rows of a form.               |
 | `src/ui/remote.ts`         | The plans on a server: connections, the session of a plan, share, users, copy and move.  |
 | `src/io/server.ts`         | The client of the API of the server.                                                     |
 | `server/`                  | The server: `src/store.ts` (tokens, plans, revisions), `src/app.ts` (HTTP), the tests.   |
@@ -235,6 +236,9 @@ change the website. `test/example.test.ts` checks that the example house stays v
 
 ## Conventions
 
+- Make each control with `src/ui/controls.ts` (or the helpers of `panel.ts` and `dialog.ts`,
+  which use it), not with `document.createElement("input")`. The style of all controls comes
+  from the tokens `--control-*` and the section "Controls" of `style.css`.
 - Format before each commit: `npm run format`.
 - Commit messages follow Conventional Commits, for example `feat(editor): ...`,
   `fix(model): ...`, `docs: ...`.

@@ -49,6 +49,7 @@ import {
   textField,
 } from "./panel";
 import { renderPanel } from "./selection";
+import { numberInput, textInput } from "./controls";
 
 /** The location and the climate, the envelope, the heating per year, and the PV yield. */
 export function renderEnergyTopic(): void {
@@ -120,12 +121,11 @@ function coordinateField(
   limit: number,
   change: (value: number) => void,
 ): void {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.step = "0.0001";
-  input.min = String(-limit);
-  input.max = String(limit);
-  input.value = value === null ? "" : String(Math.round(value * 10000) / 10000);
+  const input = numberInput(value === null ? null : Math.round(value * 10000) / 10000, {
+    step: 0.0001,
+    min: -limit,
+    max: limit,
+  });
   input.addEventListener("change", () => {
     const parsed = Number(input.value);
     if (input.value !== "" && Number.isFinite(parsed) && Math.abs(parsed) <= limit) change(parsed);
@@ -161,15 +161,15 @@ const SEARCH_MIN = 3;
 function placeSearch(): HTMLElement {
   const box = document.createElement("div");
   box.className = "place-search";
-  const input = document.createElement("input");
-  input.type = "search";
-  input.placeholder = t("Search a town or a village");
-  input.setAttribute("aria-label", t("Search a town or a village"));
+  const input = textInput(placeQuery, {
+    type: "search",
+    placeholder: t("Search a town or a village"),
+    label: t("Search a town or a village"),
+  });
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "false");
   input.autocomplete = "off";
-  input.value = placeQuery;
   const list = document.createElement("ul");
   list.className = "place-list";
   list.setAttribute("role", "listbox");

@@ -17,6 +17,7 @@ import {
   type Category,
 } from "../model/furniture";
 import type { Building, Furniture, Model } from "../model/types";
+import { textInput } from "./controls";
 
 type Tab = "generic" | "kenney" | "polyhaven" | "plan";
 
@@ -105,10 +106,7 @@ export class Catalog {
 
     const search = document.createElement("label");
     search.className = "search";
-    const input = document.createElement("input");
-    input.type = "search";
-    input.placeholder = t("Search");
-    input.value = this.query;
+    const input = textInput(this.query, { type: "search", placeholder: t("Search") });
     input.addEventListener("input", () => {
       this.query = input.value;
       this.renderBody(body);

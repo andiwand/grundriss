@@ -69,6 +69,7 @@ import { renderRenovationTopic } from "./renovation";
 import { renderLivingArea, renderRoofPanel, renderStructurePanel } from "./structure";
 import { renderTracing } from "./tracing";
 import { renderInteriorPanel, renderUtilitiesPanel, SYSTEM_ICONS } from "./utilities";
+import { selectInput } from "./controls";
 
 // ----- Helpers -----
 
@@ -662,10 +663,10 @@ function renderOpening(plan: Story, id: Id): void {
   const edit = editOf(findOpening, id);
   const name = (kind: OpeningKind) => (kind === "door" ? t("Door") : t("Window"));
   heading(name(opening.kind), opening.kind);
-  const select = document.createElement("select");
-  for (const kind of ["door", "window"] as OpeningKind[]) {
-    select.append(new Option(name(kind), kind, false, kind === opening.kind));
-  }
+  const select = selectInput(
+    (["door", "window"] as OpeningKind[]).map((kind) => [kind, name(kind)] as const),
+    opening.kind,
+  );
   select.addEventListener("change", () => edit((o) => (o.kind = select.value as OpeningKind)));
   field(t("Kind"), select);
   numberOf(t("Width"), opening, "width", edit, { min: 0.1 });

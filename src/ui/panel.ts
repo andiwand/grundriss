@@ -5,6 +5,21 @@ import { fmt } from "../model/format";
 import { layersThickness, MATERIALS } from "../model/insulation";
 import type { Layer } from "../model/types";
 import { panel } from "./context";
+import {
+  button as makeButton,
+  checkbox,
+  fieldRow,
+  iconButton,
+  numberInput,
+  selectInput,
+  textInput,
+  withUnit,
+} from "./controls";
+
+export { iconButton };
+
+/** A list with a value longer than this many characters goes under its label in the panel. */
+const LONG_CHOICE = 12;
 
 /** The section of the panel that the helpers below append to. */
 export let section: HTMLElement = panel;
@@ -55,9 +70,10 @@ export function button(
     row.className = "actions";
     section.append(row);
   }
-  const element = document.createElement("button");
-  if (options.kind) element.className = options.kind;
-  if (options.icon) element.innerHTML = icon(options.icon);
+  const element = makeButton(options.detail ? "" : text, action, {
+    kind: options.kind,
+    icon: options.icon,
+  });
   if (options.detail) {
     // A list item: the text on the first line, and the detail small below it.
     element.classList.add("item");
@@ -69,36 +85,22 @@ export function button(
     lines.className = "lines";
     lines.append(label, detail);
     element.append(lines);
-  } else {
-    element.append(text);
   }
   if (options.view) element.dataset.view = "";
-  element.addEventListener("click", action);
   row.append(element);
   return element;
 }
 
-/** A row of the panel: a label on the left and a control in a box on the right. */
+/**
+ * A row of the panel: a label on the left and a control in a box on the right. All controls have
+ * one width, so they start at one line. A list with a long value goes under its label, so that
+ * the list does not cut its value.
+ */
 export function field(text: string, control: HTMLElement, unit?: string): void {
-  const label = document.createElement("label");
-  label.className = "field";
-  // A list or a text field shows a text, so it gets a wider column than a number.
-  const wide =
-    control instanceof HTMLSelectElement ||
-    (control instanceof HTMLInputElement && control.type === "text");
-  if (wide) label.classList.add("choice");
-  label.append(text);
-  const box = document.createElement("span");
-  box.className = "input";
-  box.append(control);
-  if (unit) {
-    const element = document.createElement("span");
-    element.className = "unit";
-    element.textContent = unit;
-    box.append(element);
-  }
-  label.append(box);
-  section.append(label);
+  const stacked =
+    control instanceof HTMLSelectElement &&
+    [...control.options].some((option) => option.text.length > LONG_CHOICE);
+  section.append(fieldRow(text, withUnit(control, unit), { stacked }));
 }
 
 /**
@@ -118,14 +120,11 @@ export function colorField(
   field(text, input);
   if (reset) {
     const box = section.lastElementChild!.querySelector(".input")!;
-    const clear = document.createElement("button");
-    clear.className = "icon-button reset";
-    clear.title = reset.title;
-    clear.innerHTML = icon("close");
-    clear.addEventListener("click", (event) => {
+    const clear = iconButton("close", reset.title, (event) => {
       event.preventDefault();
       reset.action();
     });
+    clear.classList.add("reset");
     box.append(clear);
   }
 }
@@ -136,12 +135,11 @@ export function numberField(
   change: (value: number) => void,
   options: { step?: number; min?: number; max?: number; unit?: string } = {},
 ): HTMLInputElement {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.step = String(options.step ?? 0.01);
-  input.min = String(options.min ?? 0);
-  if (options.max !== undefined) input.max = String(options.max);
-  input.value = String(Math.round(value * 1000) / 1000);
+  const input = numberInput(Math.round(value * 1000) / 1000, {
+    step: options.step ?? 0.01,
+    min: options.min ?? 0,
+    max: options.max,
+  });
   input.addEventListener("change", () => {
     const parsed = input.valueAsNumber;
     if (
@@ -158,9 +156,6 @@ export function numberField(
 
 /** A slider from 0 to 1. It changes the plan only when the user releases it. */
 export function rangeField(text: string, value: number, change: (value: number) => void): void {
-  const label = document.createElement("label");
-  label.className = "field";
-  label.append(text);
   const input = document.createElement("input");
   input.type = "range";
   input.min = "0";
@@ -168,8 +163,7 @@ export function rangeField(text: string, value: number, change: (value: number) 
   input.step = "0.05";
   input.value = String(value);
   input.addEventListener("change", () => change(Number(input.value)));
-  label.append(input);
-  section.append(label);
+  section.append(fieldRow(text, input));
 }
 
 export function stats(items: [value: string, text: string, wide?: boolean][]): void {
@@ -194,10 +188,7 @@ export function textField(
   change: (value: string) => void,
   options: { placeholder?: string; allowEmpty?: boolean } = {},
 ): void {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value;
-  if (options.placeholder) input.placeholder = options.placeholder;
+  const input = textInput(value, { placeholder: options.placeholder });
   input.addEventListener("change", () => {
     const trimmed = input.value.trim();
     if (trimmed || options.allowEmpty) change(trimmed);
@@ -211,8 +202,7 @@ export function selectField<T extends string>(
   options: [T, string][],
   change: (value: T) => void,
 ): void {
-  const select = document.createElement("select");
-  for (const [key, label] of options) select.append(new Option(label, key, false, key === value));
+  const select = selectInput(options, value);
   select.addEventListener("change", () => change(select.value as T));
   field(text, select);
 }
@@ -225,23 +215,19 @@ const COMPASS =
 
 export const compassName = (azimuth: number) => COMPASS[Math.round(azimuth / 45) % 8];
 
-/** A check box. With `view`, it does not change the plan, so it stays in a plan to view. */
+/**
+ * A check box with the box before its label, like in the dialogs and the menus. With `view`, it
+ * does not change the plan, so it stays in a plan to view.
+ */
 export function checkField(
   text: string,
   value: boolean,
   change: (value: boolean) => void,
   view = false,
 ): void {
-  const label = document.createElement("label");
-  label.className = "field check-field";
-  label.append(text);
-  const input = document.createElement("input");
-  input.type = "checkbox";
+  const { element, input } = checkbox(text, value, change);
   if (view) input.dataset.view = "";
-  input.checked = value;
-  input.addEventListener("change", () => change(input.checked));
-  label.append(input);
-  section.append(label);
+  section.append(element);
 }
 
 /** A group that the user can open and close. The helpers append to it while it is open. */
@@ -271,36 +257,34 @@ export function layerEditor(
   layers.forEach((layer, i) => {
     const row = document.createElement("div");
     row.className = "layer-row";
-    const select = document.createElement("select");
-    for (const m of MATERIALS) {
-      select.append(
-        new Option(
-          `${t(m.name)} (λ ${m.lambda.toLocaleString(locale(), { maximumFractionDigits: 3 })})`,
-          m.id,
-          false,
-          m.id === layer.material,
-        ),
-      );
-    }
+    const select = selectInput(
+      MATERIALS.map(
+        (m) =>
+          [
+            m.id,
+            `${t(m.name)} (λ ${m.lambda.toLocaleString(locale(), { maximumFractionDigits: 3 })})`,
+          ] as const,
+      ),
+      layer.material,
+      { small: true, label: t("Material") },
+    );
     select.addEventListener("change", () => change((list) => (list[i].material = select.value)));
-    const input = document.createElement("input");
-    input.type = "number";
-    input.step = "1";
-    input.min = "1";
-    input.value = String(Math.round(layer.thickness * 1000) / 10);
+    const input = numberInput(Math.round(layer.thickness * 1000) / 10, {
+      step: 1,
+      min: 1,
+      label: t("Thickness in cm"),
+    });
     input.title = t("Thickness in cm");
     input.addEventListener("change", () => {
       const cm = Number(input.value);
       if (cm > 0) change((list) => (list[i].thickness = cm / 100));
     });
-    const unit = document.createElement("span");
-    unit.textContent = "cm";
-    const remove = document.createElement("button");
-    remove.className = "icon-button";
-    remove.title = t("Remove the layer");
-    remove.innerHTML = icon("close");
-    remove.addEventListener("click", () => change((list) => list.splice(i, 1)));
-    row.append(select, input, unit, remove);
+    const thickness = withUnit(input, "cm");
+    thickness.classList.add("small");
+    const remove = iconButton("close", t("Remove the layer"), () =>
+      change((list) => list.splice(i, 1)),
+    );
+    row.append(select, thickness, remove);
     section.append(row);
   });
   paragraph(
@@ -443,26 +427,6 @@ export function badge(text: string, tone: "good" | "fair" | "bad" | "none"): HTM
   const element = document.createElement("span");
   element.className = `badge ${tone}`;
   element.textContent = text;
-  return element;
-}
-
-/**
- * A small button with an icon and no text. Its title is also its label for a screen reader,
- * unless `label` gives a longer one.
- */
-export function iconButton(
-  iconName: IconName,
-  title: string,
-  action: () => void,
-  options: { disabled?: boolean; danger?: boolean; label?: string } = {},
-): HTMLButtonElement {
-  const element = document.createElement("button");
-  element.className = options.danger ? "icon-button danger" : "icon-button";
-  element.title = title;
-  element.setAttribute("aria-label", options.label ?? title);
-  element.innerHTML = icon(iconName);
-  element.disabled = options.disabled ?? false;
-  element.addEventListener("click", action);
   return element;
 }
 

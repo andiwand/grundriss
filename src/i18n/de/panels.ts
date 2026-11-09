@@ -266,6 +266,7 @@ export const PANELS: Record<string, string> = {
   Sides: "Seiten",
   Eave: "Traufe",
   "Pitch in degrees": "Neigung in Grad",
+  "Kind of side {side}": "Art der Seite {side}",
   "Overhang in meters": "Dachüberstand in Metern",
   "Side {side}: gable wall": "Seite {side}: Giebelwand",
   "Each row: the kind, the pitch in °, and the overhang in m. A half-hip side has a gable wall up to its height, and a small hip face above it.":

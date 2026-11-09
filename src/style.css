@@ -20,6 +20,14 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 6px 20px rgb(16 24 40 / 0.08);
   --radius: 12px;
   --radius-sm: 8px;
+  /* The controls: buttons, fields, and lists (see "Controls" below and src/ui/controls.ts). */
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-radius: var(--radius-sm);
+  --control-border: var(--line);
+  --control-bg: var(--surface-2);
+  --control-bg-focus: var(--surface);
+  --focus-ring: 0 0 0 3px var(--accent-soft);
 
   /* The 2D drawing. */
   --paper: #fbfbfc;
@@ -203,6 +211,133 @@ button.ghost:hover:not(:disabled) {
   background: var(--surface-2);
   border-color: transparent;
   color: var(--ink);
+}
+
+/* ----- Controls: fields, lists, check boxes, and the rows of a form ----- */
+
+.control,
+.input {
+  height: var(--control-height);
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--ink);
+  font: inherit;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms,
+    background-color 120ms;
+}
+
+.control {
+  min-width: 0;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+textarea.control {
+  height: auto;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.control.small,
+.input.small {
+  height: var(--control-height-sm);
+}
+
+.control.small {
+  padding: 0 6px;
+}
+
+.control:focus,
+.input:focus-within {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+  background: var(--control-bg-focus);
+}
+
+.control:disabled {
+  opacity: 0.4;
+}
+
+/* A box with a control and its unit: the box has the look of the control. */
+.input {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.input > input,
+.input > select,
+.input > .control,
+.input > .control:focus {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.input.small > .control {
+  padding: 0 4px 0 6px;
+}
+
+/* A check box or a radio button with its label after it. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A row of a form: the label and the control. The container sets the two columns. */
+.field {
+  display: grid;
+  grid-template-columns: var(--field-label, minmax(0, 1fr)) var(--field-control, minmax(0, 1fr));
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.field.stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.field-label {
+  min-width: 0;
+}
+
+.control-pair {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.control-pair > .control {
+  flex: 1;
 }
 
 /* A menu that opens under a button. */
@@ -813,58 +948,22 @@ body.wide .empty-state {
   color: var(--ink-2);
 }
 
-#panel .field {
-  display: grid;
-  grid-template-columns: 1fr 112px;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-2);
-}
-
-#panel .field.choice {
-  grid-template-columns: 1fr minmax(112px, 50%);
+/* The panel puts all controls in one column on the right, so they start at one line. */
+#panel {
+  --field-label: minmax(0, 1fr);
+  --field-control: minmax(120px, 55%);
 }
 
 /* In a wide panel, a field keeps its value near its label, so the eye does not cross the panel.
-   The labels have one width, so all values start at the same line. */
-body.wide:not(.compact) #panel > section .field {
-  grid-template-columns: 180px 112px;
+   The labels have one width, so all values start at the same line. There is room for a long
+   list, so it stays in the row. */
+body.wide:not(.compact) #panel > section {
+  --field-label: 180px;
+  --field-control: 220px;
 }
 
-body.wide:not(.compact) #panel > section .field.choice {
-  grid-template-columns: 180px 220px;
-}
-
-.input {
-  display: flex;
-  align-items: center;
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  transition:
-    border-color 120ms,
-    box-shadow 120ms;
-}
-
-.input:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-  background: var(--surface);
-}
-
-.input input,
-.input select {
-  font: inherit;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  padding: 0 8px;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
+body.wide:not(.compact) #panel > section .field.stacked {
+  grid-template-columns: var(--field-label) var(--field-control);
 }
 
 .input input[type="color"] {
@@ -1716,20 +1815,7 @@ body.wide:not(.compact) #panel > section .field.choice {
 }
 
 .catalog .search input {
-  font: inherit;
   width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink);
-  outline: none;
-}
-
-.catalog .search input:focus {
-  border-color: var(--accent);
-  background: var(--surface);
 }
 
 .catalog .body {
@@ -2048,28 +2134,9 @@ body.wide:not(.compact) #panel > section .field.choice {
 
 #panel .layer-row {
   display: grid;
-  grid-template-columns: 1fr 52px auto 28px;
+  grid-template-columns: minmax(0, 1fr) 88px 28px;
   align-items: center;
   gap: 4px;
-}
-
-#panel .layer-row select,
-#panel .layer-row input,
-#panel .side-row select,
-#panel .side-row input {
-  font: inherit;
-  height: 28px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--ink);
-  padding: 0 4px;
-}
-
-#panel .layer-row span {
-  color: var(--ink-3);
-  font-size: 12px;
 }
 
 #panel .layer-row .icon-button {
@@ -2077,11 +2144,8 @@ body.wide:not(.compact) #panel > section .field.choice {
   height: 28px;
 }
 
-#panel .check-field input {
-  justify-self: end;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
+#panel .check {
+  color: var(--ink-2);
 }
 
 #panel p.warning {
@@ -2155,10 +2219,6 @@ body.wide:not(.compact) #panel > section .field.choice {
   color: var(--ink-3);
   font-size: 12px;
   text-align: right;
-}
-
-#panel .side-row input:disabled {
-  opacity: 0.4;
 }
 
 .roof-outline .side-number {
@@ -2695,21 +2755,7 @@ body.overview #layers-button {
 
 #panel .price input {
   width: 92px;
-  height: 26px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink);
-  font: inherit;
   text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-#panel .price input:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--surface);
 }
 
 #panel .icon-button.reset,
@@ -2919,13 +2965,6 @@ body.overview #layers-button {
 #panel .note-text {
   width: 100%;
   box-sizing: border-box;
-  font: inherit;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--ink);
-  resize: vertical;
 }
 
 #panel .note-photos {
@@ -3099,13 +3138,16 @@ body.overview #layers-button {
     height: 40px;
   }
 
-  #panel button,
-  #panel select,
-  #panel .input input {
+  :root {
+    --control-height: 38px;
+    --control-height-sm: 34px;
+  }
+
+  #panel button {
     min-height: 38px;
   }
 
-  #panel .check-field input {
+  .check input {
     width: 22px;
     height: 22px;
   }
@@ -3396,21 +3438,8 @@ body.compact .home h2 {
 
 #panel .place-search input {
   width: 100%;
-  height: 36px;
   box-sizing: border-box;
-  padding: 0 10px 0 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink);
-  font: inherit;
-}
-
-#panel .place-search input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-  background: var(--surface);
+  padding-left: 34px;
 }
 
 #panel .place-list {
@@ -3570,44 +3599,21 @@ body.compact #share {
   align-self: flex-start;
 }
 
-.dialog-field {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  color: var(--ink-2);
+/* A dialog has a fixed label column. A form card has a padding of 12 px, so its label column is
+   12 px narrower, and its controls start at the same line as the controls outside it. */
+.app-dialog {
+  --field-label: 124px;
+  --field-control: minmax(0, 1fr);
+}
+
+.app-dialog .dialog-form {
+  --field-label: 112px;
+}
+
+.app-dialog .field,
+.app-dialog .check {
   font-size: 13px;
-}
-
-.dialog-field input,
-.dialog-field select {
-  min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink);
-  font: inherit;
-}
-
-.dialog-pair {
-  display: flex;
-  gap: 6px;
-  min-width: 0;
-}
-
-.dialog-pair > input,
-.dialog-pair > select {
-  flex: 1;
-}
-
-.dialog-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   color: var(--ink-2);
-  font-size: 13px;
 }
 
 .dialog-note {

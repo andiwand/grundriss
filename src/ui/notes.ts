@@ -6,6 +6,7 @@ import { pickFile, readImage } from "../io/files";
 import type { Note, ServiceSystem } from "../model/types";
 import { doc, showStatus } from "./context";
 import { field, group, section } from "./panel";
+import { textArea, textInput } from "./controls";
 
 /** A photo of a note is at most this many pixels on its long side. */
 export const PHOTO_LIMIT = 1600;
@@ -36,12 +37,12 @@ export function renderNotes(note: Note | undefined, change: NoteChange): void {
   const count = note ? (note.text.trim() ? 1 : 0) + note.photos.length : 0;
   const title = count > 0 ? t("Notes and photos · {count}", { count }) : t("Notes and photos");
   group(title, count > 0, () => {
-    const text = document.createElement("textarea");
-    text.className = "note-text";
-    text.rows = 3;
-    text.placeholder = t("For example: damp in the corner, window from 1985");
-    text.value = note?.text ?? "";
-    text.setAttribute("aria-label", t("Note"));
+    const text = textArea(note?.text ?? "", {
+      rows: 3,
+      placeholder: t("For example: damp in the corner, window from 1985"),
+      label: t("Note"),
+    });
+    text.classList.add("note-text");
     text.addEventListener("change", () =>
       change((old) => tidy({ text: text.value, photos: old?.photos ?? [] })),
     );
@@ -112,10 +113,7 @@ export function renderCircuit(
   for (const name of [...known].sort(new Intl.Collator(locale(), { numeric: true }).compare)) {
     list.append(new Option(name));
   }
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value ?? "";
-  input.placeholder = t("For example F3");
+  const input = textInput(value ?? "", { placeholder: t("For example F3") });
   input.setAttribute("list", "circuits");
   input.addEventListener("change", () => set(input.value.trim() || undefined));
   field(t("Circuit"), input);

@@ -2,7 +2,7 @@
 // Esc or a click outside closes a dialog.
 
 import { t } from "../i18n";
-import { iconButton } from "./panel";
+import { button, fieldRow, iconButton } from "./controls";
 
 /** A dialog with a title and a close button. Esc or a click outside closes it. */
 export function dialog(title: string): { element: HTMLDialogElement; body: HTMLElement } {
@@ -26,13 +26,9 @@ export function dialog(title: string): { element: HTMLDialogElement; body: HTMLE
   return { element, body };
 }
 
+/** A row of a dialog: a label in a fixed column, and the control after it. */
 export function row(parent: HTMLElement, label: string, control: HTMLElement): void {
-  const element = document.createElement("label");
-  element.className = "dialog-field";
-  const text = document.createElement("span");
-  text.textContent = label;
-  element.append(text, control);
-  parent.append(element);
+  parent.append(fieldRow(label, control));
 }
 
 export function note(parent: HTMLElement, text: string, className = "dialog-note"): HTMLElement {
@@ -44,9 +40,5 @@ export function note(parent: HTMLElement, text: string, className = "dialog-note
 }
 
 export function actionButton(text: string, action: () => void, primary = false): HTMLButtonElement {
-  const element = document.createElement("button");
-  element.textContent = text;
-  if (primary) element.className = "primary";
-  element.addEventListener("click", action);
-  return element;
+  return button(text, action, { kind: primary ? "primary" : "secondary" });
 }

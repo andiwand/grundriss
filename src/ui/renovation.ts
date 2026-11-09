@@ -45,6 +45,7 @@ import {
   stats,
   table,
 } from "./panel";
+import { numberInput, textInput } from "./controls";
 
 /**
  * Opens the variant with the id, or the plan for null. The changes in all topics then go into the
@@ -435,9 +436,7 @@ function variantGroup(variant: Variant, plan: EnergyBalance | null): HTMLElement
     });
     field(t("Add a measure"), add);
   }
-  const name = document.createElement("input");
-  name.type = "text";
-  name.value = variant.name;
+  const name = textInput(variant.name);
   name.addEventListener("change", () => {
     const value = name.value.trim();
     if (value) editVariant(variant.id, (v) => (v.name = value));
@@ -667,12 +666,12 @@ function amountInput(
   placeholder: string,
   change: (value: number | null) => void,
 ): HTMLInputElement {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "0";
-  input.step = "100";
-  input.placeholder = placeholder;
-  input.value = value == null ? "" : String(Math.round(value));
+  const input = numberInput(value == null ? null : Math.round(value), {
+    min: 0,
+    step: 100,
+    placeholder,
+    small: true,
+  });
   input.addEventListener("change", () => {
     const text = input.value.trim();
     const parsed = Number(text);

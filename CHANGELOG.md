@@ -19,6 +19,10 @@ The changes that a user notices.
   opened it over half of the plan.
 - Phone: a pipe or a cable shows while you draw it, and the first point of a wall, a stair, or a
   dimension shows after the tap. Before, a pipe showed only after Done.
+- Controls: the fields, the lists, and the check boxes look the same in the panel and in the
+  dialogs. The controls of the panel start at one line, a list with long values goes under its
+  label so that it shows the whole value, and each check box is before its label. A dialog
+  without a choice shows no radio buttons.
 
 ## 0.3.0 – 2026-11-08
 

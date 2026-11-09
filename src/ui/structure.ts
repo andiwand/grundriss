@@ -10,6 +10,7 @@ import { findRooms, planOutline } from "../model/rooms";
 import type { Dormer, Roof, RoofKind, RoofSide, RoofWindow, Story } from "../model/types";
 import { renderConflicts } from "./conflicts";
 import { doc, editor, shell, showStatus } from "./context";
+import { numberInput, selectInput } from "./controls";
 import {
   button,
   checkField,
@@ -335,11 +336,14 @@ export function renderRoofPanel(roofId: string, corner: number | null): void {
       row.className = "side-row";
       const label = document.createElement("span");
       label.textContent = String(i + 1);
-      const kind = document.createElement("select");
-      kind.append(
-        new Option(t("Eave"), "eave", false, side.kind === "eave"),
-        new Option(t("Gable"), "gable", false, side.kind === "gable"),
-        new Option(t("Half hip"), "half-hip", false, side.kind === "half-hip"),
+      const kind = selectInput(
+        [
+          ["eave", t("Eave")],
+          ["gable", t("Gable")],
+          ["half-hip", t("Half hip")],
+        ],
+        side.kind,
+        { small: true, label: t("Kind of side {side}", { side: i + 1 }) },
       );
       kind.addEventListener("change", () =>
         change((r) => {
@@ -350,22 +354,14 @@ export function renderRoofPanel(roofId: string, corner: number | null): void {
           } else delete next.gableHeight;
         }),
       );
-      const pitch = document.createElement("input");
-      pitch.type = "number";
-      pitch.min = "1";
-      pitch.max = "85";
-      pitch.value = String(side.pitch);
+      const pitch = numberInput(side.pitch, { min: 1, max: 85, small: true });
       pitch.title = t("Pitch in degrees");
       pitch.disabled = side.kind === "gable";
       pitch.addEventListener("change", () => {
         const v = Number(pitch.value);
         if (v > 0 && v < 90) change((r) => (r.sides[i].pitch = v));
       });
-      const overhang = document.createElement("input");
-      overhang.type = "number";
-      overhang.step = "0.05";
-      overhang.min = "0";
-      overhang.value = String(side.overhang);
+      const overhang = numberInput(side.overhang, { step: 0.05, min: 0, small: true });
       overhang.title = t("Overhang in meters");
       overhang.addEventListener("change", () => {
         const v = Number(overhang.value);

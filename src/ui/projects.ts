@@ -32,7 +32,7 @@ import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { $, app, doc, editor, shell, showStatus } from "./context";
 import { resetLocation } from "./energy";
-import { iconButton } from "./panel";
+import { iconButton, textInput } from "./controls";
 import { setSuggestions } from "./tracing";
 import { localSource, showVersions } from "./versions";
 
@@ -764,10 +764,8 @@ function trashItem(project: ProjectInfo): HTMLElement {
 /** Puts a text field in place of the name of the project. Enter or a blur keeps the new name. */
 function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
   const name = card.querySelector("strong")!;
-  const input = document.createElement("input");
-  input.className = "project-name";
-  input.value = project.name;
-  input.setAttribute("aria-label", t("Name of the project"));
+  const input = textInput(project.name, { label: t("Name of the project") });
+  input.classList.add("project-name");
   let done = false;
   const finish = (keep: boolean) => {
     if (done) return;
