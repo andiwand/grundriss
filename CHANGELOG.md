@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.4.0 – 2026-11-09
+
 - Server plans without the network: the app keeps a copy of each plan of a server that it opened,
   and opens it to view when the server does not answer. The Projects page shows the copies.
 - Images once: the server and the history of the browser keep each large image (a background, a
