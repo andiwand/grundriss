@@ -372,11 +372,15 @@ export function load(
   if (project === "from-file") void storeProject();
 }
 
+/**
+ * Opens a plan from a file. The picker opens first, in the click of the user: Safari shows a
+ * picker only during the click, and the save of the old plan waits for the storage. The old plan
+ * goes away only after the user chose a file.
+ */
 export async function openFile(): Promise<void> {
-  if (!(await confirmDiscard())) return;
   try {
     const file = await openPlanFile();
-    if (!file) return;
+    if (!file || !(await confirmDiscard())) return;
     load(readBuildingFile(file.bytes), file.name, file.handle, "from-file");
     showStatus(t("Opened {name}.", { name: file.name }));
     shell.enterPlan("structure");

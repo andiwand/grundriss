@@ -29,6 +29,8 @@ The changes that a user notices.
   and Compare is next to Variants.
 - Dialogs: the main action is at the bottom right, next to Cancel. The dialog of a server plan
   has one main action, Edit, and Close.
+- Safari: Open a file shows the file picker again. Before, Safari did not show it, for example
+  from the first screen of a new plan.
 
 ## 0.3.0 – 2026-11-08
 
