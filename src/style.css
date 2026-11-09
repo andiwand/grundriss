@@ -3764,3 +3764,34 @@ body.compact #share {
   vertical-align: -2px;
   color: var(--ink-3);
 }
+
+/* A plan to view (body.read-only): only the tools to view, and no handles that change the plan. */
+body.read-only #tools > :not([data-tool="select"], [data-tool="pan"]),
+body.read-only .group:has(#undo),
+body.read-only .group:has(#undo) + .divider,
+body.read-only #stories .add,
+body.read-only #empty-state,
+body.read-only #tool-done,
+body.read-only .roof-outline .insert,
+body.read-only #panel .actions:not(:has(button:not([hidden]))) {
+  display: none !important;
+}
+
+body.read-only .compass {
+  cursor: default;
+}
+
+/* The fields of a plan to view show their values as text, without the look of a field. */
+body.read-only #panel .input:has(:disabled) {
+  border-color: transparent;
+  background: transparent;
+}
+
+body.read-only #panel :is(input, select, textarea):disabled:not([type="checkbox"], [type="range"]) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink);
+  opacity: 1;
+  appearance: none;
+  cursor: default;
+}

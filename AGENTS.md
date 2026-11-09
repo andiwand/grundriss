@@ -45,7 +45,9 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   server starts with a token (`/<token>/` for the app, `/<token>/api/` for the API), and the
   token is the access: root, a user, or one plan. A token makes only tokens with at most its
   rights. An open plan of a server saves to it after each change, if the tab has the edit
-  lease; else `doc.readOnly` keeps it from changes, and the stream of the server updates it. A
+  lease; else `doc.readOnly` keeps it from changes, and the stream of the server updates it.
+  With `doc.readOnly`, the body has the class `read-only`: the palette has only select and pan,
+  the editors do not start a drag, and the panel disables each control without `data-view`. A
   save names its parent revision, so the server refuses a save on an old revision (409). The
   server reads the plans with the code of `src/model/`, and esbuild bundles it into one file.
 - The open plan saves itself in IndexedDB (`src/io/projects.ts`) after each change. Each

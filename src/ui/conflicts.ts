@@ -53,6 +53,7 @@ export function renderConflicts(only?: Item): void {
     const element = button(names.join(" · "), () => editor.select(target), {
       icon: "alert",
       detail: t(KIND_TEXT[conflict.kind]),
+      view: true,
     });
     element.classList.add("conflict");
   }

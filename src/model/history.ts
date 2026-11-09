@@ -58,9 +58,20 @@ export class PlanDocument {
   /**
    * True if the plan must not change, for example a plan of a server that another person edits.
    * A transaction then drops its changes, and undo and redo do nothing. `onBlocked` tells the
-   * user.
+   * user. A change of it tells the listeners, so that the user interface shows only the tools to
+   * view.
    */
-  readOnly = false;
+  get readOnly(): boolean {
+    return this.locked;
+  }
+
+  set readOnly(value: boolean) {
+    if (value === this.locked) return;
+    this.locked = value;
+    this.emit();
+  }
+
+  private locked = false;
   onBlocked: () => void = () => {};
   private activeId: Id;
   private undoStack: Building[] = [];

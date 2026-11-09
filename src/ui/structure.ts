@@ -253,7 +253,10 @@ export function renderRoofPanel(roofId: string, corner: number | null): void {
     numberField("x", point.x, (v) => change((r) => (r.outline[corner].x = v)), { min: -1e6 });
     numberField("y", point.y, (v) => change((r) => (r.outline[corner].y = v)), { min: -1e6 });
     paragraph(t("Drag the corner on the plan. Delete removes it."), "note");
-    button(t("Whole roof"), () => editor.select({ kind: "roof", id: roofId }), { icon: "roof" });
+    button(t("Whole roof"), () => editor.select({ kind: "roof", id: roofId }), {
+      icon: "roof",
+      view: true,
+    });
     return;
   }
 

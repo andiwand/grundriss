@@ -13,6 +13,8 @@ The changes that a user notices.
 - `compose.yaml` starts the server with Caddy for https.
 - Projects page: a plan of a server shows a picture of its ground floor, like a plan of the
   browser, with a small cloud in the corner. The plans of the browser are under "In this browser".
+- A plan to view shows only the tools to view: select and pan. A drag does not move an object, the
+  panel shows the values as text, and the buttons that change the plan go away.
 
 ## 0.3.0 – 2026-11-08
 

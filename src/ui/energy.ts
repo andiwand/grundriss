@@ -80,7 +80,10 @@ export function renderEnergyTopic(): void {
       [kwh(total.yield), t("per year")],
     ]);
     pvSourceNote();
-    button(t("Change the PV fields"), () => shell.setTopic("utilities"), { icon: "bolt" });
+    button(t("Change the PV fields"), () => shell.setTopic("utilities"), {
+      icon: "bolt",
+      view: true,
+    });
   }
   setColumn(panel);
 }
@@ -700,6 +703,7 @@ function renderHeatingInputs(): void {
   button(t(info.name), () => shell.setTopic("utilities"), {
     icon: "flame",
     detail: t("{detail} · change it in Utilities", { detail }),
+    view: true,
   });
   if (info.energy === "electricity") {
     paragraph(t("The heating uses the price of electricity of the Electricity group."), "note");
@@ -856,7 +860,10 @@ function renderBalance(): void {
     ),
     "note",
   );
-  button(t("Compare renovations"), () => shell.setTopic("renovation"), { icon: "coins" });
+  button(t("Compare renovations"), () => shell.setTopic("renovation"), {
+    icon: "coins",
+    view: true,
+  });
 }
 
 /** The name of a room in a table: its name, or "Room" with its story. */
@@ -933,10 +940,15 @@ function renderSummer(): void {
     paragraph(t("Load the climate in the Location group for the summer check."), "note");
     return;
   }
-  checkField(t("External blinds"), summerBlinds, (value) => {
-    summerBlinds = value;
-    shell.renderPanel();
-  });
+  checkField(
+    t("External blinds"),
+    summerBlinds,
+    (value) => {
+      summerBlinds = value;
+      shell.renderPanel();
+    },
+    true,
+  );
   const words = { ok: t("ok"), warning: t("warm"), risk: t("too hot") };
   const tones = { ok: "good", warning: "fair", risk: "bad" } as const;
   table(

@@ -41,7 +41,13 @@ export function paragraph(text: string, className?: string): void {
 export function button(
   text: string,
   action: () => void,
-  options: { kind?: "primary" | "danger"; icon?: IconName; detail?: string } = {},
+  options: {
+    kind?: "primary" | "danger";
+    icon?: IconName;
+    detail?: string;
+    /** True if the button does not change the plan, so it stays in a plan to view. */
+    view?: boolean;
+  } = {},
 ): HTMLButtonElement {
   let row = section.lastElementChild;
   if (!row?.classList.contains("actions")) {
@@ -66,6 +72,7 @@ export function button(
   } else {
     element.append(text);
   }
+  if (options.view) element.dataset.view = "";
   element.addEventListener("click", action);
   row.append(element);
   return element;
@@ -218,12 +225,19 @@ const COMPASS =
 
 export const compassName = (azimuth: number) => COMPASS[Math.round(azimuth / 45) % 8];
 
-export function checkField(text: string, value: boolean, change: (value: boolean) => void): void {
+/** A check box. With `view`, it does not change the plan, so it stays in a plan to view. */
+export function checkField(
+  text: string,
+  value: boolean,
+  change: (value: boolean) => void,
+  view = false,
+): void {
   const label = document.createElement("label");
   label.className = "field check-field";
   label.append(text);
   const input = document.createElement("input");
   input.type = "checkbox";
+  if (view) input.dataset.view = "";
   input.checked = value;
   input.addEventListener("change", () => change(input.checked));
   label.append(input);

@@ -52,6 +52,22 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await expect(viewerWalls).toHaveCount(count);
   await expect(viewer.locator("#remote-state")).toContainText("edits");
 
+  // The viewer gets only the tools to view, and a wall that it selects has no fields to change.
+  await expect(viewer.locator("body")).toHaveClass(/read-only/);
+  await expect(viewer.locator('#tools [data-tool="select"]')).toBeVisible();
+  await expect(viewer.locator('#tools [data-tool="wall"]')).toBeHidden();
+  await expect(viewer.locator("#undo")).toBeHidden();
+  const box = (await viewerWalls.first().boundingBox())!;
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await viewer.mouse.move(center.x, center.y);
+  await viewer.mouse.down();
+  await viewer.mouse.move(center.x + 60, center.y + 60, { steps: 5 });
+  // A drag does not move the wall, also not for a moment.
+  expect(await viewerWalls.first().boundingBox()).toEqual(box);
+  await viewer.mouse.up();
+  await expect(viewer.locator("#panel input:not([disabled])")).toHaveCount(0);
+  await expect(viewer.locator("#panel button:not([hidden]):not([data-view])")).toHaveCount(0);
+
   // The editor deletes all walls; the viewer sees it at once.
   await page
     .locator("#plan-2d svg")

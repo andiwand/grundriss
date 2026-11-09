@@ -153,7 +153,7 @@ function renderPlanColumn(): void {
       ),
       "note",
     );
-    button(t("Open Energy"), () => shell.setTopic("energy"), { icon: "gauge" });
+    button(t("Open Energy"), () => shell.setTopic("energy"), { icon: "gauge", view: true });
   }
 
   const finance = building.finance;

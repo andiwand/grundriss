@@ -801,6 +801,8 @@ export class Editor2D {
       return;
     }
     if (e.button !== 0) return;
+    // A plan to view only selects. The tools that draw or move do not start.
+    if (this.doc.readOnly && this.currentTool !== "select") return;
 
     switch (this.currentTool) {
       case "select":
@@ -908,7 +910,7 @@ export class Editor2D {
       e.target instanceof Element
         ? e.target.closest<SVGElement>('[data-kind="roof-insert"]')
         : null;
-    if (insert) {
+    if (insert && !this.doc.readOnly) {
       const [roofId, index] = insert.dataset.id!.split(":");
       const i = Number(index);
       this.doc.begin();
@@ -947,6 +949,8 @@ export class Editor2D {
       return;
     }
     if (!this.items.some((i) => sameItem(i, hit))) this.select(hit);
+    // A plan to view only selects, so that a drag does not move the object and jump back.
+    if (this.doc.readOnly) return;
 
     this.doc.begin();
     if (this.items.length === 1 && hit.kind === "fixture") {

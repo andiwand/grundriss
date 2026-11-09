@@ -74,6 +74,7 @@ export function setupEdit3d(): void {
 
     hover(pick) {
       const movable =
+        !doc.readOnly &&
         pick &&
         pick.storyId === doc.activeStoryId &&
         MOVABLE.has(pick.item.kind) &&
@@ -82,6 +83,7 @@ export function setupEdit3d(): void {
     },
 
     press(pick: Pick) {
+      if (doc.readOnly) return false;
       if (pick.storyId !== doc.activeStoryId || !MOVABLE.has(pick.item.kind)) return false;
       const items = editor.selection;
       if (!items.some((i) => same(i, pick.item))) return false;

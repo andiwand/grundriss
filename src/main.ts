@@ -231,7 +231,11 @@ function setTopic(next: Topic): void {
   topicChanged();
 }
 
+/** The tools that do not change the plan, so they also work in a plan to view. */
+const VIEW_TOOLS = new Set<Tool>(["select", "pan"]);
+
 function setTool(tool: Tool): void {
+  if (doc.readOnly && !VIEW_TOOLS.has(tool)) return doc.onBlocked();
   // The scale and the straightening need a background, also from a shortcut.
   if ((tool === "calibrate" || tool === "rectify") && !doc.plan.background) {
     showStatus(t("Load a background first."));
@@ -373,6 +377,7 @@ function setupCompass(): void {
     return (((Math.round(degrees / step) * step) % 360) + 360) % 360;
   };
   compass.addEventListener("pointerdown", (e) => {
+    if (doc.readOnly) return;
     compass.setPointerCapture(e.pointerId);
     doc.begin();
     doc.updateBuilding((b) => (b.north = angle(e)));
@@ -737,6 +742,38 @@ Object.assign(shell, {
   enterPlan,
   catalog,
   renderPanel,
+});
+
+/**
+ * In a plan to view, the panel disables its fields and hides its buttons, except the controls
+ * with `data-view`, which do not change the plan. A new panel starts with all controls on.
+ */
+function lockPanel(): void {
+  if (!doc.readOnly) return;
+  for (const control of $("#panel").querySelectorAll<HTMLElement>(
+    "input, select, textarea, button",
+  )) {
+    if (control.dataset.view !== undefined) continue;
+    if (control instanceof HTMLButtonElement) control.hidden = true;
+    else (control as HTMLInputElement).disabled = true;
+  }
+}
+// The modules of the panel also add controls later, for example after a calculation.
+new MutationObserver(lockPanel).observe($("#panel"), { childList: true, subtree: true });
+
+// A plan to view (`doc.readOnly`) shows only the tools to view: the body gets the class
+// `read-only`, a drawing tool goes back to "select", and the panel disables its controls.
+let readOnlyShown = false;
+doc.subscribe(() => {
+  if (doc.readOnly === readOnlyShown) return;
+  readOnlyShown = doc.readOnly;
+  document.body.classList.toggle("read-only", readOnlyShown);
+  if (readOnlyShown) {
+    editor.cancel();
+    if (catalog.isOpen) catalog.close();
+    if (!VIEW_TOOLS.has(editor.tool)) setTool("select");
+  }
+  renderPanel();
 });
 
 doc.subscribe(() => {
