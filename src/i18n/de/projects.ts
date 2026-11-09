@@ -66,7 +66,7 @@ export const PROJECTS: Record<string, string> = {
   "{name} (copy)": "{name} (Kopie)",
   "Another tab with an older version of Grundriss blocks the storage. Close it, and load this page again.":
     "Ein anderer Tab mit einer älteren Version von Grundriss blockiert den Speicher. Schließen Sie ihn, und laden Sie diese Seite neu.",
-  "Your plans": "Ihre Pläne",
+  "In this browser": "In diesem Browser",
   "Draw a house or trace a scan, see it in 3D, and check its energy and a renovation. Your plans stay in this browser and save themselves after each change.":
     "Zeichnen Sie Ihr Haus, oder pausen Sie einen Scan ab, sehen Sie es in 3D, und prüfen Sie Energie und Sanierung. Ihre Pläne bleiben in diesem Browser und speichern sich nach jeder Änderung.",
 
@@ -216,6 +216,7 @@ export const PROJECTS: Record<string, string> = {
   "No connection to {server}. You see the copy of this browser from {time}, only to view.":
     "Keine Verbindung zu {server}. Sie sehen die Kopie dieses Browsers von {time}, nur zum Ansehen.",
   "Offline copy": "Offline-Kopie",
+  "On a server": "Auf einem Server",
   "No connection to {server}. This is the copy of this browser, revision {revision}, only to view.":
     "Keine Verbindung zu {server}. Das ist die Kopie dieses Browsers, Version {revision}, nur zum Ansehen.",
   "Connect again": "Erneut verbinden",

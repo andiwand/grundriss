@@ -11,6 +11,8 @@ The changes that a user notices.
 - Server: links that ended go away by themselves. The server settings list all share links with
   the plan of each link.
 - `compose.yaml` starts the server with Caddy for https.
+- Projects page: a plan of a server shows a picture of its ground floor, like a plan of the
+  browser, with a small cloud in the corner. The plans of the browser are under "In this browser".
 
 ## 0.3.0 – 2026-11-08
 

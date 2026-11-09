@@ -38,6 +38,8 @@ export interface RemotePlan {
   by: string;
   write: boolean;
   lease: { holder: string; until: number } | null;
+  /** The SVG of the ground floor, or "". Only in the list of the plans. */
+  preview?: string;
 }
 
 export interface Revision {

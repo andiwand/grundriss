@@ -371,6 +371,8 @@ export interface RemoteCopy {
   revision: string;
   time: number;
   blobs?: string[];
+  /** The SVG of the ground floor, or "". Old copies do not have it. */
+  preview?: string;
 }
 
 /** Keeps the state of a plan of a server, so that the app can open it without the network. */
@@ -380,6 +382,7 @@ export async function saveRemoteCopy(
   name: string,
   revision: string,
   data: string,
+  preview = "",
 ): Promise<void> {
   const { json, blobs } = dehydrate(data);
   const copy: RemoteCopy = {
@@ -390,6 +393,7 @@ export async function saveRemoteCopy(
     revision,
     time: Date.now(),
     blobs: [...blobs.keys()],
+    preview,
   };
   await run([REMOTE_COPIES, REMOTE_COPY_DATA, BLOBS], "readwrite", (t) => {
     putBlobs(t, blobs);

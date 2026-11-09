@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
+import { planPreview } from "../../src/export/preview";
 import { parseBuilding } from "../../src/model/file";
 import { Store, StoreError, type PlanRecord, type TokenRecord } from "./store";
 
@@ -86,6 +87,22 @@ export function createHandler(store: Store, config: Config) {
       }
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     }
+  };
+
+  // The picture of each plan for the list, with the revision that it shows.
+  const previews = new Map<string, { revision: string; svg: string }>();
+  const preview = (plan: PlanRecord): string => {
+    const revision = plan.revisions.at(-1)!.id;
+    const known = previews.get(plan.id);
+    if (known?.revision === revision) return known.svg;
+    let svg = "";
+    try {
+      svg = planPreview(parseBuilding(store.revisionData(plan, revision)));
+    } catch {
+      // A plan that the server cannot read has no picture.
+    }
+    previews.set(plan.id, { revision, svg });
+    return svg;
   };
 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -264,7 +281,7 @@ export function createHandler(store: Store, config: Config) {
           return json(
             res,
             200,
-            store.plans(token).map((p) => planInfo(p)),
+            store.plans(token).map((p) => ({ ...planInfo(p), preview: preview(p) })),
           );
         if (method === "POST") {
           const { name, data } = await input();
@@ -311,6 +328,7 @@ export function createHandler(store: Store, config: Config) {
               throw new StoreError(423, `${held.holder} edits the plan.`);
           }
           store.removePlan(token, plan);
+          previews.delete(plan.id);
           send(plan.id, "removed", {});
           for (const stream of streams.get(plan.id)?.keys() ?? []) stream.end();
           leases.delete(plan.id);

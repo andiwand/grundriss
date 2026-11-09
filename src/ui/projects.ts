@@ -1,5 +1,4 @@
-import { storyExtras } from "../export/context";
-import { planToSvg } from "../export/svg";
+import { planPreview } from "../export/preview";
 import { locale, t } from "../i18n";
 import { icon, type IconName } from "../icons";
 import { makeBackup, readBackup } from "../io/backup";
@@ -113,7 +112,7 @@ export async function addProject(building: Building, name: string): Promise<stri
     name,
     created: now,
     updated: now,
-    preview: projectPreview(building),
+    preview: planPreview(building),
     data: serializeBuilding(building),
   });
   return id;
@@ -269,7 +268,7 @@ export async function storeProject(): Promise<void> {
       name: projectName(),
       created: projectCreated,
       updated: Date.now(),
-      preview: projectPreview(building),
+      preview: planPreview(building),
       data: serializeBuilding(building),
     };
     await locking;
@@ -309,17 +308,6 @@ export async function storeProject(): Promise<void> {
 export function hasUnsavedChanges(): boolean {
   if (remoteHooks.active()) return remoteHooks.unsaved();
   return doc.dirty && (!storageOk || readOnly || doc.building !== storedBuilding);
-}
-
-/** A small SVG of the ground floor, without the background image, for the list of projects. */
-function projectPreview(building: Building): string {
-  const story = building.stories.find((s) => s.elevation >= -1e-6) ?? building.stories[0];
-  if (story.walls.length === 0) return "";
-  try {
-    return planToSvg(story, { ...storyExtras(building, story), background: false });
-  } catch {
-    return "";
-  }
 }
 
 /**
@@ -631,7 +619,7 @@ function fillProjects(projects: ProjectInfo[] | null): void {
   const mine = document.createElement("section");
   mine.className = "project-section";
   const heading = document.createElement("h3");
-  heading.textContent = t("Your plans");
+  heading.textContent = t("In this browser");
   mine.append(heading);
   // The warning about the storage goes under the title of the plans, one line for each point.
   void storageNote().then((lines) => {

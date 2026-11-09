@@ -7,6 +7,7 @@
 // others from a stream. Without the lease, the plan only reads (`doc.readOnly`). A save starts
 // from the last known revision, so it never replaces a revision that this tab did not see.
 
+import { planPreview } from "../export/preview";
 import { locale, t } from "../i18n";
 import {
   newProjectId,
@@ -190,9 +191,14 @@ interface Session {
 
 /** Keeps the state of the plan in the browser, for use without the network. */
 function storeCopy(current: Session, name: string, data: string): void {
-  void saveRemoteCopy(current.address, current.planId, name, current.revision, data).catch(
-    () => undefined,
-  );
+  void saveRemoteCopy(
+    current.address,
+    current.planId,
+    name,
+    current.revision,
+    data,
+    planPreview(current.saved),
+  ).catch(() => undefined);
 }
 
 let session: Session | null = null;
@@ -1208,6 +1214,29 @@ function renderServers(list: HTMLElement): void {
   }
 }
 
+/**
+ * The picture of a card of a server: the plan like on a card of the browser, and a small cloud in
+ * its corner that tells that the plan is on a server.
+ */
+function remotePicture(preview: string | undefined): HTMLElement {
+  const picture = document.createElement("div");
+  picture.className = "project-picture";
+  if (preview) {
+    const image = document.createElement("img");
+    image.alt = "";
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(preview)}`;
+    picture.append(image);
+  } else {
+    picture.innerHTML = icon("view2d");
+  }
+  const badge = document.createElement("span");
+  badge.className = "remote-badge";
+  badge.title = t("On a server");
+  badge.innerHTML = icon("cloud");
+  picture.append(badge);
+  return picture;
+}
+
 /** The card of the copy of a plan of a server, without the network. */
 function offlineCard(connection: Connection, copy: RemoteCopy): HTMLElement {
   const card = document.createElement("article");
@@ -1215,9 +1244,7 @@ function offlineCard(connection: Connection, copy: RemoteCopy): HTMLElement {
   const open = document.createElement("button");
   open.className = "project-open";
   open.title = t("Open {name}", { name: copy.name });
-  const picture = document.createElement("div");
-  picture.className = "project-picture";
-  picture.innerHTML = icon("cloud");
+  const picture = remotePicture(copy.preview);
   const text = document.createElement("span");
   text.className = "project-text";
   const name = document.createElement("strong");
@@ -1244,9 +1271,7 @@ function remoteCard(connection: Connection, client: ServerClient, plan: RemotePl
   const open = document.createElement("button");
   open.className = "project-open";
   open.title = t("Open {name}", { name: plan.name });
-  const picture = document.createElement("div");
-  picture.className = "project-picture";
-  picture.innerHTML = icon("cloud");
+  const picture = remotePicture(plan.preview);
   const text = document.createElement("span");
   text.className = "project-text";
   const name = document.createElement("strong");
@@ -1262,7 +1287,6 @@ function remoteCard(connection: Connection, client: ServerClient, plan: RemotePl
     element.textContent = value;
     marks.append(element);
   };
-  mark(t("Server"));
   if (!plan.write) mark(t("View only"), "busy");
   if (plan.lease) mark(t("{holder} edits", { holder: plan.lease.holder }), "busy");
   text.append(marks);

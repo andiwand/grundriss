@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { emptyBuilding } from "../../src/model/building";
 import { serializeBuilding } from "../../src/model/file";
+import { makeHouse } from "../../src/model/example";
 import { createHandler, type Config } from "../src/app";
 import { Store } from "../src/store";
 
@@ -313,6 +314,20 @@ describe("plans and revisions", () => {
     expect(revisions.body.map((r: { id: string }) => r.id)).toEqual(["1", "2"]);
     const old = await call(root, `plans/${id}/revisions/1`);
     expect(JSON.parse(old.body.data).stories[0].name).toBe("Ground floor");
+  });
+
+  it("lists each plan with a picture of its ground floor, also after a save", async () => {
+    const empty = await call(root, "plans", { method: "POST", json: { name: "x", data: plan() } });
+    expect((await call(root, "plans")).body[0].preview).toBe("");
+    const house = serializeBuilding(makeHouse());
+    await call(root, `plans/${empty.body.id}`, {
+      method: "PUT",
+      json: { parent: "1", data: house },
+    });
+    const [listed] = (await call(root, "plans")).body;
+    expect(listed.preview).toMatch(/^<svg/);
+    // The plan itself has no picture, because only the list shows it.
+    expect((await call(root, `plans/${empty.body.id}`)).body.preview).toBeUndefined();
   });
 
   it("refuses data that is not a plan", async () => {
