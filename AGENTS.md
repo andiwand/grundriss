@@ -239,6 +239,9 @@ change the website. `test/example.test.ts` checks that the example house stays v
 - Make each control with `src/ui/controls.ts` (or the helpers of `panel.ts` and `dialog.ts`,
   which use it), not with `document.createElement("input")`. The style of all controls comes
   from the tokens `--control-*` and the section "Controls" of `style.css`.
+- A button has one of four kinds: `primary` only for the one main action of a screen or a
+  dialog, `secondary` (the default), `danger`, and `quiet`. In the panel, a list of objects that
+  opens or selects an object uses `button()` with a `detail`, so each object is a row.
 - Format before each commit: `npm run format`.
 - Commit messages follow Conventional Commits, for example `feat(editor): ...`,
   `fix(model): ...`, `docs: ...`.

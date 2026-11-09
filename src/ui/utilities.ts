@@ -120,10 +120,7 @@ export function renderInteriorPanel(): void {
     [String(plan.furniture.length), t("pieces on {story}", { story: t(plan.name) })],
     [String(total), t("pieces in the building")],
   ]);
-  button(t("Open the furniture catalog"), () => shell.catalog.open(), {
-    kind: "primary",
-    icon: "sofa",
-  });
+  button(t("Open the furniture catalog"), () => shell.catalog.open(), { icon: "sofa" });
   paragraph(
     t(
       "Click a piece on the plan to move it, to turn it, or to change its size. R turns a selected piece.",

@@ -201,13 +201,13 @@ kbd {
   text-align: center;
 }
 
-button.ghost {
+button.quiet {
   border-color: transparent;
   background: transparent;
   color: var(--ink-2);
 }
 
-button.ghost:hover:not(:disabled) {
+button.quiet:hover:not(:disabled) {
   background: var(--surface-2);
   border-color: transparent;
   color: var(--ink);
@@ -1011,14 +1011,52 @@ body.wide:not(.compact) #panel > section .field.stacked {
   line-height: 1.25;
 }
 
-/* A list item, for example a roof: one item in each row, with a detail below the text. */
-#panel .actions button.item {
-  flex-basis: 100%;
+/* A list of objects, for example the roofs or the rooms: one row for each object, with a detail
+   below the text and an arrow at the end. A click on a row selects or opens the object. */
+#panel .object-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+#panel .object-list button.item {
   justify-content: flex-start;
   gap: 10px;
   height: auto;
-  padding: 10px 12px;
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-weight: 500;
+  text-align: start;
+  white-space: normal;
   line-height: 1.3;
+}
+
+#panel .object-list button.item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+#panel .object-list button.item:focus-visible {
+  outline-offset: -2px;
+}
+
+#panel .object-list button.item .icon {
+  color: var(--ink-2);
+}
+
+/* The arrow at the end of a row. */
+#panel .object-list button.item::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 0 auto;
+  border-top: 1.5px solid var(--ink-3);
+  border-right: 1.5px solid var(--ink-3);
+  transform: rotate(45deg);
 }
 
 #panel button.item .lines {
@@ -2112,20 +2150,59 @@ body.wide:not(.compact) #panel > section .field.stacked {
 #panel details.group {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Two groups one after the other share one line. */
+#panel details.group + details.group {
+  border-top: 0;
+}
+
+/* The line between two sections is the end of the last group. */
+#panel details.group:last-child {
+  border-bottom: 0;
 }
 
 #panel details.group[open] {
-  padding-bottom: 10px;
+  padding-bottom: 12px;
 }
 
+/* A flat header: an arrow and the title, the full width of the panel. */
 #panel details.group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 0;
   cursor: pointer;
-  color: var(--ink-2);
+  color: var(--ink);
   font-weight: 500;
-  padding: 2px 0;
+  list-style: none;
+}
+
+#panel details.group > summary::-webkit-details-marker {
+  display: none;
+}
+
+#panel details.group > summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 3px;
+  border-right: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(-45deg);
+  transition: transform 120ms;
+}
+
+#panel details.group[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+#panel details.group > summary:hover {
+  color: var(--accent);
 }
 
 #panel details.group > * + * {
@@ -2663,6 +2740,18 @@ body.overview #layers-button {
 
 /* The variants of the renovation: each one is a group of the panel. Its head has the name, the
    state, the saving, and the actions; the body has the key numbers and the items of the cost. */
+/* A variant is an object with its own actions, so it keeps a box, also next to another variant. */
+#panel details.group.variant,
+#panel details.group.variant + details.group.variant {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+}
+
+#panel details.group.variant[open] {
+  padding-bottom: 10px;
+}
+
 #panel details.group.variant > summary {
   display: flex;
   align-items: center;

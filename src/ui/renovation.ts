@@ -93,7 +93,8 @@ export function renderVariantSwitch(): void {
  */
 export function renderRenovationTopic(): void {
   const building = doc.building;
-  heading(t("Renovation"), "coins");
+  renderPlanColumn();
+  heading(t("Variants"), "layers");
   // The comparison opens in a dialog over the app, so the panel stays as it is.
   if (building.variants.length > 0) {
     const compare = document.createElement("button");
@@ -103,8 +104,6 @@ export function renderRenovationTopic(): void {
     compare.addEventListener("click", showComparison);
     section.querySelector("h2")!.append(compare);
   }
-  renderPlanColumn();
-  heading(t("Variants"), "layers");
   if (building.variants.length === 0) {
     paragraph(t("No variants yet. Start one with New variant."), "note");
   }

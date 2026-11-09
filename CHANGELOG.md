@@ -23,6 +23,10 @@ The changes that a user notices.
   dialogs. The controls of the panel start at one line, a list with long values goes under its
   label so that it shows the whole value, and each check box is before its label. A dialog
   without a choice shows no radio buttons.
+- Panel: a list of objects (the roofs, the rooms, the collisions) shows a row for each object.
+  A group that opens and closes has a flat header with an arrow, so it does not look like a
+  button. Only the main action of a screen is a blue button. Renovation shows one heading less,
+  and Compare is next to Variants.
 
 ## 0.3.0 – 2026-11-08
 

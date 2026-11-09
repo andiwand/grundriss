@@ -377,7 +377,8 @@ function renderLocationPanel(): void {
     button(
       building.climate ? t("Load the climate again") : t("Load climate"),
       () => void loadClimate(),
-      { kind: "primary" },
+      // The main action only while the plan has no climate.
+      { kind: building.climate ? "secondary" : "primary" },
     );
   }
   paragraph(

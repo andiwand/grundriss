@@ -7,6 +7,7 @@ import type { Layer } from "../model/types";
 import { panel } from "./context";
 import {
   button as makeButton,
+  type ButtonKind,
   checkbox,
   fieldRow,
   iconButton,
@@ -53,21 +54,27 @@ export function paragraph(text: string, className?: string): void {
   section.append(element);
 }
 
+/**
+ * A button of the panel. Buttons side by side share a row. A button with a `detail` is an item of
+ * a list that opens an object, for example a roof or a room: it is a row with the detail below
+ * the text, and the items one after the other make one list.
+ */
 export function button(
   text: string,
   action: () => void,
   options: {
-    kind?: "primary" | "danger";
+    kind?: ButtonKind;
     icon?: IconName;
     detail?: string;
     /** True if the button does not change the plan, so it stays in a plan to view. */
     view?: boolean;
   } = {},
 ): HTMLButtonElement {
+  const rowClass = options.detail ? "object-list" : "actions";
   let row = section.lastElementChild;
-  if (!row?.classList.contains("actions")) {
+  if (!row?.classList.contains(rowClass)) {
     row = document.createElement("div");
-    row.className = "actions";
+    row.className = rowClass;
     section.append(row);
   }
   const element = makeButton(options.detail ? "" : text, action, {
@@ -75,7 +82,6 @@ export function button(
     icon: options.icon,
   });
   if (options.detail) {
-    // A list item: the text on the first line, and the detail small below it.
     element.classList.add("item");
     const label = document.createElement("span");
     const detail = document.createElement("small");
