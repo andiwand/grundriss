@@ -279,9 +279,12 @@ export class View3D {
   /**
    * A left drag with the mouse turns the view around the point of the building under the
    * cursor, not around the target of the controls. Without a building under the cursor, the
-   * pivot is the point on the ground, and else the target. The camera and the target turn
-   * together around the pivot, so the view does not jump. Touch keeps the rotation of the
-   * controls, because they also read two fingers for zoom and pan.
+   * pivot is the center of the building. A point on the ground far away is not a pivot, because
+   * the camera then moves on a large circle and the building goes out of the view. The camera
+   * and the target turn together around the pivot, so the view does not jump, and the camera
+   * stays above the ground. A double click on empty space shows the whole building again.
+   * Touch keeps the rotation of the controls, because they also read two fingers for zoom and
+   * pan.
    */
   private setupPivotRotation(): void {
     const element = this.renderer.domElement;
@@ -293,24 +296,23 @@ export class View3D {
     marker.visible = false;
     this.scene.add(marker);
     const raycaster = new THREE.Raycaster();
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const up = new THREE.Vector3(0, 1, 0);
+    // The lowest height of the camera above the ground, in meters.
+    const minHeight = 0.2;
 
-    const pivotAt = (e: PointerEvent): THREE.Vector3 => {
-      const rect = element.getBoundingClientRect();
-      const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
-      );
-      raycaster.setFromCamera(ndc, this.camera);
+    /** The point of the building under the pointer, or null on empty space. */
+    const hitAt = (e: MouseEvent): THREE.Vector3 | null => {
+      raycaster.ray.copy(this.rayAt(e));
       const hit = raycaster
         .intersectObject(this.content, true)
         .find((h) => h.object instanceof THREE.Mesh && h.object.visible);
-      if (hit) return hit.point.clone();
-      const onGround = raycaster.ray.intersectPlane(ground, new THREE.Vector3());
-      return onGround && onGround.distanceTo(this.camera.position) < 200
-        ? onGround
-        : this.controls.target.clone();
+      return hit ? hit.point.clone() : null;
+    };
+    const pivotAt = (e: PointerEvent): THREE.Vector3 => {
+      const hit = hitAt(e);
+      if (hit) return hit;
+      const box = new THREE.Box3().setFromObject(this.content);
+      return box.isEmpty() ? this.controls.target.clone() : box.getCenter(new THREE.Vector3());
     };
 
     let drag: { pivot: THREE.Vector3; x: number; y: number; id: number } | null = null;
@@ -346,12 +348,13 @@ export class View3D {
       const rotation = tilt.multiply(turn);
       const rotate = (p: THREE.Vector3) =>
         p.sub(drag!.pivot).applyQuaternion(rotation).add(drag!.pivot);
-      // The view must not go over the top or under the bottom, where it would flip.
-      const offset = rotate(this.camera.position.clone()).sub(rotate(this.controls.target.clone()));
-      const polar = offset.angleTo(up);
-      if (polar < 0.02 || polar > Math.PI - 0.02) {
-        rotation.copy(turn);
-      }
+      // The view must not go over the top or under the bottom, where it would flip, and the
+      // camera must not go under the ground. Then the drag only turns the view.
+      const camera = rotate(this.camera.position.clone());
+      const polar = camera.clone().sub(rotate(this.controls.target.clone())).angleTo(up);
+      const flips = polar < 0.02 || polar > Math.PI - 0.02;
+      const under = camera.y < minHeight && pitch !== 0 && camera.y < this.camera.position.y;
+      if (flips || under) rotation.copy(turn);
       rotate(this.camera.position);
       rotate(this.controls.target);
       this.controls.update();
@@ -365,6 +368,9 @@ export class View3D {
     };
     element.addEventListener("pointerup", end);
     element.addEventListener("pointercancel", end);
+    element.addEventListener("dblclick", (e) => {
+      if (this.last && !hitAt(e)) this.fit(this.last.building);
+    });
   }
 
   /** The ray from the camera through the point of the pointer. */

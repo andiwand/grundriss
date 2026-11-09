@@ -79,7 +79,8 @@ export const APP: Record<string, string> = {
   Done: "Fertig",
   "North. Drag to turn it.": "Norden. Zum Drehen ziehen.",
   "Fit the plan in the view (F)": "Plan in die Ansicht einpassen (F)",
-  "3D · drag to orbit, scroll to zoom": "3D · Ziehen zum Drehen, Scrollen zum Zoomen",
+  "3D · drag to orbit, scroll to zoom, double-click to fit":
+    "3D · Ziehen zum Drehen, Scrollen zum Zoomen, Doppelklick zum Einpassen",
   "Show the stories above the active story": "Die Geschosse über dem aktiven Geschoss zeigen",
   "All stories": "Alle Geschosse",
   "Show more or less of the panel": "Mehr oder weniger vom Seitenbereich zeigen",

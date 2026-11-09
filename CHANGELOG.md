@@ -4,6 +4,11 @@ The changes that a user notices.
 
 ## Unreleased
 
+- 3D: a drag turns the view around the point of the building under the cursor, or around the
+  center of the building if the cursor is on empty space. Before, a drag that started on the
+  ground far away moved the house out of the view. The camera stays above the ground, and a
+  double click on empty space shows the whole building.
+
 ## 0.4.0 – 2026-11-09
 
 - Server plans without the network: the app keeps a copy of each plan of a server that it opened,
