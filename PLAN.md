@@ -51,6 +51,20 @@
 
 - Edits without the network: edit the offline copy of a server plan. The revision check then
   makes a copy if the server went on.
+- **The outdoor area.** The plot with its boundary, surfaces (lawn, paths, terrace, driveway),
+  fences and hedges, trees, a pool, and neighbor buildings as simple boxes. A garage, a carport,
+  or a shed reuses the walls and roofs. Trees and neighbors cast shade on the PV, which removes a
+  known limit; a tree that loses its leaves shades less in winter. The areas help to choose a
+  mowing robot, with its zones; the floor area and no-go zones do the same for a vacuum robot.
+  The plot and its content also give a site plan for a building permit.
+- **The house as a library.** First a module that only builds the 3D scene from a building,
+  without the editor: `buildGroup()` in `src/view3d/view3d.ts` today, mixed with the editing.
+  Then a web component, `<grundriss-view src="house.grundriss">`, with a small API: lights on
+  and off (each fixture has an id), the sun from a date and the location of the plan (the sun
+  position is in `src/model/climate.ts`), the weather (clouds, rain, snow), markers (cameras,
+  sensors, a robot), and events for a click on a room or a device. A 2D mode for weak wall
+  tablets. Then a card for Home Assistant on top of it: its settings map fixtures to entities,
+  so the file stays free of Home Assistant; a click switches a light or opens a camera stream.
 
 ## Later
 
@@ -153,6 +167,19 @@ need (see the decisions). Then the same WASM module runs in the browser and in e
   EN ISO 13370.
 - Better recognition: real scans and walls drawn as two thin lines in the training data.
 - Photos of the notes in the PDF report.
+- A sun and shadow study: a slider for the time of day and the date, with the shadows on the
+  terrace and the PV.
+- The horizon of the terrain: mountains hide the low sun, so the PV yield in winter and the
+  sunrise in a valley differ from a flat horizon. `horizon_profile()` of
+  [almucantar](https://github.com/andiwand/almucantar) (C++ in WASM, MPL-2.0) calculates it from
+  elevation tiles. Load the module only for this, after `@almucantar/core` is on npm. The sun
+  position itself stays `sunPosition()` in `src/model/climate.ts`, which is exact enough.
+- Neighbor buildings from OpenStreetMap, with their heights if OSM has them, from the location
+  of the plan.
+- Measured data in the energy model: the heating use or the room temperatures from Home
+  Assistant, compared with the model, to correct the estimate of the heat loss.
+- The view of cameras and the reach of motion sensors as cones on the plan, to plan their places.
+- An import of a room scan from an iPhone with LiDAR (Apple RoomPlan: walls, doors, windows).
 
 ## Known limits
 
