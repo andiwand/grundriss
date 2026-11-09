@@ -246,6 +246,10 @@ change the website. `test/example.test.ts` checks that the example house stays v
 - Commit messages follow Conventional Commits, for example `feat(editor): ...`,
   `fix(model): ...`, `docs: ...`.
 - A change that a user notices gets an entry under `## Unreleased` in `CHANGELOG.md`.
+- A release is a commit `chore(release): X.Y.Z` that sets the version in `package.json` and
+  `package-lock.json` and adds `## X.Y.Z – date` under `## Unreleased`, then a tag `vX.Y.Z`. The
+  tag builds the image (`X.Y.Z`, `X.Y`, `latest`) and the GitHub release. A minor version can
+  change the API while the version is 0.x.
 - A change of the file format that old versions cannot read needs a new `FILE_VERSION` and a
   migration in `parsePlan`. Add a test with a file of the old version.
 - Commit messages, code comments, and documentation use Simplified Technical English: one idea

@@ -33,197 +33,35 @@
   the help of the shortcuts.
 - A layout for phones and tablets, with touch input, and a German interface.
 - Browser tests with Playwright, and `src/main.ts` in modules of `src/ui/`.
-- A self-hosted server (steps 2 and 3 below): tokens in the path (root, users, plan links),
-  revisions with the parent check, the edit lease, live updates, server settings and users, share
-  links with rights and end dates, copy and move between the browser and a server, and the
-  Docker image with releases.
+- Revisions: a header in each file with its parent, the history in the browser, the
+  "Versions" list, and the check of the file on the disk before a save.
+- A self-hosted server: tokens in the path (root, users, plan links), revisions with the parent
+  check (409), the edit lease, live updates (server-sent events), server settings and users, and
+  share links with rights and end dates. Links that ended go away by themselves.
+- Connected plans in the app: copy and move between the browser and a server, a copy of each
+  plan for offline viewing, and the public app connects with `#connect=`.
+- Images once: the server and the history of the browser store each large image once, by its
+  hash (`src/model/blobs.ts`).
+- The Docker image on `ghcr.io` for amd64 and arm64, `compose.yaml` with Caddy, releases from
+  tags, and a browser test against a real server (`e2e/sharing.e2e.ts`).
+- One look for all controls: `src/ui/controls.ts`, the tokens `--control-*`, object lists as
+  rows, and a footer for the main action of a dialog (0.4.0).
 
-## Next: revisions and a self-hosted server
+## Next
 
-Today a plan goes to other people only as a file, and nothing stops two copies from going out of
-sync. The first goal is not live editing, but this: a plan has one current state, each save
-knows which state it starts from, and a save never overwrites the work of another person
-without a message. The server is private and self-hosted; a public service comes later.
+- Edits without the network: edit the offline copy of a server plan. The revision check then
+  makes a copy if the server went on.
 
-Each step is useful alone.
-
-Step 1, the list of the revisions in the app, the copy of each connected plan for offline use, the
-images stored once by their hash (`src/model/blobs.ts`), the removal of links that ended, the
-list of all share links, `compose.yaml`, and a browser test against a real server
-(`e2e/sharing.e2e.ts`) are done too. Edits without the network are still open.
-
-### Step 1: revisions, without a server
-
-- **A small header in the file.** A `.grundriss` file gets `revision`: an id, the id of the
-  revision that it starts from (`parent`), the time of the save, and the name of the device. It
-  is a new field that old versions ignore, so it needs no new `FILE_VERSION`. With it, each
-  copy can find a conflict: "this file starts from revision 12, but the target has 14 now".
-  The file holds only this header, not the history, because each revision of a plan with a
-  background image is large.
-- **A history in the browser.** IndexedDB keeps the revisions of each project next to its
-  current state: one at each save to a file, and one every few minutes while the user edits.
-  A "Versions" list of the project opens or restores an old revision. A limit (for example 50
-  revisions or 200 MB) removes the oldest ones.
-- **A check on save to a file.** If the file on the disk has another revision than the one that
-  the app opened, the app does not overwrite it. It offers to load that version or to save the
-  plan as a copy. This needs the File System Access API (Chrome and Edge).
-
-### Step 2: the server
-
-One program in TypeScript (Node), in this repository, from one container image. It uses the
-code of the app to read and check a `.grundriss` file. It stores the tokens and the plans in one
-JSON file and each revision in its own file on its disk; a private server has a few users and
-some dozen plans, so it needs no database and no native module. SQLite can come when a server
-needs more.
-
-**The token is in the path.** Each token is a place on the server: `https://<server>/<token>/`
-is the app with the access of that token, and `https://<server>/<token>/api/…` is its API. The
-link is the access, so a person opens it like any address, and `curl` works without a header.
-The API also takes `Authorization: Bearer <token>`, for scripts. A token is 128 random bits;
-the server stores only its hash, and shows the token once, when it makes it. Root removes a
-token, and its whole path is gone at once. A token can have an end date.
-
-The path is in the access logs of the server and of a proxy, and in the history of the browser.
-On a private server these are the logs of the owner. The server masks the tokens in its own log,
-and sends `Referrer-Policy: no-referrer`, so that a link to another site does not send the path.
-
-**Modes.** A setting chooses what the server does:
-
-- `full`: it serves the build of the app under each valid token (`/<token>/`) and the API
-  under `/<token>/api/`.
-- `api`: it serves only the API (`/<token>/api/`). The app connects from another place (step 4).
-
-In both modes, each request outside a valid token gets 404, also `/`, so the server shows
-nothing to a scan.
-
-**One kind of token, with a scope.** Each token opens the same app; only its scope differs. The
-app asks `/<token>/api/me` for the scope, and shows what the token allows.
-
-- **Root.** On the first start, the server makes the root token and prints it to the log once.
-  Root sees and writes all plans, and makes and removes tokens. The app opens with the list of
-  all plans.
-- **User tokens.** Root makes a token for each person, with its settings: can the person make
-  plans, does the person see only the own plans or all plans, and can the person write or only
-  read. A plan that a user makes is visible only to that user and to root, until the user
-  shares it. The app opens with the list of the plans that the token sees.
-- **Plan tokens.** The owner of a plan (or root) makes a token for this one plan, to read or to
-  write: this is the share link. The app opens the plan at once, without a list, and without the
-  edit tools if the token only reads.
-
-**Who makes tokens.** Only root and users that can write make tokens, and a token gets at most
-the rights of its maker.
-
-- Root makes user tokens and plan tokens with any rights and any end date.
-- A user token that can write makes plan tokens for its own plans with its API: to read or to
-  write; with an end date or a duration (for example 7 days), at most the end date of the user
-  token; and with a label, for example "Bank" or "Architect".
-- A user token makes other user tokens only if root allows it with a setting, for example for an
-  office that invites its staff.
-- A user token that only reads, and a plan token, make no tokens.
-- A user lists and removes the tokens that it made; root lists and removes all of them. A removed
-  token also removes the tokens that it made, so that no share link lives longer than the person
-  who made it.
-
-A plan has its own id, which is not a token. So one plan can have many plan tokens, for example
-one to read for the bank and one to write for the architect, and each one ends or goes away
-alone. The data: `tokens` (the hash, the kind, a label, the owner, the plan of a plan token, the
-settings, the end date), `plans` (the id, the owner, the name, the current revision, the
-lease), and `revisions` (the id, the plan, the parent, the time, the token that saved it, the
-file).
-
-**Revisions and the edit lease.**
-
-- Each save sends the revision that it starts from. If another save came first, the server
-  refuses the save (409), and the app offers to load the new version or to save a copy. So no
-  save gets lost, also in rare cases.
-- One client at a time edits a plan: it takes the edit lease of the plan for about 60 seconds,
-  and renews it while its tab is open. The others see who edits, and read only. If the lease
-  ends, for example because a laptop sleeps, another client can take it.
-- The server keeps the revisions, so a user can go back to an old one. Large images go into
-  the store once by their hash later, so that each revision does not copy them.
-
-**The API** under `/<token>/api/`, about this size: the scope of the token (`me`); list the plans
-that the token sees; make a plan; read the current revision; save a new revision with its parent;
-list and read the revisions; take, renew, and give back the lease; make, list, and remove tokens
-(root, and the owner of a plan for its plan tokens); and a stream of new revisions (server-sent
-events), so that the readers see each save at once.
-
-### The Docker image and the versions
-
-The server goes out as a Docker image on the GitHub Container Registry
-(`ghcr.io/andiwand/grundriss`), for `linux/amd64` and `linux/arm64`, so that it also runs on a
-Raspberry Pi or a NAS. The image contains the server and the build of the app of the same
-version, so the server always serves a matching app.
-
-**The configuration** comes from environment variables, and the data from one volume:
-
-- `GRUNDRISS_MODE`: `full` (app and API) or `api` (only the API).
-- `GRUNDRISS_DATA`: the folder of the database and the revisions, a volume (default `/data`).
-- `PORT`: the port (default 8080). The server speaks HTTP; a reverse proxy (Caddy, Traefik)
-  adds https.
-- `GRUNDRISS_ORIGINS`: the origins that may call the API (CORS), for example the PWA on GitHub
-  Pages (step 4). Empty means only the same origin.
-- `GRUNDRISS_ROOT_TOKEN`: an own root token, for example from a secret of the host. Without it,
-  the server makes one on the first start and prints it to the log once.
-
-So one command starts a server:
-`docker run -v grundriss:/data -p 8080:8080 ghcr.io/andiwand/grundriss`. A `compose.yaml` in the
-repository shows the same with a reverse proxy.
-
-**The versions.** The project uses semantic versions, starting in 0.x, where a minor version can
-change the API. One version is for all parts: `package.json`, the app (it shows it in the help),
-the server, and the image.
-
-- **A release** is a tag `vX.Y.Z` on `main`. A workflow then builds the image with the tags
-  `X.Y.Z`, `X.Y`, and `latest`, and makes a GitHub release with the part of `CHANGELOG.md` for
-  this version. The section `## Unreleased` becomes `## X.Y.Z – date`.
-- **Each commit on `main`** also publishes an image, with the tags `main` and `sha-<commit>`, for
-  people who want the newest state. `latest` stays the last release.
-- **The API** has its version in the answer of `/<token>/api/me`. The app from GitHub Pages
-  checks it and says if the server is too old or too new for it. The file format keeps its own
-  `FILE_VERSION`.
-- The first release with a version tag can be now, before the server, so that the app and the
-  changelog get versions already.
-
-### Step 3: connected projects in the app
-
-- A project in IndexedDB is local, or connected: it then has the address of the token on the
-  server (`https://<server>/<token>`), the id of the plan, and the last known revision. The
-  Projects page shows both, with a mark on the connected ones.
-- A connection is the address of a token. With a plan token, the app adds that plan. With a user
-  token or root, it adds the server as a place with its list of plans, next to the plans of the
-  browser. In mode `full`, the app reads the address from its own URL.
-- The editor with the lease saves each change to the server, after a short wait, like the
-  autosave today. The others get the new revisions from the stream and show them.
-- The app keeps a copy of each connected plan in IndexedDB. Without the network, it opens the
-  copy to read. Edits without the network can come later: the revision check then makes a copy
-  if the server went on.
-- The PWA: in mode `full`, the app installs from the path of a token. The scope of a service
-  worker follows the path, so the installed app belongs to that token, with its own storage. For
-  one person with one user token, that is the right thing. The service worker caches the app as
-  today.
-
-### Step 4: the public app connects to a private server
-
-The normal PWA (on GitHub Pages) connects to a server in modes `full` and `api` too: the user
-pastes the address of a token, or opens a link of the form
-`…/grundriss/app/#connect=https://<server>/<token>`. GitHub Pages serves only its own files, so
-the address goes in the fragment, which the browser does not send to any server. Because that
-app runs on https, the browser lets it call the server only if the server has https and allows
-the origin of the app (CORS, a setting of the server). Chrome also limits calls from public
-sites to addresses in a local network. So the app that the server serves (mode `full`) is the
-sure way, and the README explains the setup for the other way.
-
-### Later
+## Later
 
 - **A public service.** We run the same server for all users, in the EU, with the business model
   below. A floor plan of a home is personal data (GDPR), so a user must be able to delete a plan,
   and the service needs a privacy policy.
 - **Live editing.** All people edit at the same time, and their changes merge without loss with a
   CRDT (Yjs or Automerge). `PlanDocument` then keeps the building in the CRDT, undo stays per
-  user, and the others show their selection. The lease of step 2 keeps it simple until people ask
+  user, and the others show their selection. The edit lease keeps it simple until people ask
   for this.
-- **Accounts.** The tokens of step 2 are enough for a private server. A public service may need a
+- **Accounts.** The tokens of the server are enough for a private server. A public service may need a
   login: a link by email with a library in our server (for example Better Auth), or an external
   service (Zitadel or Keycloak in the EU), never our own passwords.
 
