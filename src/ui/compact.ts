@@ -4,7 +4,7 @@
 // at the bottom, the files, the layers, and the export go into the "More" menu, and the panel
 // becomes a sheet at the bottom. The sheet has three heights: a strip ("peek"), half of the
 // view, and almost all of it. A tap on its handle goes to the next height, and a drag of the
-// handle moves it. A selection opens the sheet to half.
+// handle moves it. A selection with the select tool opens the sheet to half.
 //
 // A finger has no Esc and no Enter. With a drawing tool, a "Done" button ends the tool. It
 // shows in a narrow window and on a device with a touch screen.
@@ -60,9 +60,14 @@ export function toolChanged(tool: Tool): void {
   $("#tool-done").hidden = !(DRAWING.includes(tool) && (compact.matches || coarse.matches));
 }
 
-/** A selection on a phone opens the sheet, so that the user sees the panel of the selection. */
+/**
+ * A selection on a phone opens the sheet, so that the user sees the panel of the selection. Only
+ * with the select tool: a drawing tool selects what it draws, and the sheet must not cover the
+ * plan while the user draws.
+ */
 export function selectionChanged(): void {
-  if (compact.matches && sheet === "peek" && editor.selection.length > 0) setSheet("half");
+  if (!compact.matches || sheet !== "peek" || editor.selection.length === 0) return;
+  if (editor.tool === "select") setSheet("half");
 }
 
 /** A new topic on a phone: the topics with a wide panel open the sheet to half. */

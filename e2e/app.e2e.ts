@@ -227,4 +227,30 @@ test("draws a room with taps of a finger on the phone", async ({ page }) => {
   // The Done button ends the tool, in place of Esc.
   await page.locator("#tool-done").tap();
   await expect(page.locator('#tools [data-tool="select"]')).toHaveClass(/active/);
+  // A door selects itself, but the sheet stays down while the user draws, so that it does not
+  // cover the plan.
+  await page.locator('#tools [data-tool="door"]').tap();
+  await page.touchscreen.tap(box.x + 190, box.y + 160);
+  await expect(page.locator('#plan-2d [data-kind="opening"]')).toHaveCount(1);
+  await expect(page.locator("body")).toHaveAttribute("data-sheet", "peek");
+});
+
+test("shows a water pipe while a finger draws it on the phone", async ({ page }) => {
+  await openApp(page);
+  test.skip(!(await isPhone(page)), "Only on the phone.");
+  await page.locator(".project-start", { hasText: "New plan" }).tap();
+  await page.locator('[data-topic-tab="utilities"]').tap();
+  await page.locator('#tools [data-system="water"]').tap();
+  await page
+    .locator("#services-menu button", { has: page.locator(".swatch") })
+    .first()
+    .tap();
+  const box = (await page.locator("#plan-2d svg.editor2d").boundingBox())!;
+  await page.touchscreen.tap(box.x + 80, box.y + 160);
+  await page.touchscreen.tap(box.x + 250, box.y + 160);
+  // A finger has no hover, so the line so far shows also after the tap, before Done.
+  await expect(page.locator("#plan-2d .run-preview")).toHaveCount(1);
+  await expect(page.locator("body")).toHaveAttribute("data-sheet", "peek");
+  await page.locator("#tool-done").tap();
+  await expect(page.locator("#plan-2d .run-preview")).toHaveCount(0);
 });

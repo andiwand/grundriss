@@ -15,6 +15,10 @@ The changes that a user notices.
   browser, with a small cloud in the corner. The plans of the browser are under "In this browser".
 - A plan to view shows only the tools to view: select and pan. A drag does not move an object, the
   panel shows the values as text, and the buttons that change the plan go away.
+- Phone: the panel stays down while you draw. Before, a door, a window, a stair, or a dimension
+  opened it over half of the plan.
+- Phone: a pipe or a cable shows while you draw it, and the first point of a wall, a stair, or a
+  dimension shows after the tap. Before, a pipe showed only after Done.
 
 ## 0.3.0 – 2026-11-08
 

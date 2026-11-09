@@ -2056,6 +2056,12 @@ export class Editor2D {
     }
     const marker = (p: Point, className = "") =>
       svg("circle", { cx: p.x, cy: p.y, r: 4 / this.zoom, class: `cursor ${className}` }, group);
+    // A finger has no hover, so the cursor is gone after a tap. The start of a wall, a stair, or a
+    // dimension still shows, so that the user sees where the next tap ends it.
+    if (!this.cursor) {
+      if (this.currentTool === "wall" && this.chain) marker(this.chain.point);
+      if (["stair", "dimension"].includes(this.currentTool)) this.measure.forEach((p) => marker(p));
+    }
     if (this.currentTool === "wall" && this.cursor) {
       const p = this.cursor.point;
       marker(p, this.cursor.vertexId ? "on-vertex" : this.cursor.wallId ? "on-wall" : "");
@@ -2092,21 +2098,24 @@ export class Editor2D {
       };
       this.drawFixture(svg("g", { class: `fixture ghost ${ghost.system}` }, group), ghost);
     }
-    if (this.currentTool === "run" && this.cursor) {
+    if (this.currentTool === "run") {
+      // The points of the line show also without a cursor, because a finger has no hover: after
+      // a tap, the user still sees the line so far.
       const kind = runKind(this.runKindName);
-      const target = this.runSnap(this.cursor.point, { altKey: false, shiftKey: false });
-      marker(target.point, target.fixtureId ? "on-vertex" : "");
-      if (this.runPoints.length > 0) {
-        const line = svg(
+      const line = [...this.runPoints];
+      if (this.cursor) {
+        const target = this.runSnap(this.cursor.point, { altKey: false, shiftKey: false });
+        marker(target.point, target.fixtureId ? "on-vertex" : "");
+        if (line.length > 0) line.push(target.point);
+      }
+      if (this.runPoints.length > 0) marker(this.runPoints[0]);
+      if (line.length > 1) {
+        const element = svg(
           "polyline",
-          {
-            points: points([...this.runPoints, target.point]),
-            class: "run-preview",
-            stroke: kind.color,
-          },
+          { points: points(line), class: "run-preview", stroke: kind.color },
           group,
         );
-        if (kind.dashed) line.setAttribute("stroke-dasharray", "6 4");
+        if (kind.dashed) element.setAttribute("stroke-dasharray", "6 4");
       }
     }
     if (this.currentTool === "furniture" && this.placing && this.cursor) {
