@@ -27,6 +27,8 @@ The changes that a user notices.
   A group that opens and closes has a flat header with an arrow, so it does not look like a
   button. Only the main action of a screen is a blue button. Renovation shows one heading less,
   and Compare is next to Variants.
+- Dialogs: the main action is at the bottom right, next to Cancel. The dialog of a server plan
+  has one main action, Edit, and Close.
 
 ## 0.3.0 – 2026-11-08
 

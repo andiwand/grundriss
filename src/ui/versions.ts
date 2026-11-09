@@ -183,7 +183,6 @@ export async function showVersions(source: Source): Promise<void> {
               t('The plan has the state of "{version}" again.', { version: version.title }),
             );
           }),
-          true,
         ),
       );
     }

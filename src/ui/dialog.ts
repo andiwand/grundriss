@@ -1,5 +1,5 @@
-// The dialogs of the app: a title, a close button, and a body with fields, notes, and buttons.
-// Esc or a click outside closes a dialog.
+// The dialogs of the app: a title, a close button, a body with fields, notes, and buttons, and a
+// footer with the main action on the right. Esc or a click outside closes a dialog.
 
 import { t } from "../i18n";
 import { button, fieldRow, iconButton } from "./controls";
@@ -41,4 +41,17 @@ export function note(parent: HTMLElement, text: string, className = "dialog-note
 
 export function actionButton(text: string, action: () => void, primary = false): HTMLButtonElement {
   return button(text, action, { kind: primary ? "primary" : "secondary" });
+}
+
+/**
+ * The footer of a dialog, on the right: a button that closes the dialog, and the main action
+ * after it. The first button says "Cancel" if the dialog has a main action, else "Close".
+ */
+export function footer(element: HTMLDialogElement, main?: HTMLButtonElement): HTMLElement {
+  const foot = document.createElement("div");
+  foot.className = "app-dialog-foot";
+  foot.append(button(main ? t("Cancel") : t("Close"), () => element.close()));
+  if (main) foot.append(main);
+  element.append(foot);
+  return foot;
 }

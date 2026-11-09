@@ -3683,9 +3683,18 @@ body.compact #share {
   border-radius: var(--radius-sm);
 }
 
-.dialog-form > button.primary,
-.app-dialog-body > button.primary {
-  align-self: flex-start;
+/* The button of a form card is at the end of the card, like the main action of a dialog. */
+.dialog-form > button.primary {
+  align-self: flex-end;
+}
+
+/* The footer of a dialog: the button to close it, and the main action at the right end. */
+.app-dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 /* A dialog has a fixed label column. A form card has a padding of 12 px, so its label column is

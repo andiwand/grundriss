@@ -31,7 +31,7 @@ import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
-import { actionButton, dialog, note, row } from "./dialog";
+import { actionButton, dialog, footer, note, row } from "./dialog";
 import { remoteSource, showVersions } from "./versions";
 import { checkbox, iconButton, pair, radioGroup, selectInput, textInput } from "./controls";
 import {
@@ -707,7 +707,7 @@ function connectDialog(): void {
     true,
   );
   input.addEventListener("keydown", (e) => e.key === "Enter" && connect.click());
-  body.append(connect);
+  footer(element, connect);
   input.focus();
 }
 
@@ -724,7 +724,8 @@ function planDialog(): void {
         { server: current.serverName, revision: current.revision },
       ),
     );
-    body.append(
+    footer(
+      element,
       actionButton(
         t("Connect again"),
         () => {
@@ -755,20 +756,9 @@ function planDialog(): void {
           ? t("Nobody edits this plan.")
           : t("Your link can only view this plan."),
   );
+  // The other actions are in the body. The one main action, Edit, is in the footer.
   const actions = document.createElement("div");
   actions.className = "dialog-actions";
-  if (current.write && !current.editing && !current.holder) {
-    actions.append(
-      actionButton(
-        t("Edit"),
-        () => {
-          element.close();
-          void startEditing();
-        },
-        true,
-      ),
-    );
-  }
   actions.append(
     actionButton(t("Versions…"), () => {
       element.close();
@@ -793,6 +783,20 @@ function planDialog(): void {
     );
   }
   body.append(actions);
+  const canEdit = current.write && !current.editing && !current.holder;
+  footer(
+    element,
+    canEdit
+      ? actionButton(
+          t("Edit"),
+          () => {
+            element.close();
+            void startEditing();
+          },
+          true,
+        )
+      : undefined,
+  );
 }
 
 /** The share links of a plan: the list, and a form for a new link. */
@@ -1061,7 +1065,7 @@ function uploadDialog(project: { id: string; name: string } | null): void {
     },
     true,
   );
-  body.append(put);
+  footer(element, put);
 }
 
 /** Copies or moves a plan of a server to this browser. A move deletes it on the server. */
@@ -1101,7 +1105,7 @@ function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boole
     },
     true,
   );
-  body.append(take);
+  footer(element, take);
 }
 
 // ----- The home page -----
