@@ -180,6 +180,16 @@ need (see the decisions). Then the same WASM module runs in the browser and in e
   Assistant, compared with the model, to correct the estimate of the heat loss.
 - The view of cameras and the reach of motion sensors as cones on the plan, to plan their places.
 - An import of a room scan from an iPhone with LiDAR (Apple RoomPlan: walls, doors, windows).
+- IKEA furniture as a source of the catalog, after the generic pieces. IKEA has no open data:
+  it has no public API, and the GLB models of its product pages are under its terms of use,
+  which allow only personal use in some countries. The open
+  [IKEA 3D Assembly Dataset](https://github.com/IKEA/IKEA3DAssemblyDataset) has only 5 products,
+  under CC BY-NC-SA 4.0 for research. The options:
+  - Nothing new: the user downloads a model for personal use and adds it with the glTF import.
+  - Generic pieces with the common IKEA sizes (for example a wardrobe of 100 × 58 × 236 cm),
+    without the product names, because they are trademarks. Sizes are facts, so this needs no
+    license. This is the recommended option.
+  - A license from Inter IKEA Systems for the real models.
 
 ## Known limits
 
