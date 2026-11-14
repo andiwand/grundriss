@@ -8,6 +8,9 @@ The changes that a user notices.
   center of the building if the cursor is on empty space. Before, a drag that started on the
   ground far away moved the house out of the view. The camera stays above the ground, and a
   double click on empty space shows the whole building.
+- 2D: a thick wall that meets a thinner wall does not stick out of it any more, at a T, at a
+  corner, or where the wall goes on straight. The 2D drawing and the exports now use the same
+  joins as the 3D view.
 
 ## 0.4.0 – 2026-11-09
 

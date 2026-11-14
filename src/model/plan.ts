@@ -96,19 +96,6 @@ export function degree(plan: Plan, vertexId: Id): number {
   return plan.walls.filter((w) => w.a === vertexId || w.b === vertexId).length;
 }
 
-/**
- * The extent of the wall body along the wall, from vertex `a` (0) to vertex `b` (the length).
- * At a vertex where the wall meets another wall, the body goes on for half the thickness. So
- * the bodies of the walls fill the corner.
- */
-export function wallExtents(plan: Plan, wall: Wall): { start: number; end: number } {
-  const half = wall.thickness / 2;
-  return {
-    start: degree(plan, wall.a) > 1 ? -half : 0,
-    end: wallLength(plan, wall) + (degree(plan, wall.b) > 1 ? half : 0),
-  };
-}
-
 /** The nearest wall to the point, if it is nearer than `tolerance`. */
 export function nearestWall(
   plan: Plan,

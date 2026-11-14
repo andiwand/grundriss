@@ -5,20 +5,28 @@
 import { fmt } from "./format";
 import { add, distance, perpendicular, scale, sub } from "./geometry";
 import { chimneyOutline, stairShape, type StairShape } from "./building";
-import { findWall, wallEnds, wallExtents } from "./plan";
+import { findWall, wallEnds } from "./plan";
+import { wallFaces } from "./walljoin";
 import type { Chimney, Dimension, Opening, OpeningKind, Plan, Point, Stair, Wall } from "./types";
 
-/** The four corners of the body of a wall, in order around the body. */
+/**
+ * The four corners of the body of a wall, in order around the body. The ends follow the joins
+ * with the other walls (`wallFaces`), so a thick wall does not go out of a thin wall that it meets.
+ */
 export function wallOutline(plan: Plan, wall: Wall): Point[] {
   const [a, b] = wallEnds(plan, wall);
   const length = distance(a, b);
   if (length === 0) return [];
   const dir = scale(sub(b, a), 1 / length);
   const normal = scale(perpendicular(dir), wall.thickness / 2);
-  const { start, end } = wallExtents(plan, wall);
-  const p = add(a, scale(dir, start));
-  const q = add(a, scale(dir, end));
-  return [add(p, normal), add(q, normal), sub(q, normal), sub(p, normal)];
+  const { right, left } = wallFaces(plan, wall).body;
+  const at = (s: number) => add(a, scale(dir, s));
+  return [
+    add(at(right[0]), normal),
+    add(at(right[1]), normal),
+    sub(at(left[1]), normal),
+    sub(at(left[0]), normal),
+  ];
 }
 
 /** A circular arc around `center` from the point `from` to the point `to`. */

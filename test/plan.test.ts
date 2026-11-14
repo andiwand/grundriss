@@ -10,7 +10,6 @@ import {
   removeWall,
   setWallLength,
   splitWall,
-  wallExtents,
 } from "../src/model/plan";
 import type { Plan } from "../src/model/types";
 
@@ -135,16 +134,6 @@ describe("plan", () => {
     expect(door.wallId).toBe(kept.id);
     expect(door.offset).toBeCloseTo(1);
     expect(door.hinge).toBe("a");
-  });
-
-  it("extends a wall at the corners only", () => {
-    const plan = emptyPlan();
-    const a = addVertex(plan, { x: 0, y: 0 });
-    const b = addVertex(plan, { x: 4, y: 0 });
-    const c = addVertex(plan, { x: 4, y: 3 });
-    const first = addWall(plan, a.id, b.id)!;
-    addWall(plan, b.id, c.id);
-    expect(wallExtents(plan, first)).toEqual({ start: 0, end: 4 + first.thickness / 2 });
   });
 
   it("keeps an opening inside its wall", () => {

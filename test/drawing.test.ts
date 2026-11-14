@@ -33,6 +33,37 @@ describe("drawing shapes", () => {
     close(outline[3], 0, -0.1);
   });
 
+  it("keeps a thick wall inside a thin wall at a T, a corner, and a straight join", () => {
+    const plan = emptyPlan();
+    const v = (x: number, y: number) => addVertex(plan, { x, y }).id;
+    const thin = { thickness: 0.12, height: 2.5 };
+    const thick = { thickness: 0.36, height: 2.5 };
+    // A thin wall along y = 0, and a thick wall that ends on it from below (a T).
+    const [w0, t, w1] = [v(0, 0), v(2, 0), v(4, 0)];
+    addWall(plan, w0, t, thin);
+    addWall(plan, t, w1, thin);
+    const stem = addWall(plan, v(2, 3), t, thick)!;
+    // The stem goes to the center line of the thin wall, not beyond its far face at y = -0.06.
+    expect(Math.min(...wallOutline(plan, stem).map((p) => p.y))).toBeCloseTo(0);
+
+    // A thick wall that turns into a thin wall at a corner of 90 degrees.
+    const c = v(10, 0);
+    const side = addWall(plan, v(10, 3), c, thick)!;
+    const top = addWall(plan, c, v(14, 0), thin)!;
+    // The thick wall ends at the outer face of the thin wall, the thin wall at the outer face of
+    // the thick wall.
+    expect(Math.min(...wallOutline(plan, side).map((p) => p.y))).toBeCloseTo(-0.06);
+    expect(Math.min(...wallOutline(plan, top).map((p) => p.x))).toBeCloseTo(9.82);
+
+    // A thick wall that goes on straight as a thin wall: the thick wall stops at the vertex, and
+    // the thin wall goes on into it.
+    const s = v(20, 0);
+    const wide = addWall(plan, v(17, 0), s, thick)!;
+    const narrow = addWall(plan, s, v(23, 0), thin)!;
+    expect(Math.max(...wallOutline(plan, wide).map((p) => p.x))).toBeCloseTo(20);
+    expect(Math.min(...wallOutline(plan, narrow).map((p) => p.x))).toBeCloseTo(19.94);
+  });
+
   it("draws a door with the hinge at a and the swing to the right side like the editor", () => {
     const { plan, wall } = wallPlan();
     const door = addOpening(plan, wall.id, "door", 2);

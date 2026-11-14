@@ -24,6 +24,7 @@ describe("the faces of a wall at its joins", () => {
       right: [0, 4],
       left: [0, 4],
       joins: ["free", "free"],
+      body: { right: [0, 4], left: [0, 4] },
     });
   });
 
