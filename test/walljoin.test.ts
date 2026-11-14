@@ -25,6 +25,7 @@ describe("the faces of a wall at its joins", () => {
       left: [0, 4],
       joins: ["free", "free"],
       body: { right: [0, 4], left: [0, 4] },
+      hub: [false, false],
     });
   });
 
@@ -78,5 +79,24 @@ describe("the faces of a wall at its joins", () => {
     expect(stem.left[0]).toBeCloseTo(0.1);
     // The straight walls go through flush.
     expect(wallFaces(p, p.walls[0]).joins[1]).toBe("straight");
+  });
+
+  it("joins three walls at 120 degrees in miters, and fills the joint from the vertex", () => {
+    const r = 3;
+    const ray = (deg: number) =>
+      P(r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180));
+    const p = plan([
+      [P(0, 0), ray(0)],
+      [P(0, 0), ray(120)],
+      [P(0, 0), ray(240)],
+    ]);
+    for (const wall of p.walls) {
+      const faces = wallFaces(p, wall);
+      expect(faces.joins[0]).toBe("other");
+      expect(faces.hub).toEqual([true, false]);
+      // The thickness is 0.2. Each face meets the face of the next wall at 0.1 / tan(60°).
+      expect(faces.right[0]).toBeCloseTo(0.1 / Math.tan(Math.PI / 3));
+      expect(faces.left[0]).toBeCloseTo(0.1 / Math.tan(Math.PI / 3));
+    }
   });
 });

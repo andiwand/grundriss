@@ -1122,6 +1122,16 @@ function addWall(
     body.polygon(REST, points, UP);
   }
 
+  // At a join of three or more walls, the top goes on to the vertex, so the joint has no hole.
+  for (const end of [0, 1] as const) {
+    if (!faces.hub[end]) continue;
+    const r = faces.right[end];
+    const l = faces.left[end];
+    const v = end === 0 ? 0 : length;
+    const y = Math.min(top(r), top(l));
+    if (y > 1e-4) body.polygon(REST, [at(r, half, y), at(v, 0, y), at(l, -half, y)], UP);
+  }
+
   // The reveals of the openings: the sill, the head, and the two jambs, across the wall.
   for (const h of openings) {
     const head = Math.min(h.head, top(h.s0), top(h.s1));

@@ -11,6 +11,8 @@ The changes that a user notices.
 - 2D: a thick wall that meets a thinner wall does not stick out of it any more, at a T, at a
   corner, or where the wall goes on straight. The 2D drawing and the exports now use the same
   joins as the 3D view.
+- 2D and 3D: where three or more walls meet, each wall meets the next wall around the joint in a
+  clean miter. Before, each wall went on by half its thickness, so a thick wall stuck out.
 
 ## 0.4.0 – 2026-11-09
 

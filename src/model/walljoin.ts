@@ -6,6 +6,10 @@
 // - Two walls at a corner meet in a miter: each face goes on to the point where it meets the
 //   face of the other wall on the same side of the corner.
 // - A wall that ends against a straight wall (a T) stops at the face of the straight wall.
+// - Where three or more walls meet without a straight wall, each face goes on to the point where
+//   it meets the face of the next wall around the vertex on its side. The faces then leave a
+//   small polygon around the vertex open. The body of each wall fills its part of it: the
+//   triangle from the ends of its two faces to the vertex (`WallFaces.hub`).
 //
 // The positions are distances along the wall from its vertex `a`.
 
@@ -27,6 +31,8 @@ export interface WallFaces {
    * the joint. They never go out of the other walls.
    */
   body: { right: [number, number]; left: [number, number] };
+  /** The body goes on to the vertex a and b, between the ends of its faces (a join "other"). */
+  hub: [boolean, boolean];
 }
 
 /** Two directions are opposite (a straight line through the vertex) within this tolerance. */
@@ -64,6 +70,7 @@ export function wallFaces(plan: Plan, wall: Wall): WallFaces {
   const left: [number, number] = [0, length];
   const joins: [JoinKind, JoinKind] = ["free", "free"];
   const body = { right: [0, length] as [number, number], left: [0, length] as [number, number] };
+  const hub: [boolean, boolean] = [false, false];
 
   const position = new Map(plan.vertices.map((v) => [v.id, v]));
   /** The direction from the vertex along the other wall, and its half thickness. */
@@ -94,46 +101,51 @@ export function wallFaces(plan: Plan, wall: Wall): WallFaces {
       for (const side of [1, -1] as const) setEnd(side, 0, fill);
       continue;
     }
-    // The face of another wall that a face of this wall meets: the face toward this wall.
-    const facing = (o: { u: Point; half: number }, toward: Point) => {
-      const n2 = perpendicular(o.u);
-      return { n2, o2: dot(n2, toward) > 0 ? o.half : -o.half };
+    /**
+     * The end of the face on `side`: where it meets the next wall around the vertex on that
+     * side, at the face of that wall toward this wall. With one other wall, the inner face meets
+     * the inner face of the other, and the outer face the outer face of the other: a miter.
+     */
+    const faceEnd = (side: 1 | -1) => {
+      const toward = { x: side * n.x, y: side * n.y };
+      // The direction of the turn from u to the face: +1 or -1.
+      const turn = Math.sign(cross(u, toward));
+      const angle = (o: Point) => {
+        const a = Math.atan2(turn * cross(u, o), dot(u, o));
+        return a > 0 ? a : a + 2 * Math.PI;
+      };
+      const next = others.reduce((p, q) => (angle(q.u) < angle(p.u) ? q : p));
+      // The normal of the face of the next wall toward this wall: a turn back toward u.
+      const n2 = turn > 0 ? { x: next.u.y, y: -next.u.x } : { x: -next.u.y, y: next.u.x };
+      const t = meet(n, side * half, u, n2, next.half, next.u);
+      const limit = MAX_MITER * Math.max(half, next.half) * 2;
+      return t === null ? next.half : Math.max(-limit, Math.min(limit, t));
     };
+    const ends = { 1: faceEnd(1), [-1]: faceEnd(-1) } as Record<1 | -1, number>;
+
     if (others.length === 1) {
       joins[end] = "corner";
-      const other = others[0];
-      const ends: Record<1 | -1, number> = { 1: 0, [-1]: 0 };
-      for (const side of [1, -1] as const) {
-        // A face toward the other wall is on the inside of the corner. It meets the face of the
-        // other wall toward this wall. A face on the outside meets the outer face of the other.
-        const inner = dot({ x: side * n.x, y: side * n.y }, other.u) > 0;
-        const { n2, o2 } = facing(other, inner ? u : { x: -u.x, y: -u.y });
-        const t = meet(n, side * half, u, n2, o2, other.u);
-        const limit = MAX_MITER * Math.max(half, other.half) * 2;
-        ends[side] = t === null ? 0 : Math.max(-limit, Math.min(limit, t));
-      }
       // At a corner of 90 degrees or more, the end of the body is square at the outer point of
       // the miter. The part beyond the miter is then inside the other wall.
-      const square = dot(u, other.u) <= 1e-9 ? Math.min(ends[1], ends[-1]) : null;
+      const square = dot(u, others[0].u) <= 1e-9 ? Math.min(ends[1], ends[-1]) : null;
       for (const side of [1, -1] as const) setEnd(side, ends[side], square ?? ends[side]);
       continue;
     }
     // A T: this wall ends against the face of a straight wall through the vertex.
     const through = others.find((o) => others.some((p) => dot(o.u, p.u) < -STRAIGHT));
-    if (through) {
+    if (through && others.length === 2) {
       joins[end] = "tee";
-      const { n2, o2 } = facing(through, u);
       // The body goes on to the center line of the straight wall if it stays inside it there.
       const inside = half * Math.abs(dot(u, through.u)) <= through.half + 1e-9;
       for (const side of [1, -1] as const) {
-        const t = meet(n, side * half, u, n2, o2, through.u) ?? through.half;
-        setEnd(side, t, inside ? Math.min(t, 0) : t);
+        setEnd(side, ends[side], inside ? Math.min(ends[side], 0) : ends[side]);
       }
       continue;
     }
-    // Other joins of three or more walls: the faces go on into the joint, so that it has no gap.
+    // Other joins of three or more walls: the body fills its part of the joint up to the vertex.
     joins[end] = "other";
-    for (const side of [1, -1] as const) setEnd(side, -half);
+    hub[end] = true;
+    for (const side of [1, -1] as const) setEnd(side, ends[side]);
   }
-  return { right, left, joins, body };
+  return { right, left, joins, body, hub };
 }
