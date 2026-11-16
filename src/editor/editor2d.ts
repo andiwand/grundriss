@@ -2299,9 +2299,8 @@ export class Editor2D {
 
   /**
    * The lengths of the selected wall, or of the selected walls in one line, the same as in the
-   * panel: the center line as a dash-dot line through the walls, with its length on it, and the
-   * length of each side as a thin line along the face, from wall to wall, with its length in the
-   * room. A line of more walls also shows the number and the length of each part.
+   * panel: the length of each side as a thin line along the face, from wall to wall, with its
+   * length beside it. A line of more walls also shows the number and the length of each part.
    */
   private drawLineLengths(group: Element, plan: Plan, line: WallLine): void {
     const points = line.vertices.map((id) => findVertex(plan, id)!);
@@ -2311,7 +2310,6 @@ export class Editor2D {
     const px = 1 / this.zoom;
     const d = scale(sub(b, a), 1 / length);
     const normal = perpendicular(d);
-    svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "axis-line" }, group);
     const runs = ([1, -1] as const).map((side) => lineSide(plan, line, side));
     if (points.length > 2) {
       // A chain of dimensions for the parts, out beyond the side with the longer face (the
@@ -2334,7 +2332,6 @@ export class Editor2D {
         this.label(group, at(scale(add(points[i], p), 0.5), away), text, "dimension part-length");
       });
     }
-    this.label(group, scale(add(a, b), 0.5), `${fmt(length, 2)} m`, "dimension");
     for (const side of [1, -1] as const) {
       const run = runs[side === 1 ? 0 : 1];
       if (!run || run.length < 1e-6) continue;

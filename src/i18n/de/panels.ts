@@ -150,7 +150,6 @@ export const PANELS: Record<string, string> = {
   // selection.ts: a wall.
   Wall: "Wand",
   Length: "Länge",
-  "Length, center line": "Länge Achse",
   "Length, {name}": "Länge {name}",
   "Length, outside": "Länge außen",
   "Both ends of this length are pinned.": "Beide Enden dieser Länge sind fixiert.",

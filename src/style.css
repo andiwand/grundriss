@@ -1358,15 +1358,7 @@ body.wide:not(.compact) #panel > section .field.stacked {
   stroke-dasharray: 6 4;
 }
 
-/* The lengths of the selected wall: the center line as a dash-dot line (the sign of an axis in a
-   drawing), and the length of each side as a thin line along its face. */
-.overlay .axis-line {
-  stroke: var(--accent);
-  stroke-width: 1;
-  stroke-dasharray: 10 3 2 3;
-  vector-effect: non-scaling-stroke;
-}
-
+/* The lengths of the selected wall: a thin line along each face. */
 .overlay .side-line {
   stroke: var(--accent);
   stroke-width: 1;

@@ -1,12 +1,11 @@
 // The lengths of a wall, or of a line of walls: walls in one straight line that join end to end,
 // for example a wall that is split where other walls meet it.
 //
-// - The length on the center line, from the first vertex of the line to the last one.
 // - The length on each side: along the face, from the wall at one end to the wall at the other
 //   end. This is the length that a user measures in a room. The face goes on through a straight
 //   join to the next wall in the same line, if that wall has the same thickness and no other
 //   wall meets the vertex on this side.
-// - The length of each part of the line.
+// - The length of each part of the line, from vertex to vertex.
 //
 // A pinned vertex (`Vertex.pinned`) stays in its place when a length changes: the other end
 // moves. If both ends are pinned, the length cannot change.
@@ -188,15 +187,6 @@ export function isPinned(plan: Plan, id: Id): boolean {
   return plan.vertices.find((v) => v.id === id)?.pinned === true;
 }
 
-/** The vertices that move for a change of the length on the center line, or null. */
-function centerMove(plan: Plan, line: WallLine): Move | null {
-  const first = line.vertices[0];
-  const last = line.vertices[line.vertices.length - 1];
-  if (!isPinned(plan, last)) return { ids: [last], sign: 1 };
-  if (!isPinned(plan, first)) return { ids: [first], sign: -1 };
-  return null;
-}
-
 /** The vertices that move for a change of the length of a side, or null. */
 function sideMove(plan: Plan, line: WallLine, side: Side): Move | null {
   const run = lineSide(plan, line, side);
@@ -222,7 +212,6 @@ function partMove(plan: Plan, line: WallLine, index: number): Move | null {
 /** Which lengths of the line can change: not where pinned vertices hold both ends. */
 export function lineCanChange(plan: Plan, line: WallLine) {
   return {
-    center: centerMove(plan, line) !== null,
     side: (side: Side) => sideMove(plan, line, side) !== null,
     part: (index: number) => partMove(plan, line, index) !== null,
   };
@@ -256,19 +245,6 @@ function settle(
     }
   }
   return true;
-}
-
-/** Changes the length of the walls on the center line. It gives false if it cannot. */
-export function setLineLength(plan: Plan, wallIds: Id[], length: number): boolean {
-  const line = wallLine(plan, wallIds);
-  if (!line) return false;
-  return settle(
-    plan,
-    line,
-    length,
-    () => lineEnds(plan, line).length,
-    () => centerMove(plan, line),
-  );
 }
 
 /** Changes the length of the walls on the side, from wall to wall. It gives false if it cannot. */

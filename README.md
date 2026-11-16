@@ -213,9 +213,8 @@ internet.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
    the selection.
-   A selected wall shows its lengths: the length on the center line (the dash-dot line through
-   the wall), and the length of each side from wall to wall (the thin line along the face). The
-   panel has the same lengths, and you can type each one. A new length moves only the end
+   A selected wall shows the length of each side from wall to wall (the thin line along the
+   face): in the room, and outside. The panel has the same lengths, and you can type each one. A new length moves only the end
    of the wall. A corner that you pin (select it, then **Pinned**) stays in its place: the other
    end moves. A length with pinned corners at both ends cannot change.
    Select walls in one straight line (Shift+click) to see and type their lengths like one wall,

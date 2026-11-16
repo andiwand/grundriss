@@ -12,7 +12,6 @@ import {
   mergeWalls,
   splitInTwo,
   wallDimensions,
-  setLineLength,
   setPartLength,
   setSideLength,
   sideRun,
@@ -92,16 +91,16 @@ describe("the length of a wall on each side", () => {
     expect(p.vertices.some((v) => v.x === 4 && v.y === 3)).toBe(true);
   });
 
-  it("sets the length on the center line: only the vertex b moves", () => {
+  it("sets the length of a wall as its one part: only the vertex b moves", () => {
     const p = plan(room());
-    setLineLength(p, [p.walls[0].id], 3);
+    setPartLength(p, [p.walls[0].id], 0, 3);
     expect(p.vertices[1]).toMatchObject({ x: 3, y: 0 });
     expect(p.vertices[2]).toMatchObject({ x: 4, y: 3 });
   });
 
   it("does not change a wall to a length of zero", () => {
     const p = plan(room());
-    setLineLength(p, [p.walls[0].id], 0);
+    setPartLength(p, [p.walls[0].id], 0, 0);
     expect(p.vertices[1]).toMatchObject({ x: 4, y: 0 });
   });
 
@@ -132,7 +131,7 @@ describe("the length of a wall on each side", () => {
   it("moves the other end if the end b is pinned", () => {
     const p = plan(room());
     p.vertices[1].pinned = true;
-    setLineLength(p, [p.walls[0].id], 3);
+    setPartLength(p, [p.walls[0].id], 0, 3);
     expect(p.vertices[0]).toMatchObject({ x: 1, y: 0 });
     expect(p.vertices[1]).toMatchObject({ x: 4, y: 0 });
   });
@@ -141,8 +140,8 @@ describe("the length of a wall on each side", () => {
     const p = plan(room());
     p.vertices[0].pinned = true;
     p.vertices[1].pinned = true;
-    expect(setLineLength(p, [p.walls[0].id], 3)).toBe(false);
-    expect(lineCanChange(p, wallLine(p, [p.walls[0].id])!).center).toBe(false);
+    expect(setPartLength(p, [p.walls[0].id], 0, 3)).toBe(false);
+    expect(lineCanChange(p, wallLine(p, [p.walls[0].id])!).part(0)).toBe(false);
     expect(p.vertices[1]).toMatchObject({ x: 4, y: 0 });
   });
 });
@@ -185,12 +184,6 @@ describe("walls in one line", () => {
     p.vertices[3].pinned = true;
     setPartLength(p, ids(p), 1, 2.5);
     expect(x(p)).toEqual([-0.5, 0.5, 3, 6]);
-  });
-
-  it("changes the whole line at its end", () => {
-    const p = parts();
-    setLineLength(p, ids(p), 7);
-    expect(x(p)).toEqual([0, 1, 3, 7]);
   });
 
   it("does not merge walls where another wall meets them", () => {

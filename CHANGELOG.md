@@ -17,8 +17,8 @@ The changes that a user notices.
   plan, so it works also in a plan to view. Its points snap to the corners and the faces of the
   walls. The dimension lines have their own tool, Dimension (L), in Structure.
 - 2D: a selected wall shows the length of each side from wall to wall, as a thin line along the
-  face, and its length on the center line as a dash-dot line. The panel has the same three
-  lengths, and you can type each one. A new length moves only the end of the wall.
+  face. The panel has the same lengths, and you can type each one. Before, the wall showed only
+  its length from the middle of one joint to the middle of the other. A new length moves only the end of the wall.
 - 2D: a corner can be pinned. A pinned corner stays in its place when a length changes, so the
   other end moves. A length with pinned corners at both ends cannot change, and the panel says
   why.

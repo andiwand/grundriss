@@ -35,7 +35,6 @@ import {
   mergeProblem,
   mergeWalls,
   splitInTwo,
-  setLineLength,
   setPartLength,
   setSideLength,
   wallLine,
@@ -731,11 +730,6 @@ function lengthFields(plan: Story, ids: Id[], rooms: Room[]): void {
       locked = true;
     }
   };
-  const first = findVertex(plan, line.vertices[0])!;
-  const last = findVertex(plan, line.vertices[line.vertices.length - 1])!;
-  lengthField(t("Length, center line"), distance(first, last), can.center, (p, v) =>
-    setLineLength(p, ids, v),
-  );
   const sides = ([1, -1] as const)
     .map((side) => {
       // The room on this side of each wall; a wall in the other direction has it on its other side.
