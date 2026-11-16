@@ -44,8 +44,17 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - A plan can also be on a Grundriss server (`server/`, `src/ui/remote.ts`). Each address of the
   server starts with a token (`/<token>/` for the app, `/<token>/api/` for the API), and the
   token is the access: root, a user, or one plan. A token makes only tokens with at most its
-  rights. An open plan of a server saves to it after each change, if the tab has the edit
-  lease; else `doc.readOnly` keeps it from changes, and the stream of the server updates it.
+  rights. All tabs whose token can write edit an open plan at the same time: each tab sends the
+  change since the last revision that it knows as a patch (`src/model/patch.ts`: the objects by
+  id, so a patch applies after other changes) to `POST plans/<id>/changes`. The server applies
+  the patches in their order, saves each one as a revision, and sends it on the stream of the
+  plan (`revision` with `patch`). Each tab applies them to `saved` and moves its own changes on
+  top (`rebase`). The history keeps the building before and after each change, so an undo after
+  the changes of others applies the change back as a patch. `src/ui/presence.ts` sends the
+  state of the tab (`POST plans/<id>/presence`: story, topic, view, cursor, selection, camera)
+  and shows the others, their cursors, and the follow. A server without `live` in `me` has the
+  older edit lease: only the tab with the lease edits. Without the right to edit, or in "View
+  only", `doc.readOnly` keeps the plan from changes.
   With `doc.readOnly`, the body has the class `read-only`: the palette has only select and pan,
   the editors do not start a drag, and the panel disables each control without `data-view`. A
   save names its parent revision, so the server refuses a save on an old revision (409). The
@@ -126,6 +135,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/example.ts`     | The example house of the start card and the website. `test/example.test.ts`.              |
 | `src/model/attic.ts`       | The rooms under a roof: ceiling, roof area, volume, walls, and the WoFlV living area.     |
 | `src/model/history.ts`     | `PlanDocument`: transactions, undo, redo, and the dirty state.                            |
+| `src/model/patch.ts`       | The patches of live editing: diff and apply by object id, rebase, and repair.             |
 | `src/model/file.ts`        | The file format: `serializePlan` and `parsePlan` with validation.                         |
 | `src/model/drawing.ts`     | The shapes of the 2D drawing, for the editor and the exports.                             |
 | `src/io/files.ts`          | Open and save with the File System Access API, and the fallbacks.                         |
@@ -182,6 +192,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/dialog.ts`         | The helpers of the dialogs of the app.                                                    |
 | `src/ui/controls.ts`       | The controls: buttons, fields, lists, check boxes, and the rows of a form.                |
 | `src/ui/remote.ts`         | The plans on a server: connections, the session of a plan, share, users, copy and move.   |
+| `src/ui/presence.ts`       | The other people on a plan of a server: marks, cursors, selections, follow, view only.    |
 | `src/io/server.ts`         | The client of the API of the server.                                                      |
 | `server/`                  | The server: `src/store.ts` (tokens, plans, revisions), `src/app.ts` (HTTP), the tests.    |
 | `Dockerfile`               | The image of the server with the website and the app. `.github/workflows/image.yml`.      |

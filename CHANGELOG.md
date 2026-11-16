@@ -4,6 +4,13 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: all people who can edit a plan now edit it at the same time. Each change goes to the
+  others at once, and the changes of different people merge by object, so a wall that one person
+  moves and a door that another person adds both stay. Undo takes back only your own changes.
+  Before, only the first person could edit, and the others had to wait.
+- Server: the top bar shows the other people on the plan. The 2D view shows their cursors and
+  their selections. A click on a person follows that person: the story, the topic, the part of
+  the plan, the 3D camera, and the selection. A person who can edit can switch to "View only".
 - 3D: a drag turns the view around the point of the building under the cursor, or around the
   center of the building if the cursor is on empty space. Before, a drag that started on the
   ground far away moved the house out of the view. The camera stays above the ground, and a

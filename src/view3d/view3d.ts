@@ -265,7 +265,10 @@ export class View3D {
 
     this.camera.position.set(8, 10, 12);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.addEventListener("change", () => this.requestRender());
+    this.controls.addEventListener("change", () => {
+      this.requestRender();
+      this.onCamera();
+    });
     // The wheel zooms to the point under the cursor, and a right drag pans in the screen plane.
     this.controls.zoomToCursor = true;
     this.controls.screenSpacePanning = true;
@@ -558,6 +561,26 @@ export class View3D {
       this.rebuild = 0;
       if (this.last) this.update(this.last.building, this.last.view);
     });
+  }
+
+  /** Called after each move of the camera. */
+  onCamera: () => void = () => {};
+
+  /** The place of the camera and the point that it looks at, in the coordinates of the scene. */
+  cameraState(): { position: number[]; target: number[] } {
+    const round = (v: THREE.Vector3) => [v.x, v.y, v.z].map((n) => Math.round(n * 1000) / 1000);
+    return { position: round(this.camera.position), target: round(this.controls.target) };
+  }
+
+  /** Puts the camera at a place, for example the camera of another person. */
+  setCamera(state: { position: number[]; target: number[] }): void {
+    const [px, py, pz] = state.position;
+    const [tx, ty, tz] = state.target;
+    if (![px, py, pz, tx, ty, tz].every(Number.isFinite)) return;
+    this.camera.position.set(px, py, pz);
+    this.controls.target.set(tx, ty, tz);
+    this.controls.update();
+    this.requestRender();
   }
 
   /** Points the camera at all visible content. */

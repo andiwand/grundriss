@@ -258,6 +258,8 @@ export class Editor2D {
   onCalibrate: (a: Point, b: Point) => void = () => {};
   /** The "rectify" tool calls this after the fourth click, with the corners in meters. */
   onCorners: (corners: [Point, Point, Point, Point]) => void = () => {};
+  /** Called after each drawing, for example after a pan, a zoom, or a new selection. */
+  onRender: () => void = () => {};
   /** The functions that `dispose` calls to remove the listeners outside the element. */
   private readonly disposers: (() => void)[] = [];
 
@@ -628,6 +630,34 @@ export class Editor2D {
       x: (e.clientX - rect.left - this.offset.x) / this.zoom,
       y: (e.clientY - rect.top - this.offset.y) / this.zoom,
     };
+  }
+
+  /** The part of the plan in the view, in meters. */
+  viewBox(): { x: number; y: number; width: number; height: number } {
+    const width = this.element.clientWidth;
+    const height = this.element.clientHeight;
+    return {
+      x: -this.offset.x / this.zoom,
+      y: -this.offset.y / this.zoom,
+      width: width / this.zoom,
+      height: height / this.zoom,
+    };
+  }
+
+  /**
+   * Shows a part of the plan, for example the view of another person: the same center, and all
+   * of the part in the view.
+   */
+  showBox(box: { x: number; y: number; width: number; height: number }): void {
+    const width = this.element.clientWidth;
+    const height = this.element.clientHeight;
+    if (width === 0 || height === 0 || box.width <= 0 || box.height <= 0) return;
+    this.zoom = clamp(Math.min(width / box.width, height / box.height), MIN_ZOOM, MAX_ZOOM);
+    this.offset = {
+      x: width / 2 - (box.x + box.width / 2) * this.zoom,
+      y: height / 2 - (box.y + box.height / 2) * this.zoom,
+    };
+    this.render();
   }
 
   /** Shows the whole plan, or the background if the plan is empty. */
@@ -1648,6 +1678,7 @@ export class Editor2D {
       draw(svg("g", { class: "extra" }, this.content), this.zoom);
     }
     this.renderOverlay(plan);
+    this.onRender();
   }
 
   /**

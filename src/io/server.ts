@@ -2,6 +2,8 @@
 // a token on a server, for example `https://example.org/<token>`: the app and its API are below
 // it. The token is the access, so the address is a secret.
 
+import type { Patch } from "../model/patch";
+
 /** The version of the API that the app knows. */
 export const API_VERSION = 1;
 
@@ -27,6 +29,16 @@ export interface Me {
   server: string;
   mode: "full" | "api";
   token: TokenInfo;
+  /** True if the server merges the changes of many people (`changes`); else one edits. */
+  live?: boolean;
+}
+
+/** A person who has a plan open, with the state that the app of that person sends. */
+export interface Person {
+  client: string;
+  name: string;
+  write: boolean;
+  state: unknown;
 }
 
 export interface RemotePlan {
@@ -152,6 +164,12 @@ export class ServerClient {
   revisions = (id: string) => this.request<Revision[]>("GET", `plans/${id}/revisions`);
   revision = (id: string, revision: string) =>
     this.request<{ data: string }>("GET", `plans/${id}/revisions/${revision}`);
+  /** Sends the changes since the revision `parent`. The server applies them to its last one. */
+  sendChanges = (id: string, parent: string, patch: Patch, name?: string) =>
+    this.request<RemotePlan>("POST", `plans/${id}/changes`, { parent, patch, name });
+  /** Tells the others of a plan the name and the state of this tab. */
+  sendPresence = (id: string, name: string, state: unknown) =>
+    this.request<unknown>("POST", `plans/${id}/presence`, { name, state });
   takeLease = (id: string) =>
     this.request<{ holder: string; until: number }>("POST", `plans/${id}/lease`);
   releaseLease = (id: string) => this.request<unknown>("DELETE", `plans/${id}/lease`);
@@ -167,14 +185,24 @@ export class ServerClient {
   saveSettings = (settings: { name: string }) =>
     this.request<ServerSettings>("PUT", "settings", settings);
 
-  /** The stream of the events of a plan: new revisions, the lease, and the removal. */
+  /** The stream of the events of a plan: new revisions, the people, the lease, the removal. */
   events(id: string): EventSource {
-    return new EventSource(`${this.base}/api/plans/${id}/events`);
+    const client = this.client ? `?client=${encodeURIComponent(this.client)}` : "";
+    return new EventSource(`${this.base}/api/plans/${id}/events${client}`);
   }
 
   /** The address of a new token on this server: the server address with the token. */
   tokenAddress(token: string): string {
     return `${this.base.slice(0, this.base.lastIndexOf("/"))}/${token}`;
+  }
+
+  /** Leaves the list of the people of a plan when the page closes. */
+  leaveOnUnload(id: string): void {
+    void fetch(`${this.base}/api/plans/${id}/presence`, {
+      method: "DELETE",
+      headers: { "X-Client": this.client },
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
   /** Gives the lease back when the page closes. `keepalive` lets the request outlive the page. */

@@ -7,6 +7,7 @@ import { buildingTakeoff } from "./model/takeoff";
 import { isCompact, selectionChanged, setupCompact, toolChanged, topicChanged } from "./ui/compact";
 import { renderContents } from "./ui/contents";
 import { setupRemote } from "./ui/remote";
+import { setupPresence } from "./ui/presence";
 import { setupEdit3d } from "./ui/edit3d";
 import {
   $,
@@ -785,6 +786,8 @@ function afterChange(): void {
 Object.assign(shell, {
   setTool,
   setTopic,
+  setView,
+  view: () => currentView,
   markTool,
   closeMenus,
   loadBackground,
@@ -1100,6 +1103,7 @@ void startProjects();
 // A click on the name of the plan shows its versions.
 $("#file-name").addEventListener("click", openVersions);
 setupRemote();
+setupPresence();
 
 // ----- Installed app -----
 

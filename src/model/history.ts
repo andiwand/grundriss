@@ -9,10 +9,15 @@
 // So the snapshots of the history do not copy this data. The history keeps at most HISTORY_LIMIT
 // entries.
 //
+// With other people on the same plan of a server, the building also changes by their patches
+// (`applyRemote`). An entry of the history then keeps the building before and after the change,
+// and an undo applies the change back as a patch (`patch.ts`), so it undoes only the own change.
+//
 // The 2D editor works on one story at a time: the active story. `plan` gives it, and `edit` and
 // `update` change it. The choice of the active story is not part of the history.
 
 import { emptyBuilding, findStory } from "./building";
+import { diffBuildings, patchBuilding } from "./patch";
 import { normalize } from "./plan";
 import type { Building, Id, Story } from "./types";
 
@@ -53,6 +58,20 @@ export function sameTree(a: unknown, b: unknown): boolean {
   );
 }
 
+/** One entry of the history: the building before and after one change. */
+interface Step {
+  before: Building;
+  after: Building;
+}
+
+/**
+ * The other end of a step from `from`: the end itself if the building is still `from`, else the
+ * building with the change from `from` to `to` applied as a patch.
+ */
+function stepTo(building: Building, from: Building, to: Building): Building {
+  return building === from ? to : patchBuilding(building, diffBuildings(from, to));
+}
+
 export class PlanDocument {
   building: Building;
   /**
@@ -74,8 +93,8 @@ export class PlanDocument {
   private locked = false;
   onBlocked: () => void = () => {};
   private activeId: Id;
-  private undoStack: Building[] = [];
-  private redoStack: Building[] = [];
+  private undoStack: Step[] = [];
+  private redoStack: Step[] = [];
   private before: Building | null = null;
   private changed = false;
   /** True if `commit` compares the building with the one before, as at the end of a drag. */
@@ -184,7 +203,7 @@ export class PlanDocument {
       this.changed = false;
     }
     if (this.changed) {
-      this.undoStack.push(this.before);
+      this.undoStack.push({ before: this.before, after: this.building });
       if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
       this.redoStack = [];
     } else {
@@ -250,20 +269,22 @@ export class PlanDocument {
   undo(): void {
     if (this.readOnly) return this.onBlocked();
     this.cancel();
-    const previous = this.undoStack.pop();
-    if (!previous) return;
-    this.redoStack.push(this.building);
-    this.building = previous;
+    const step = this.undoStack.pop();
+    if (!step) return;
+    const now = this.building;
+    this.building = stepTo(now, step.after, step.before);
+    this.redoStack.push({ before: this.building, after: now });
     this.emit();
   }
 
   redo(): void {
     if (this.readOnly) return this.onBlocked();
     this.cancel();
-    const next = this.redoStack.pop();
-    if (!next) return;
-    this.undoStack.push(this.building);
-    this.building = next;
+    const step = this.redoStack.pop();
+    if (!step) return;
+    const now = this.building;
+    this.building = stepTo(now, step.before, step.after);
+    this.undoStack.push({ before: now, after: this.building });
     this.emit();
   }
 
@@ -277,6 +298,17 @@ export class PlanDocument {
     this.redoStack = [];
     const ground = building.stories.find((s) => s.elevation >= -1e-6) ?? building.stories[0];
     this.activeId = ground.id;
+    this.emit();
+  }
+
+  /**
+   * Puts the building with the changes of other people in the document. The history stays: an
+   * undo then undoes only the own changes. It needs no open transaction.
+   */
+  applyRemote(building: Building): void {
+    if (this.before !== null) throw new Error("applyRemote() needs no open transaction");
+    if (building === this.building) return;
+    this.building = building;
     this.emit();
   }
 

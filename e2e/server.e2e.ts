@@ -41,9 +41,7 @@ test.afterEach(() => {
   }
 });
 
-test("shares live changes and hands the edit lease to a waiting browser", async ({
-  browser,
-}, testInfo) => {
+test("shares live changes between two browsers that both edit", async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Uses two desktop browser contexts.");
   const { store, owner, plan, base } = await start();
   const first = store.makeToken(owner, {
@@ -61,24 +59,29 @@ test("shares live changes and hands the edit lease to a waiting browser", async 
   const a = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
   const b = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
   try {
-    const writer = await a.newPage();
-    const viewer = await b.newPage();
-    await writer.goto(`${base}/${first.token}/`);
-    await expect(writer.locator("#remote-state")).toHaveText("Grundriss");
-    await viewer.goto(`${base}/${second.token}/`);
-    await expect(viewer.locator("#remote-state")).toContainText("First edits");
-    const north = writer.getByRole("spinbutton", { name: "North" });
+    const one = await a.newPage();
+    const two = await b.newPage();
+    await one.goto(`${base}/${first.token}/`);
+    await expect(one.locator("#remote-state")).toHaveText("Grundriss");
+    await two.goto(`${base}/${second.token}/`);
+    // Both edit at once; each sees the other.
+    await expect(two.locator("#remote-state")).toHaveText("Grundriss");
+    await expect(one.locator("#people .person")).toHaveText("S");
+    await expect(two.locator("#people .person")).toHaveText("F");
+    const north = one.getByRole("spinbutton", { name: "North" });
     await north.fill("25");
     await north.press("Tab");
-    await expect(viewer.getByRole("spinbutton", { name: "North" })).toHaveValue("25");
-    await writer.close();
-    await expect(viewer.locator("#remote-state")).toHaveText("Grundriss");
-    const next = viewer.getByRole("spinbutton", { name: "North" });
+    await expect(two.getByRole("spinbutton", { name: "North" })).toHaveValue("25");
+    const next = two.getByRole("spinbutton", { name: "North" });
     await next.fill("40");
     await next.press("Tab");
+    await expect(one.getByRole("spinbutton", { name: "North" })).toHaveValue("40");
     await expect
       .poll(() => JSON.parse(store.revisionData(plan, plan.revisions.at(-1)!.id)).north)
       .toBe(40);
+    // A closed tab leaves the list of the others.
+    await one.close();
+    await expect(two.locator("#people .person")).toHaveCount(0);
   } finally {
     await a.close();
     await b.close();

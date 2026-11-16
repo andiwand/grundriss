@@ -222,4 +222,27 @@ export const PROJECTS: Record<string, string> = {
   "Connect again": "Erneut verbinden",
   "Share links": "Freigabe-Links",
   "Copy from {time}": "Kopie von {time}",
+
+  // ----- src/ui/presence.ts: the people on a plan of a server -----
+  Viewing: "Ansehen",
+  "You only view the plan. Click to edit it.":
+    "Sie sehen den Plan nur an. Klicken Sie, um ihn zu bearbeiten.",
+  "You edit the plan. Click to only view it, for example to follow another person.":
+    "Sie bearbeiten den Plan. Klicken Sie, um ihn nur anzusehen, zum Beispiel um einer anderen Person zu folgen.",
+  "Your name": "Ihr Name",
+  "Your name…": "Ihr Name …",
+  "You follow {name}": "Sie folgen {name}",
+  "Stop following": "Nicht mehr folgen",
+  "{name} closed the plan.": "{name} hat den Plan geschlossen.",
+  views: "sieht an",
+  edits: "bearbeitet",
+  "{name} ({what}, {story}). Click to follow.": "{name} ({what}, {story}). Klicken, um zu folgen.",
+  "{name} ({what}, {story}). Click to stop following.":
+    "{name} ({what}, {story}). Klicken, um nicht mehr zu folgen.",
+  "You only view this plan. Click Edit at the top to change it.":
+    "Sie sehen diesen Plan nur an. Klicken Sie oben auf Bearbeiten, um ihn zu ändern.",
+  "You edit this plan with the others who have it open. Each change saves to the server.":
+    "Sie bearbeiten diesen Plan gemeinsam mit den anderen, die ihn geöffnet haben. Jede Änderung wird auf dem Server gespeichert.",
+  "You only view this plan. Click Edit to change it.":
+    "Sie sehen diesen Plan nur an. Klicken Sie auf Bearbeiten, um ihn zu ändern.",
 };

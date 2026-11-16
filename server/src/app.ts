@@ -9,7 +9,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 import { planPreview } from "../../src/export/preview";
-import { parseBuilding } from "../../src/model/file";
+import { parseBuilding, serializeBuilding } from "../../src/model/file";
+import { patchBuilding, type Patch } from "../../src/model/patch";
+import type { Building } from "../../src/model/types";
 import { Store, StoreError, type PlanRecord, type TokenRecord } from "./store";
 
 /** The version of the API. A change that old apps cannot use gives a new version. */
@@ -17,6 +19,12 @@ export const API_VERSION = 1;
 
 /** The time of the edit lease without a renewal, in ms. */
 export const LEASE_TIME = 60_000;
+
+/** The time that a person stays in the list of a plan without a sign of life, in ms. */
+export const PRESENCE_TIME = 60_000;
+
+/** The largest state of a person: the cursor, the view, and the selection. */
+const MAX_PRESENCE = 16_000;
 
 export interface Config {
   mode: "full" | "api";
@@ -39,6 +47,16 @@ export interface Config {
   /** The largest body of a request, in bytes. */
   maxBody: number;
   version: string;
+}
+
+/** A person who has a plan open: the name, and the state that the app sends. */
+interface Presence {
+  client: string;
+  token: TokenRecord;
+  name: string;
+  write: boolean;
+  state: unknown;
+  seen: number;
 }
 
 interface Lease {
@@ -71,6 +89,10 @@ export function createHandler(store: Store, config: Config) {
   const leases = new Map<string, Lease>();
   /** The open streams of the events of each plan. */
   const streams = new Map<string, Map<ServerResponse, TokenRecord>>();
+  /** The people who have each plan open, by the id of their tab. */
+  const people = new Map<string, Map<string, Presence>>();
+  /** The building of the last revision of each plan, for the patches. */
+  const buildings = new Map<string, { revision: string; building: Building }>();
   const origins = new Set(config.origins);
   if (config.appUrl) origins.add(new URL(config.appUrl).origin);
 
@@ -87,6 +109,39 @@ export function createHandler(store: Store, config: Config) {
       }
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     }
+  };
+
+  const personInfo = (p: Presence) => ({
+    client: p.client,
+    name: p.name,
+    write: p.write,
+    state: p.state,
+  });
+
+  /** Removes a person from a plan, and tells the others. */
+  const leave = (planId: string, client: string) => {
+    const set = people.get(planId);
+    if (!set?.delete(client)) return;
+    if (set.size === 0) people.delete(planId);
+    send(planId, "presence", { client, gone: true });
+  };
+
+  /** The people of a plan, without the ones who left without a word or lost the access. */
+  const present = (planId: string, now = Date.now()): Presence[] => {
+    for (const p of [...(people.get(planId)?.values() ?? [])]) {
+      if (now - p.seen > PRESENCE_TIME || !store.active(p.token, now)) leave(planId, p.client);
+    }
+    return [...(people.get(planId)?.values() ?? [])];
+  };
+
+  /** The building of the last revision of a plan. */
+  const latestBuilding = (plan: PlanRecord): Building => {
+    const revision = plan.revisions.at(-1)!.id;
+    const known = buildings.get(plan.id);
+    if (known?.revision === revision) return known.building;
+    const building = parseBuilding(store.revisionData(plan, revision));
+    buildings.set(plan.id, { revision, building });
+    return building;
   };
 
   // The picture of each plan for the list, with the revision that it shows.
@@ -225,6 +280,7 @@ export function createHandler(store: Store, config: Config) {
         server: store.settings.name,
         mode: config.mode,
         token: publicToken(token),
+        live: true,
       });
     }
 
@@ -315,6 +371,7 @@ export function createHandler(store: Store, config: Config) {
             checkPlan(value.data),
             value.name,
           );
+          buildings.delete(plan.id);
           send(plan.id, "revision", { ...revision, name: latest.name, client });
           return json(res, 200, planInfo(latest));
         }
@@ -329,6 +386,8 @@ export function createHandler(store: Store, config: Config) {
           }
           store.removePlan(token, plan);
           previews.delete(plan.id);
+          buildings.delete(plan.id);
+          people.delete(plan.id);
           send(plan.id, "removed", {});
           for (const stream of streams.get(plan.id)?.keys() ?? []) stream.end();
           leases.delete(plan.id);
@@ -339,6 +398,66 @@ export function createHandler(store: Store, config: Config) {
       if (sub === "revisions" && method === "GET") {
         if (subId) return json(res, 200, { data: store.revisionData(plan, subId) });
         return json(res, 200, plan.revisions);
+      }
+
+      if (sub === "changes" && method === "POST") {
+        if (!client) throw new StoreError(400, "The request needs the header X-Client.");
+        const value = (await input()) as { parent?: string | null; patch?: unknown; name?: string };
+        const latest = store.plan(plan.id);
+        if (!latest || !store.canSee(token, latest))
+          throw new StoreError(404, "The plan does not exist.");
+        if (!store.canWrite(token, latest)) throw new StoreError(403, "This token only reads.");
+        const patch = value.patch as Patch | undefined;
+        if (!patch || typeof patch !== "object" || typeof patch.t !== "string")
+          throw new StoreError(400, "The request needs the changes as a patch.");
+        // The patch names the objects by id, so it applies to the last revision also when other
+        // people saved after its parent. Their changes stay, and the later change of a field wins.
+        const parent = latest.revisions.at(-1)!.id;
+        let building: Building;
+        let data: string;
+        try {
+          building = patchBuilding(latestBuilding(latest), patch);
+          data = serializeBuilding(building);
+        } catch {
+          throw new StoreError(400, "The changes do not fit the plan.");
+        }
+        const revision = store.saveRevision(token, latest, parent, checkPlan(data), value.name);
+        buildings.set(latest.id, { revision: revision.id, building });
+        send(plan.id, "revision", {
+          ...revision,
+          name: latest.name,
+          client,
+          base: value.parent ?? null,
+          patch,
+        });
+        return json(res, 200, planInfo(latest));
+      }
+
+      if (sub === "presence" && method === "POST") {
+        if (!client) throw new StoreError(400, "The request needs the header X-Client.");
+        const value = (await input()) as { name?: string; state?: unknown };
+        if (JSON.stringify(value.state ?? null).length > MAX_PRESENCE)
+          throw new StoreError(413, "The state is too large.");
+        const set = people.get(plan.id) ?? new Map<string, Presence>();
+        people.set(plan.id, set);
+        const name = typeof value.name === "string" ? value.name.trim().slice(0, 40) : "";
+        const person: Presence = {
+          client,
+          token,
+          name: name || token.label,
+          write: store.canWrite(token, plan),
+          state: value.state ?? null,
+          seen: Date.now(),
+        };
+        set.set(client, person);
+        send(plan.id, "presence", personInfo(person));
+        return json(res, 200, { ok: true });
+      }
+
+      if (sub === "presence" && method === "DELETE") {
+        if (client && people.get(plan.id)?.get(client)?.token.id === token.id)
+          leave(plan.id, client);
+        return json(res, 200, { ok: true });
       }
 
       if (sub === "lease") {
@@ -374,10 +493,12 @@ export function createHandler(store: Store, config: Config) {
           Connection: "keep-alive",
         });
         const held = lease(plan.id);
+        const streamClient = new URL(req.url ?? "/", "http://server").searchParams.get("client");
         res.write(
           `event: hello\ndata: ${JSON.stringify({
             revision: plan.revisions.at(-1)?.id ?? null,
             lease: held ? { holder: held.holder, client: held.client, until: held.until } : null,
+            people: present(plan.id).map(personInfo),
           })}\n\n`,
         );
         const set = streams.get(plan.id) ?? new Map();
@@ -390,11 +511,15 @@ export function createHandler(store: Store, config: Config) {
             leases.delete(plan.id);
             send(plan.id, "lease", null);
           }
+          present(plan.id);
         }, 25_000);
         req.on("close", () => {
           clearInterval(ping);
           set.delete(res);
           if (set.size === 0) streams.delete(plan.id);
+          // The tab is gone, or it opens a new stream at once, which sends its state again.
+          if (streamClient && people.get(plan.id)?.get(streamClient)?.token.id === token.id)
+            leave(plan.id, streamClient);
         });
         return;
       }

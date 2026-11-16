@@ -355,6 +355,135 @@ describe("plans and revisions", () => {
   });
 });
 
+describe("live editing", () => {
+  /** Reads the events of a stream until `stop` gives true for one of them. */
+  async function events(token: string, planId: string, client: string) {
+    const abort = new AbortController();
+    const response = await fetch(`${base}/${token}/api/plans/${planId}/events?client=${client}`, {
+      signal: abort.signal,
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const seen: { event: string; data: Record<string, unknown> }[] = [];
+    const next = async (stop: (e: { event: string; data: Record<string, unknown> }) => boolean) => {
+      for (;;) {
+        const found = seen.find(stop);
+        if (found) return found;
+        const { value, done } = await reader.read();
+        if (done) throw new Error("The stream ended.");
+        buffer += decoder.decode(value, { stream: true });
+        let end: number;
+        while ((end = buffer.indexOf("\n\n")) >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const event = /^event: (.*)$/m.exec(block)?.[1];
+          const data = /^data: (.*)$/m.exec(block)?.[1];
+          if (event && data) seen.push({ event, data: JSON.parse(data) });
+        }
+      }
+    };
+    return { next, close: () => abort.abort() };
+  }
+
+  it("merges the changes of two people and sends each change to the others", async () => {
+    const start = emptyBuilding();
+    const story = start.stories[0];
+    const { body: house } = await call(root, "plans", {
+      method: "POST",
+      json: { name: "House", data: serializeBuilding(start) },
+    });
+    const watcher = await events(root, house.id, "watcher");
+    await watcher.next((e) => e.event === "hello");
+    const vertex = (id: string, x: number) => ({
+      t: "keys",
+      keys: {
+        stories: {
+          t: "items",
+          items: {
+            [story.id]: {
+              t: "keys",
+              keys: { vertices: { t: "items", items: {}, add: [{ id, x, y: 0 }] } },
+            },
+          },
+        },
+      },
+    });
+    // Both start from revision 1; the second change applies on top of the first.
+    for (const [client, id] of [
+      ["a", "v-a"],
+      ["b", "v-b"],
+    ]) {
+      const sent = await call(root, `plans/${house.id}/changes`, {
+        method: "POST",
+        headers: { "X-Client": client },
+        json: { parent: "1", patch: vertex(id, 1) },
+      });
+      expect(sent.status).toBe(200);
+    }
+    const saved = await call(root, `plans/${house.id}`);
+    expect(saved.body.revision).toBe("3");
+    const ids = JSON.parse(saved.body.data).stories[0].vertices.map((v: { id: string }) => v.id);
+    expect(ids).toEqual(["v-a", "v-b"]);
+    const second = await watcher.next((e) => e.event === "revision" && e.data.id === "3");
+    expect(second.data).toMatchObject({ parent: "2", client: "b", base: "1" });
+    expect(second.data.patch).toEqual(vertex("v-b", 1));
+    watcher.close();
+  });
+
+  it("refuses changes of a token that only reads, and changes that do not fit", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const { body: link } = await call(root, "tokens", {
+      method: "POST",
+      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
+    });
+    const patch = { t: "keys", keys: { north: { t: "set", v: 10 } } };
+    const change = (token: string, body: unknown) =>
+      call(token, `plans/${house.id}/changes`, {
+        method: "POST",
+        headers: { "X-Client": "x" },
+        json: { parent: "1", patch: body },
+      });
+    expect((await change(link.token, patch)).status).toBe(403);
+    expect((await change(root, { t: "keys", keys: { stories: { t: "set", v: [] } } })).status).toBe(
+      400,
+    );
+    expect((await change(root, "nothing")).status).toBe(400);
+    expect((await change(root, patch)).status).toBe(200);
+  });
+
+  it("shows who has the plan open, also to readers, until the tab goes", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const { body: link } = await call(root, "tokens", {
+      method: "POST",
+      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
+    });
+    const reader = await events(link.token, house.id, "reader");
+    await reader.next((e) => e.event === "hello");
+    const editor = await events(root, house.id, "editor");
+    await editor.next((e) => e.event === "hello");
+    const state = { story: "s1", cursor: { x: 1, y: 2 } };
+    const sent = await call(root, `plans/${house.id}/presence`, {
+      method: "POST",
+      headers: { "X-Client": "editor" },
+      json: { name: "Anna", state },
+    });
+    expect(sent.status).toBe(200);
+    const seen = await reader.next((e) => e.event === "presence");
+    expect(seen.data).toEqual({ client: "editor", name: "Anna", write: true, state });
+    // A new stream gets the people in its hello.
+    const late = await events(link.token, house.id, "late");
+    const hello = await late.next((e) => e.event === "hello");
+    expect(hello.data.people).toEqual([{ client: "editor", name: "Anna", write: true, state }]);
+    late.close();
+    // The tab of the editor closes its stream: the others see that it left.
+    editor.close();
+    const gone = await reader.next((e) => e.event === "presence" && e.data.gone === true);
+    expect(gone.data.client).toBe("editor");
+    reader.close();
+  });
+});
+
 describe("tokens", () => {
   async function user(rights: Record<string, unknown>) {
     const made = await call(root, "tokens", {

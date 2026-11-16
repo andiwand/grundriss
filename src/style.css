@@ -3959,3 +3959,152 @@ body.read-only #panel :is(input, select, textarea):disabled:not([type="checkbox"
   appearance: none;
   cursor: default;
 }
+
+/* ----- The people on a plan of a server (src/ui/presence.ts) ----- */
+
+.people {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.people[hidden] {
+  display: none;
+}
+
+.people .person {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 999px;
+  border: 2px solid var(--surface);
+  background: var(--person);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.people .person + .person {
+  margin-left: -8px;
+}
+
+.people .person:hover:not(:disabled) {
+  background: var(--person);
+  border-color: var(--surface);
+  filter: brightness(1.1);
+}
+
+/* A person who only views has a dashed ring. */
+.people .person.viewing,
+.people .person.viewing:hover:not(:disabled) {
+  border-style: dashed;
+  border-color: var(--person);
+  background: var(--surface);
+  color: var(--person);
+}
+
+.people .person.followed {
+  outline: 2px solid var(--person);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.people .mode {
+  height: 28px;
+  margin-left: 4px;
+}
+
+/* A phone has little room: the dialog of the server has the switch. */
+body.compact .people .mode {
+  display: none;
+}
+
+.topbar.fit-topics .people .mode {
+  font-size: 0;
+  gap: 0;
+}
+
+/* The views of a follow have the color of the person, and a band names the person. */
+body.following #plan-2d::after,
+body.following #plan-3d::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 3px solid var(--follow-color);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+#area {
+  position: relative;
+}
+
+.follow-band {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 12px;
+  border-radius: 999px;
+  background: var(--follow-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow, 0 2px 8px rgb(0 0 0 / 0.2));
+  white-space: nowrap;
+}
+
+.follow-band button {
+  height: 24px;
+  color: #fff;
+  background: rgb(255 255 255 / 0.2);
+}
+
+.follow-band button:hover {
+  background: rgb(255 255 255 / 0.3);
+}
+
+.people-layer {
+  pointer-events: none;
+}
+
+.person-layer .person-selection {
+  fill: none;
+  stroke: var(--person);
+  stroke-opacity: 0.6;
+  stroke-linecap: round;
+}
+
+.person-layer .person-room {
+  fill: var(--person);
+  fill-opacity: 0.12;
+  stroke: var(--person);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.person-layer .person-cursor path {
+  fill: var(--person);
+  stroke: #fff;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.person-layer .person-cursor rect {
+  fill: var(--person);
+}
+
+.person-layer .person-cursor text {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+}

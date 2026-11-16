@@ -136,10 +136,18 @@ password. It opens the app with the server: all plans, the **server settings**, 
 - **Share links.** A user who can edit shares a plan with **Share** in the top bar: a link for
   this one plan, to view or to edit, with an end date. A link that only views makes no other
   links.
-- **One editor at a time.** The first person who opens a plan to edit gets it. The others see
-  "Anna edits" next to the name of the plan, only view it, and see each change at once. When
-  the editor closes the plan, the next one can edit. A save never replaces a newer version: the
-  app then asks whether to load the newer version or to keep the own one as a copy.
+- **Edit together.** All people who can edit a plan edit it at the same time, and each one sees
+  the changes of the others at once. If two people change the same thing, the later change wins;
+  changes of different things all stay. Undo takes back only your own changes.
+- **See each other.** The top bar shows a round mark for each other person on the plan, with the
+  story and if the person edits or only views. The 2D view shows their cursors and what they
+  selected, on the same story. **Your name…** in the dialog of the server sets the name that the
+  others see.
+- **Follow.** A click on the mark of a person follows that person: your views show the same
+  story, topic, part of the plan, 3D camera, and selection, for example while the person explains
+  the plan on the phone. A pan, a zoom, a click in a view, Esc, or **Stop following** ends it.
+- **View only.** A person who can edit can switch to **View only** in the top bar (on a phone, in
+  the dialog of the server), so that a click cannot change the plan, and back to **Edit**.
 - **Server and browser.** On the Projects page, the plans of each server show under its name.
   **Connect a server** adds a link. A plan of the browser goes to a server, and a plan of a
   server to the browser, as a copy or as a move.

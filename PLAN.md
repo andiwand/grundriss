@@ -46,6 +46,10 @@
   tags, and a browser test against a real server (`e2e/sharing.e2e.ts`).
 - One look for all controls: `src/ui/controls.ts`, the tokens `--control-*`, object lists as
   rows, and a footer for the main action of a dialog (0.4.0).
+- Live editing: all people with the right to edit change a plan of a server at the same time.
+  The changes are patches by object id that the server applies in order (no CRDT); the undo is
+  per person. The others show with their cursor, selection, and story, and a person can follow
+  another one, also in "View only".
 
 ## Next
 
@@ -71,10 +75,9 @@
 - **A public service.** We run the same server for all users, in the EU, with the business model
   below. A floor plan of a home is personal data (GDPR), so a user must be able to delete a plan,
   and the service needs a privacy policy.
-- **Live editing.** All people edit at the same time, and their changes merge without loss with a
-  CRDT (Yjs or Automerge). `PlanDocument` then keeps the building in the CRDT, undo stays per
-  user, and the others show their selection. The edit lease keeps it simple until people ask
-  for this.
+- **Live editing, offline.** Edits without the network that merge later. The patches by id
+  already merge, so this needs a queue of patches in the browser, and a CRDT (Yjs or Automerge)
+  only if the merge of the fields of one object is not enough.
 - **Accounts.** The tokens of the server are enough for a private server. A public service may need a
   login: a link by email with a library in our server (for example Better Auth), or an external
   service (Zitadel or Keycloak in the EU), never our own passwords.

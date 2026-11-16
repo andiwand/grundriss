@@ -2,10 +2,16 @@
 // the browser. A connection is the address of a token: root and users see a list of plans, and
 // a plan token (a share link) gives one plan.
 //
-// An open plan of a server is a session: the app takes the edit lease of the plan if the token
-// can write, saves each change to the server after a short wait, and gets the saves of the
-// others from a stream. Without the lease, the plan only reads (`doc.readOnly`). A save starts
-// from the last known revision, so it never replaces a revision that this tab did not see.
+// An open plan of a server is a session. All people whose token can write edit at the same time
+// ("live"): the app sends the changes of its user as a patch (`src/model/patch.ts`) after a short
+// wait, and the server applies the patches in their order and sends each one to the other tabs
+// on a stream. Each tab applies them to the last revision that it knows (`saved`) and moves its
+// own changes that the server does not have yet on top (`rebase`). A person can also only view,
+// and follow another person (`presence.ts`).
+//
+// An older server has no patches: then the app takes the edit lease of the plan, and only the tab
+// with the lease edits and saves the whole plan. A save starts from the last known revision, so
+// it never replaces a revision that this tab did not see.
 
 import { planPreview } from "../export/preview";
 import { locale, t } from "../i18n";
@@ -24,15 +30,26 @@ import {
   ServerClient,
   ServerError,
   type Me,
+  type Person,
   type RemotePlan,
   type TokenInfo,
 } from "../io/server";
 import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
+import { diffBuildings, patchBuilding, rebase, type Patch } from "../model/patch";
 import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
 import { actionButton, dialog, footer, note, row } from "./dialog";
 import { remoteSource, showVersions } from "./versions";
+import {
+  endPresence,
+  nameDialog,
+  personSeenSelf,
+  peopleAgain,
+  personGone,
+  personSeen,
+  startPresence,
+} from "./presence";
 import { checkbox, iconButton, pair, radioGroup, selectInput, textInput } from "./controls";
 import {
   addProject,
@@ -187,7 +204,34 @@ interface Session {
   loading: number;
   /** True for the copy of the browser, without the network: only to view. */
   offline: boolean;
+  /** True if the server merges the changes of many people. Else the lease decides who edits. */
+  live: boolean;
+  /** True if the user chose to only view the plan, although the token can write. */
+  viewOnly: boolean;
+  /** The changes of the server that wait for the ones before them, by their parent revision. */
+  waiting: Map<string, Change>;
+  /** The functions that wait until the session knows a revision. */
+  waiters: { revision: string; done: () => void }[];
+  /** The last patch that this tab sent, to stop a loop if the server gives another result. */
+  lastSent: string;
+  /** The timer of the load of the whole plan when a change of the server did not come. */
+  gap: number;
+  /** The timer of the copy in the browser, which waits for a pause of the changes. */
+  copyTimer: number;
 }
+
+/** A change of the plan on the server: a new revision with its patch, from the stream. */
+interface Change {
+  id: string;
+  parent: string | null;
+  client: string;
+  name?: string;
+  /** The patch, or nothing for a save of the whole plan, for example by an older app. */
+  patch?: Patch;
+}
+
+/** Revision ids are numbers that count up. */
+const revisionNumber = (id: string | null) => Number(id ?? 0);
 
 /** Keeps the state of the plan in the browser, for use without the network. */
 function storeCopy(current: Session, name: string, data: string): void {
@@ -201,10 +245,22 @@ function storeCopy(current: Session, name: string, data: string): void {
   ).catch(() => undefined);
 }
 
+/** Keeps the copy in the browser after a pause of the changes of the others. */
+function storeCopySoon(current: Session): void {
+  window.clearTimeout(current.copyTimer);
+  current.copyTimer = window.setTimeout(() => {
+    if (session === current) storeCopy(current, projectName(), serializeBuilding(current.saved));
+  }, 5000);
+}
+
 let session: Session | null = null;
 let opening = 0;
 
 const unsaved = (current: Session) => doc.building !== current.saved || current.saving !== null;
+
+/** True if the open plan has changes that the server does not have. */
+const unsentChanges = (current: Session) =>
+  doc.building !== current.saved && !!diffBuildings(current.saved, doc.building);
 
 /** Opens a plan of a server, and starts its session. */
 export async function openRemote(address: string, planId: string): Promise<void> {
@@ -241,13 +297,36 @@ export async function openRemote(address: string, planId: string): Promise<void>
       taking: null,
       loading: 0,
       offline: false,
+      live: !!me.live,
+      viewOnly: false,
+      waiting: new Map(),
+      waiters: [],
+      lastSent: "",
+      gap: 0,
+      copyTimer: 0,
     };
     session = current;
     storeCopy(current, plan.name, plan.data);
-    if (current.write) current.renew = window.setInterval(() => void renewLease(current), RENEW);
-    await startEditing(current);
+    if (current.live) {
+      current.editing = current.write;
+      current.holder = null;
+      doc.readOnly = !current.editing;
+    } else {
+      if (current.write) current.renew = window.setInterval(() => void renewLease(current), RENEW);
+      await startEditing(current);
+    }
     if (session !== current) return;
     listen(current);
+    if (current.live) {
+      startPresence({
+        client: current.client,
+        planId: current.planId,
+        me: current.me,
+        write: current.write,
+        viewOnly: () => current.viewOnly,
+        setViewOnly: (value) => setViewOnly(current, value),
+      });
+    }
     showStatus(
       session.editing
         ? t('Opened "{name}" on {server}. Each change saves to the server.', {
@@ -307,6 +386,13 @@ async function openOffline(
     taking: null,
     loading: 0,
     offline: true,
+    live: false,
+    viewOnly: false,
+    waiting: new Map(),
+    waiters: [],
+    lastSent: "",
+    gap: 0,
+    copyTimer: 0,
   };
   showStatus(
     t("No connection to {server}. You see the copy of this browser from {time}, only to view.", {
@@ -383,7 +469,14 @@ function listen(current: Session): void {
     const hello = read(event) as {
       revision: string | null;
       lease?: { client: string; holder: string } | null;
+      people?: Person[];
     };
+    if (current.live) {
+      // After a lost connection, the server forgot this tab: the list starts again.
+      peopleAgain(hello.people ?? []);
+      if (hello.revision && hello.revision !== current.revision) void catchUp(current);
+      return;
+    }
     if (hello.lease && hello.lease.client !== current.client.client) {
       current.holder = hello.lease.holder;
       current.editing = false;
@@ -395,13 +488,28 @@ function listen(current: Session): void {
     }
   });
   events.addEventListener("revision", (event) => {
+    if (session !== current) return;
+    if (current.live) {
+      const change = read(event) as Change;
+      // Each change comes once to each tab, also to the tab that sent it.
+      if (revisionNumber(change.id) <= revisionNumber(current.revision)) return;
+      current.waiting.set(change.parent ?? "", change);
+      advance(current);
+      return;
+    }
     const revision = read(event) as { id: string; client: string };
-    if (revision.client === current.client.client || session !== current) return;
+    if (revision.client === current.client.client) return;
     if (!current.editing) void reload(current);
+  });
+  events.addEventListener("presence", (event) => {
+    if (session !== current) return;
+    const person = read(event) as Person & { gone?: boolean };
+    if (person.gone) personGone(person.client);
+    else personSeen(person);
   });
   events.addEventListener("lease", (event) => {
     const lease = read(event) as { holder: string; client: string } | null;
-    if (session !== current) return;
+    if (session !== current || current.live) return;
     if (!lease) {
       current.holder = null;
       // The plan is free: a tab that can write takes it.
@@ -421,6 +529,176 @@ function listen(current: Session): void {
     showStatus(t("The plan is gone from the server. Save a copy to keep it."), true);
     updateRemoteState();
   });
+}
+
+// ----- Live editing -----
+
+/**
+ * Applies the changes of the server that follow the known revision, in their order. The own
+ * changes that the server does not have yet move on top of them. During a drag, the changes wait
+ * until its end.
+ */
+function advance(current: Session): void {
+  if (session !== current || doc.inTransaction) return;
+  const before = current.saved;
+  let next = before;
+  let whole = false;
+  for (;;) {
+    const change = current.waiting.get(current.revision);
+    if (!change) break;
+    current.waiting.delete(current.revision);
+    if (!change.patch) {
+      // A save of the whole plan, for example by an older app: load it.
+      whole = true;
+      break;
+    }
+    next = patchBuilding(next, change.patch);
+    current.revision = change.id;
+  }
+  for (const key of current.waiting.keys()) {
+    if (revisionNumber(key) < revisionNumber(current.revision)) current.waiting.delete(key);
+  }
+  if (next !== before) {
+    current.saved = next;
+    adopt(current, rebase(before, doc.building, next));
+    storeCopySoon(current);
+    updateRemoteState();
+  }
+  window.clearTimeout(current.gap);
+  if (whole) void catchUp(current);
+  // A change that waits for one that did not come: after a short time, load the whole plan.
+  else if (current.waiting.size > 0) {
+    current.gap = window.setTimeout(() => void catchUp(current), 3000);
+  }
+  for (const waiter of [...current.waiters]) {
+    if (revisionNumber(current.revision) >= revisionNumber(waiter.revision)) {
+      current.waiters.splice(current.waiters.indexOf(waiter), 1);
+      waiter.done();
+    }
+  }
+}
+
+/**
+ * Shows the building with the changes of the server and the own changes on top. Without own
+ * changes that the server does not have, it is the building of the server itself, so that the
+ * plan has no unsaved changes.
+ */
+function adopt(current: Session, local: Building): void {
+  const sent = !diffBuildings(current.saved, local);
+  doc.applyRemote(sent ? current.saved : local);
+  if (sent) {
+    doc.markSaved(current.saved);
+    current.lastSent = "";
+  }
+}
+
+/**
+ * Loads the last revision of the server, and moves the own changes that it does not have on
+ * top of it, for example after a lost connection.
+ */
+async function catchUp(current: Session): Promise<void> {
+  if (session !== current || current.loading) return;
+  const request = ++current.loading;
+  try {
+    const plan = await current.client.plan(current.planId);
+    if (session !== current || request !== current.loading) return;
+    if (revisionNumber(plan.revision) <= revisionNumber(current.revision)) return;
+    // A drag keeps its copy of the building: the new revision waits for its end.
+    while (doc.inTransaction) {
+      await new Promise((done) => window.setTimeout(done, 200));
+      if (session !== current) return;
+    }
+    const next = parseBuilding(plan.data);
+    const local = rebase(current.saved, doc.building, next);
+    current.saved = next;
+    current.revision = plan.revision;
+    current.waiting.clear();
+    adopt(current, local);
+    storeCopy(current, plan.name, plan.data);
+    app.fileName = `${plan.name}.grundriss`;
+    updateTitle();
+    advance(current);
+  } catch (error) {
+    if (session === current) showStatus(errorText(error), true);
+  } finally {
+    if (request === current.loading) current.loading = 0;
+    updateRemoteState();
+  }
+}
+
+/** Waits until the session knows the revision, or loads the whole plan after a while. */
+function knows(current: Session, revision: string): Promise<void> {
+  if (revisionNumber(current.revision) >= revisionNumber(revision)) return Promise.resolve();
+  return new Promise((done) => {
+    const waiter = { revision, done };
+    current.waiters.push(waiter);
+    window.setTimeout(() => {
+      if (!current.waiters.includes(waiter)) return;
+      void catchUp(current).finally(() => {
+        current.waiters.splice(current.waiters.indexOf(waiter), 1);
+        done();
+      });
+    }, 5000);
+  });
+}
+
+/** Sends the own changes that the server does not have yet. */
+async function sendChanges(current: Session): Promise<void> {
+  const building = doc.building;
+  const patch = diffBuildings(current.saved, building);
+  if (!patch) {
+    if (doc.dirty) doc.markSaved(building);
+    return;
+  }
+  const text = JSON.stringify(patch);
+  // The server has the change, but with another result, for example after a repair: the plan
+  // of the server wins, so that the tab does not send the same change again and again.
+  if (text === current.lastSent) {
+    current.lastSent = "";
+    doc.applyRemote(current.saved);
+    doc.markSaved(current.saved);
+    return;
+  }
+  try {
+    const plan = await current.client.sendChanges(
+      current.planId,
+      current.revision,
+      patch,
+      projectName(),
+    );
+    current.lastSent = text;
+    current.failed = false;
+    // The change comes back on the stream, with the changes of the others before it.
+    await knows(current, plan.revision);
+  } catch (error) {
+    if (session !== current) return;
+    if (error instanceof ServerError && error.status === 403) {
+      current.write = false;
+      current.editing = false;
+      doc.readOnly = true;
+      showStatus(t("Your link can only view this plan."), true);
+      return;
+    }
+    if (error instanceof ServerError && error.status === 400) return conflict(current);
+    if (!current.failed) {
+      showStatus(t("The server did not save the plan: {error}", { error: errorText(error) }), true);
+    }
+    current.failed = true;
+  }
+}
+
+/** Only view the plan, or edit it again. The changes that wait go to the server first. */
+async function setViewOnly(current: Session, value: boolean): Promise<void> {
+  if (session !== current || !current.write || current.viewOnly === value) return;
+  if (value) {
+    doc.cancel();
+    await save();
+  }
+  if (session !== current) return;
+  current.viewOnly = value;
+  current.editing = current.write && !value;
+  doc.readOnly = !current.editing;
+  updateRemoteState();
 }
 
 /** Loads the current revision of the server into the open plan. */
@@ -445,6 +723,7 @@ async function reload(current: Session, discard = false): Promise<boolean> {
     doc.setActiveStory(story);
     current.saved = doc.building;
     current.revision = plan.revision;
+    current.waiting.clear();
     storeCopy(current, plan.name, plan.data);
     app.fileName = `${plan.name}.grundriss`;
     updateTitle();
@@ -463,6 +742,17 @@ async function save(): Promise<void> {
   if (current.saving) return current.saving;
   const building = doc.building;
   if (building === current.saved || doc.inTransaction) return;
+  if (current.live) {
+    current.saving = sendChanges(current).finally(() => {
+      current.saving = null;
+      updateRemoteState();
+      if (session === current && current.editing && !current.failed && unsentChanges(current)) {
+        window.setTimeout(() => void save(), 100);
+      }
+    });
+    updateRemoteState();
+    return current.saving;
+  }
   const data = serializeBuilding(building);
   current.saving = (async () => {
     try {
@@ -559,8 +849,11 @@ function endSession(): void {
   if (!current) return;
   session = null;
   window.clearInterval(current.renew);
+  window.clearTimeout(current.gap);
+  window.clearTimeout(current.copyTimer);
   current.events?.close();
-  if (current.write) void current.client.releaseLease(current.planId).catch(() => undefined);
+  if (current.live) endPresence();
+  else if (current.write) void current.client.releaseLease(current.planId).catch(() => undefined);
   doc.readOnly = false;
   updateRemoteState();
 }
@@ -591,7 +884,9 @@ function updateRemoteState(): void {
           : ["cloud", current.serverName, ""]
       : current.holder
         ? ["users", t("{holder} edits", { holder: current.holder }), "busy"]
-        : ["cloud", t("View only"), "busy"];
+        : current.viewOnly
+          ? ["eye", t("Viewing"), ""]
+          : ["cloud", t("View only"), "busy"];
   state.innerHTML = icon(iconName);
   state.append(text);
   state.className = `remote-state plan-tools ${tone}`;
@@ -746,15 +1041,19 @@ function planDialog(): void {
   );
   note(
     body,
-    current.editing
-      ? t("You edit this plan. Each change saves to the server.")
-      : current.holder
-        ? t("{holder} edits this plan. You see it, and it updates itself.", {
-            holder: current.holder,
-          })
-        : current.write
-          ? t("Nobody edits this plan.")
-          : t("Your link can only view this plan."),
+    current.live && current.editing
+      ? t("You edit this plan with the others who have it open. Each change saves to the server.")
+      : current.live && current.viewOnly
+        ? t("You only view this plan. Click Edit to change it.")
+        : current.editing
+          ? t("You edit this plan. Each change saves to the server.")
+          : current.holder
+            ? t("{holder} edits this plan. You see it, and it updates itself.", {
+                holder: current.holder,
+              })
+            : current.write
+              ? t("Nobody edits this plan.")
+              : t("Your link can only view this plan."),
   );
   // The other actions are in the body. The one main action, Edit, is in the footer.
   const actions = document.createElement("div");
@@ -774,6 +1073,22 @@ function planDialog(): void {
       void keepCopy();
     }),
   );
+  if (current.live) {
+    actions.append(
+      actionButton(t("Your name…"), () => {
+        element.close();
+        nameDialog();
+      }),
+    );
+    if (current.editing) {
+      actions.append(
+        actionButton(t("View only"), () => {
+          element.close();
+          void setViewOnly(current, true).then(() => personSeenSelf());
+        }),
+      );
+    }
+  }
   if (canShare(current.me.token) && current.write) {
     actions.append(
       actionButton(t("Share…"), () => {
@@ -791,7 +1106,8 @@ function planDialog(): void {
           t("Edit"),
           () => {
             element.close();
-            void startEditing();
+            if (current.live) void setViewOnly(current, false).then(() => personSeenSelf());
+            else void startEditing();
           },
           true,
         )
@@ -1345,7 +1661,9 @@ export function setupRemote(): void {
     showStatus(
       session.holder
         ? t("{holder} edits this plan, so you can only view it.", { holder: session.holder })
-        : t("This plan is only to view. Click the mark of the server for more."),
+        : session.viewOnly
+          ? t("You only view this plan. Click Edit at the top to change it.")
+          : t("This plan is only to view. Click the mark of the server for more."),
       true,
     );
   };
@@ -1356,7 +1674,8 @@ export function setupRemote(): void {
   });
   doc.subscribe(() => updateRemoteState());
   window.addEventListener("pagehide", () => {
-    if (session?.editing) session.client.releaseOnUnload(session.planId);
+    if (session?.live) session.client.leaveOnUnload(session.planId);
+    else if (session?.editing) session.client.releaseOnUnload(session.planId);
   });
   void connectAtStart();
 }
