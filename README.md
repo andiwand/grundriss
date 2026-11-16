@@ -10,6 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/andiwand/grundriss/actions/workflows/pages.yml"><img src="https://github.com/andiwand/grundriss/actions/workflows/pages.yml/badge.svg" alt="Pages" /></a>
+  <a href="https://github.com/andiwand/grundriss/actions/workflows/image.yml"><img src="https://github.com/andiwand/grundriss/actions/workflows/image.yml/badge.svg" alt="Image" /></a>
+  <a href="https://github.com/andiwand/grundriss/releases/latest"><img src="https://img.shields.io/github/v/release/andiwand/grundriss.svg" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg" alt="License: MPL 2.0" /></a>
+</p>
+
+<p align="center">
   <a href="https://andiwand.github.io/grundriss/app/"><strong>Open the app</strong></a> ·
   <a href="https://andiwand.github.io/grundriss/">Website</a> ·
   <a href="#use">Use</a> ·
