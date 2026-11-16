@@ -93,10 +93,9 @@ import type {
   OpeningKind,
   Plan,
   Point,
-  Wall,
 } from "../model/types";
 import { wallFaces as faceExtents } from "../model/walljoin";
-import { sideRun } from "../model/wallsides";
+import { lineSide, wallLine, type WallLine } from "../model/wallsides";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const GRID_STEP = 0.05;
@@ -2125,9 +2124,17 @@ export class Editor2D {
 
   private renderOverlay(plan: Plan): void {
     const group = svg("g", { class: "overlay" }, this.content);
-    if (this.items.length === 1 && this.items[0].kind === "wall") {
-      const wall = findWall(plan, this.items[0].id);
-      if (wall) this.drawWallLengths(group, plan, wall);
+    // A pinned corner has a mark, so that the user sees which end stays when a length changes.
+    for (const vertex of plan.vertices) {
+      if (!vertex.pinned) continue;
+      svg("circle", { cx: vertex.x, cy: vertex.y, r: 5 / this.zoom, class: "pinned" }, group);
+    }
+    if (this.items.length > 0 && this.items.every((item) => item.kind === "wall")) {
+      const line = wallLine(
+        plan,
+        this.items.map((item) => item.id),
+      );
+      if (line) this.drawLineLengths(group, plan, line);
     }
     if (this.drag?.kind === "marquee") {
       const { start, end } = this.drag;
@@ -2278,20 +2285,45 @@ export class Editor2D {
   }
 
   /**
-   * The lengths of the selected wall, the same as in the panel: the center line as a dash-dot
-   * line through the wall, with its length on it, and the length of each side as a thin line
-   * along the face, from wall to wall, with its length in the room.
+   * The lengths of the selected wall, or of the selected walls in one line, the same as in the
+   * panel: the center line as a dash-dot line through the walls, with its length on it, and the
+   * length of each side as a thin line along the face, from wall to wall, with its length in the
+   * room. A line of more walls also shows the number and the length of each part.
    */
-  private drawWallLengths(group: Element, plan: Plan, wall: Wall): void {
-    const [a, b] = wallEnds(plan, wall);
+  private drawLineLengths(group: Element, plan: Plan, line: WallLine): void {
+    const points = line.vertices.map((id) => findVertex(plan, id)!);
+    const [a, b] = [points[0], points[points.length - 1]];
     const length = distance(a, b);
     if (length < 1e-9) return;
-    svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "axis-line" }, group);
-    this.label(group, scale(add(a, b), 0.5), `${fmt(length, 2)} m`, "dimension");
-    const normal = perpendicular(scale(sub(b, a), 1 / length));
     const px = 1 / this.zoom;
+    const d = scale(sub(b, a), 1 / length);
+    const normal = perpendicular(d);
+    svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "axis-line" }, group);
+    const runs = ([1, -1] as const).map((side) => lineSide(plan, line, side));
+    if (points.length > 2) {
+      // A chain of dimensions for the parts, out beyond the side with the longer face (the
+      // outside of an outer wall), so that its texts do not cover the other lengths.
+      const side = (runs[0]?.length ?? 0) >= (runs[1]?.length ?? 0) ? 1 : -1;
+      const half = Math.max(...line.walls.map((w) => w.thickness)) / 2;
+      const n = scale(normal, side);
+      const at = (p: Point, pixels: number) => add(p, scale(n, half + pixels * px));
+      // Upright texts need more room beside a wall that goes up and down.
+      const base = 44 + Math.abs(n.x) * 40;
+      const [s, e] = [at(a, base), at(b, base)];
+      svg("line", { x1: s.x, y1: s.y, x2: e.x, y2: e.y, class: "side-line" }, group);
+      for (const p of points) {
+        const [t0, t1] = [at(p, base - 6), at(p, base + 6)];
+        svg("line", { x1: t0.x, y1: t0.y, x2: t1.x, y2: t1.y, class: "side-line" }, group);
+      }
+      const away = base + 10 + Math.abs(n.x) * 22;
+      points.slice(1).forEach((p, i) => {
+        const text = `${i + 1} · ${fmt(distance(points[i], p), 2)} m`;
+        this.label(group, at(scale(add(points[i], p), 0.5), away), text, "dimension part-length");
+      });
+    }
+    this.label(group, scale(add(a, b), 0.5), `${fmt(length, 2)} m`, "dimension");
     for (const side of [1, -1] as const) {
-      const run = sideRun(plan, wall, side);
+      const run = runs[side === 1 ? 0 : 1];
       if (!run || run.length < 1e-6) continue;
       const n = scale(normal, side);
       const at = (p: Point, offset: number) => add(p, scale(n, offset * px));
@@ -2302,7 +2334,7 @@ export class Editor2D {
         svg("line", { x1: s.x, y1: s.y, x2: e.x, y2: e.y, class: "side-line" }, group);
       }
       // The text stands upright, so it needs more room beside a wall that goes up and down.
-      const away = 18 + Math.abs(n.x) * 18;
+      const away = 18 + Math.abs(n.x) * 30;
       const mid = at(scale(add(run.from, run.to), 0.5), away);
       this.label(group, mid, `${fmt(run.length, 2)} m`, "dimension side-length");
     }

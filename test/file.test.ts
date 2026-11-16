@@ -34,6 +34,14 @@ import {
 } from "../src/model/plan";
 
 describe("file format", () => {
+  it("keeps a pinned vertex, and no pin on the other vertices", () => {
+    const building = makeHouse();
+    building.stories[0].vertices[0].pinned = true;
+    const vertices = parseBuilding(serializeBuilding(building)).stories[0].vertices;
+    expect(vertices[0].pinned).toBe(true);
+    expect(vertices[1]).not.toHaveProperty("pinned");
+  });
+
   it("rejects repeated ids in a collection", () => {
     const building = makeHouse();
     building.stories[0].vertices.push({ ...building.stories[0].vertices[0] });

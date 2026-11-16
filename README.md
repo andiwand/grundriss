@@ -215,7 +215,13 @@ internet.
    A selected wall shows its lengths: the length on the center line (the dash-dot line through
    the wall), and the length of each side from wall to wall (the thin line along the face). The
    panel has the same lengths, and you can type each one. A new length moves only the end
-   of the wall.
+   of the wall. A corner that you pin (select it, then **Pinned**) stays in its place: the other
+   end moves. A length with pinned corners at both ends cannot change.
+   Select walls in one straight line (Shift+click) to see and type their lengths like one wall,
+   and the length of each part. A new length of a part moves the parts after it. If no other
+   wall meets the line between its ends, **Merge into one wall** makes one wall of them.
+   **Split into two walls** cuts a selected wall in the middle, or beside a door or a window
+   there, and selects the two parts, so that you can type their lengths.
 8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
    the stories. The walls of the story below show as dashed lines, so you can draw on top of
    them. Each story has its own background.

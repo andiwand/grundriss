@@ -11,6 +11,8 @@ export interface Point {
 /** A corner: the point where walls meet. */
 export interface Vertex extends Point {
   id: Id;
+  /** A pinned vertex stays in its place when the user types a new length of a wall. */
+  pinned?: boolean;
 }
 
 /** A straight wall between two vertices. The vertices are on the center line of the wall. */

@@ -648,6 +648,8 @@ function parsePlanData(data: Data, prefix: string): Plan {
     id: string(v, "id", `${prefix}vertex ${i}`),
     x: number(v, "x", `${prefix}vertex ${i}`),
     y: number(v, "y", `${prefix}vertex ${i}`),
+    // An old app drops the pin. That is no problem: the pin only changes how a length changes.
+    ...(v.pinned === true ? { pinned: true } : {}),
   }));
   const vertexIds = new Set(vertices.map((v) => v.id));
 

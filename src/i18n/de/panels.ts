@@ -152,8 +152,27 @@ export const PANELS: Record<string, string> = {
   Length: "Länge",
   "Length, center line": "Länge Achse",
   "Length, {name}": "Länge {name}",
-  "Length, room side": "Länge Raumseite",
   "Length, outside": "Länge außen",
+  "Both ends of this length are pinned.": "Beide Enden dieser Länge sind fixiert.",
+  "room side": "Raumseite",
+  outside: "außen",
+  "Part {n}": "Teil {n}",
+  "A new length of a part moves the parts after it. The other parts keep their lengths.":
+    "Eine neue Länge eines Teils verschiebt die Teile danach. Die anderen Teile behalten ihre Länge.",
+  "A length with pinned corners at both ends cannot change. Select a corner and unpin it to change the length.":
+    "Eine Länge mit fixierten Ecken an beiden Enden lässt sich nicht ändern. Wählen Sie eine Ecke und lösen Sie die Fixierung, um die Länge zu ändern.",
+  "{count} walls in a line": "{count} Wände in einer Linie",
+  "Merge into one wall": "Zu einer Wand verbinden",
+  "Split into two walls": "In zwei Wände teilen",
+  "Other walls meet these walls between their ends, so they stay separate walls.":
+    "Zwischen ihren Enden treffen andere Wände auf diese Wände, daher bleiben es getrennte Wände.",
+  "The walls differ in thickness, height, layers, or colors, so they cannot become one wall.":
+    "Die Wände unterscheiden sich in Dicke, Höhe, Schichten oder Farben, daher lassen sie sich nicht zu einer Wand verbinden.",
+  "More than one of the walls has a note, so they cannot become one wall.":
+    "Mehr als eine der Wände hat eine Notiz, daher lassen sie sich nicht zu einer Wand verbinden.",
+  Pinned: "Fixiert",
+  "A pinned corner stays in its place when you type a new length of a wall.":
+    "Eine fixierte Ecke bleibt an ihrem Platz, wenn Sie eine neue Länge einer Wand eingeben.",
   Thickness: "Dicke",
   "Side to {name}": "Seite zu {name}",
   "Side to the room": "Seite zum Raum",

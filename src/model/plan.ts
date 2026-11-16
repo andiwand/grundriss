@@ -154,7 +154,9 @@ export function splitWall(plan: Plan, wallId: Id, p: Point): Vertex {
   const at = hit.t * distance(a, b);
   const vertex = addVertex(plan, hit.point);
   const first: Wall = { ...wall, id: newId("w"), b: vertex.id };
-  const second: Wall = { ...wall, id: newId("w"), a: vertex.id };
+  // The note stays with the first part, so that it is not there twice.
+  const { note: _note, ...rest } = wall;
+  const second: Wall = { ...rest, id: newId("w"), a: vertex.id };
   plan.walls.splice(plan.walls.indexOf(wall), 1, first, second);
   for (const opening of plan.openings) {
     if (opening.wallId !== wallId) continue;

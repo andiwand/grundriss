@@ -1373,6 +1373,15 @@ body.wide:not(.compact) #panel > section .field.stacked {
   vector-effect: non-scaling-stroke;
 }
 
+/* A pinned corner: it stays in its place when a length of a wall changes. */
+.overlay .pinned {
+  fill: var(--paper);
+  stroke: var(--accent);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 /* The distance of the measure tool. */
 .overlay .ruler {
   stroke: var(--accent);

@@ -19,6 +19,15 @@ The changes that a user notices.
 - 2D: a selected wall shows the length of each side from wall to wall, as a thin line along the
   face, and its length on the center line as a dash-dot line. The panel has the same three
   lengths, and you can type each one. A new length moves only the end of the wall.
+- 2D: a corner can be pinned. A pinned corner stays in its place when a length changes, so the
+  other end moves. A length with pinned corners at both ends cannot change, and the panel says
+  why.
+- 2D: walls in one straight line that are selected together show their lengths like one wall,
+  with a chain of dimensions for the parts. Each part has its own length; a new length of a part
+  moves the parts after it. If no other wall meets the line between its ends, the walls merge
+  into one wall, with their doors and windows.
+- 2D: a wall splits into two walls with one click, in the middle or beside a door or a window
+  there. A note of the wall stays with the first part.
 - The top bar and the tool palette get shorter in steps until they fit, also with the longer
   German texts: first the keys and the labels go, then only the icons stay. The palette can use
   the full width of the 2D view, and in a narrow view it gets a second row, so each tool stays

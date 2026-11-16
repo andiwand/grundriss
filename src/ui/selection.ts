@@ -21,10 +21,20 @@ import {
   removeOpening,
   removeVertex,
   removeWall,
-  wallLength,
 } from "../model/plan";
 import { roomReadiness } from "../model/radiators";
-import { setCenterLength, setSideLength, sideRun } from "../model/wallsides";
+import {
+  lineCanChange,
+  lineSide,
+  mergeProblem,
+  mergeWalls,
+  splitInTwo,
+  setLineLength,
+  setPartLength,
+  setSideLength,
+  wallLine,
+  type MergeProblem,
+} from "../model/wallsides";
 import { editRoomInfo, findRoom, findRooms, netRoomArea, type Room } from "../model/rooms";
 import {
   findFixture,
@@ -179,6 +189,15 @@ export function renderPanel(): void {
 
   if (editor.tool === "calibrate") return renderCalibration(plan);
   const items = editor.selection;
+  if (items.length > 1 && items.every((item) => item.kind === "wall")) {
+    if (
+      wallLine(
+        plan,
+        items.map((item) => item.id),
+      )
+    )
+      return renderLine(plan, items);
+  }
   if (items.length > 1) return renderMany(items);
   const selection = items[0];
   if (selection) return PANELS[selection.kind]?.(plan, selection.id);
@@ -601,36 +620,126 @@ function renderChimney(plan: Story, id: Id): void {
   itemActions(chimney, edit);
 }
 
+/**
+ * The lengths of a wall, or of walls in one line: on the center line, on each side from wall to
+ * wall, and of each part. The plan shows the same lengths at the selection. A pinned corner
+ * stays in its place, so a length with pinned corners at both ends cannot change.
+ */
+function lengthFields(plan: Story, ids: Id[], rooms: Room[]): void {
+  const line = wallLine(plan, ids);
+  if (!line) return;
+  const can = lineCanChange(plan, line);
+  let locked = false;
+  const lengthField = (
+    label: string,
+    value: number,
+    open: boolean,
+    set: (p: Story, v: number) => void,
+  ) => {
+    const input = numberField(label, value, (v) => doc.edit((p) => void set(p, v)));
+    if (!open) {
+      input.disabled = true;
+      input.title = t("Both ends of this length are pinned.");
+      locked = true;
+    }
+  };
+  const first = findVertex(plan, line.vertices[0])!;
+  const last = findVertex(plan, line.vertices[line.vertices.length - 1])!;
+  lengthField(t("Length, center line"), distance(first, last), can.center, (p, v) =>
+    setLineLength(p, ids, v),
+  );
+  const sides = ([1, -1] as const)
+    .map((side) => {
+      // The room on this side of each wall; a wall in the other direction has it on its other side.
+      const names = new Set(
+        line.walls.map((wall, i) => {
+          const own = wall.a === line.vertices[i] ? side : (-side as 1 | -1);
+          const room = roomOnSide(plan, wall, own, rooms);
+          return room ? (room.info?.name ?? t("room side")) : null;
+        }),
+      );
+      return { side, run: lineSide(plan, line, side), names: [...names] };
+    })
+    // The sides in rooms first: their length is the one that a user measures most often.
+    .sort((p, q) => Number(p.names.includes(null)) - Number(q.names.includes(null)));
+  for (const { side, run, names } of sides) {
+    if (!run) continue;
+    const label =
+      names.length === 1 && names[0] === null
+        ? t("Length, outside")
+        : t("Length, {name}", { name: names.map((n) => n ?? t("outside")).join(" / ") });
+    lengthField(label, run.length, can.side(side), (p, v) => setSideLength(p, ids, side, v));
+  }
+  if (line.walls.length > 1) {
+    line.walls.forEach((_, i) => {
+      const [a, b] = [line.vertices[i], line.vertices[i + 1]].map((v) => findVertex(plan, v)!);
+      lengthField(t("Part {n}", { n: i + 1 }), distance(a, b), can.part(i), (p, v) =>
+        setPartLength(p, ids, i, v),
+      );
+    });
+    paragraph(
+      t("A new length of a part moves the parts after it. The other parts keep their lengths."),
+      "note",
+    );
+  }
+  if (locked) {
+    paragraph(
+      t(
+        "A length with pinned corners at both ends cannot change. Select a corner and unpin it to change the length.",
+      ),
+      "note",
+    );
+  }
+}
+
+/** Walls in one line: their lengths like one wall, and a merge into one wall. */
+function renderLine(plan: Story, items: Item[]): void {
+  const ids = items.map((item) => item.id);
+  const line = wallLine(plan, ids)!;
+  heading(t("{count} walls in a line", { count: ids.length }), "wall");
+  lengthFields(plan, ids, findRooms(plan));
+  const problem = mergeProblem(plan, line);
+  if (problem === null) {
+    button(
+      t("Merge into one wall"),
+      () => {
+        let id = null as Id | null;
+        doc.edit((p) => (id = mergeWalls(p, ids)));
+        if (id) editor.select({ kind: "wall", id });
+      },
+      { icon: "wall" },
+    );
+  } else {
+    const why: Record<MergeProblem, string> = {
+      branch: t("Other walls meet these walls between their ends, so they stay separate walls."),
+      different: t(
+        "The walls differ in thickness, height, layers, or colors, so they cannot become one wall.",
+      ),
+      notes: t("More than one of the walls has a note, so they cannot become one wall."),
+    };
+    paragraph(why[problem], "note");
+  }
+  button(t("Duplicate"), () => editor.duplicate(), { icon: "copy" });
+  deleteButton();
+}
+
 function renderWall(plan: Story, id: Id): void {
   const wall = findWall(plan, id);
   if (!wall) return;
   const edit = editOf(findWall, id);
   heading(t("Wall"), "wall");
-  // The length on the center line, and on each side from wall to wall. The plan shows the same
-  // lengths at the selected wall: on the wall, and along each face.
   const rooms = findRooms(plan);
-  numberField(t("Length, center line"), wallLength(plan, wall), (value) =>
-    doc.edit((plan) => setCenterLength(plan, id, value)),
+  lengthFields(plan, [id], rooms);
+  // The two parts stay selected, so that the panel shows the length of each part.
+  button(
+    t("Split into two walls"),
+    () => {
+      let parts = null as [Id, Id] | null;
+      doc.edit((p) => (parts = splitInTwo(p, id)));
+      if (parts) editor.select(parts.map((part) => ({ kind: "wall" as const, id: part })));
+    },
+    { icon: "wall" },
   );
-  const sides = ([1, -1] as const)
-    .map((side) => ({
-      side,
-      run: sideRun(plan, wall, side),
-      room: roomOnSide(plan, wall, side, rooms),
-    }))
-    // The sides in rooms first: their length is the one that a user measures most often.
-    .sort((p, q) => Number(!p.room) - Number(!q.room));
-  for (const { side, run, room } of sides) {
-    if (!run) continue;
-    const label = room
-      ? room.info?.name
-        ? t("Length, {name}", { name: room.info.name })
-        : t("Length, room side")
-      : t("Length, outside");
-    numberField(label, run.length, (value) =>
-      doc.edit((plan) => setSideLength(plan, id, side, value)),
-    );
-  }
   numberOf(t("Thickness"), wall, "thickness", edit);
   numberOf(t("Height"), wall, "height", edit);
   // The color of each side: its own color, or the color of the room or the facade there.
@@ -742,5 +851,12 @@ function renderVertex(plan: Story, id: Id): void {
   heading(t("Corner"), "select");
   numberOf("x", vertex, "x", edit, { min: -1e6 });
   numberOf("y", vertex, "y", edit, { min: -1e6 });
+  checkField(t("Pinned"), vertex.pinned === true, (pinned) =>
+    edit((v) => {
+      if (pinned) v.pinned = true;
+      else delete v.pinned;
+    }),
+  );
+  paragraph(t("A pinned corner stays in its place when you type a new length of a wall."), "note");
   deleteButton(() => doc.edit((plan) => removeVertex(plan, id)), t("Delete corner"));
 }
