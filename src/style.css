@@ -558,57 +558,31 @@ body:not(.no-plan) #language {
   font-size: 0;
 }
 
-/* The top bar gets shorter in steps before it wraps: first the views, Layers, and Export show
-   only their icons, then the topics and the back button. Each button keeps its title. */
-@media (max-width: 1660px) {
-  #views button,
-  #layers-button,
-  #export,
-  #share {
-    gap: 0;
-    padding: 0 8px;
-    font-size: 0;
-  }
+/* The top bar gets shorter in steps before it wraps (`fitBar` in src/ui/fit.ts): first the
+   views, Layers, Export, and Share show only their icons, then the topics, then the brand shows
+   only its icon, then the dividers hide. Each button keeps its title. */
+.topbar.fit-views :is(#views button, #layers-button, #export, #share) {
+  gap: 0;
+  padding: 0 8px;
+  font-size: 0;
 }
 
-@media (max-width: 1500px) {
-  .topics button span {
-    display: none;
-  }
-
-  .topics button {
-    gap: 0;
-    padding: 0 8px;
-  }
+.topbar.fit-topics .topics button span {
+  display: none;
 }
 
-/* The switch of the variants takes about 140 px, so with it the steps come earlier. */
-@media (max-width: 1800px) {
-  body.has-variants #views button,
-  body.has-variants #layers-button,
-  body.has-variants #export,
-  body.remote-plan #views button,
-  body.remote-plan #layers-button,
-  body.remote-plan #export,
-  body.has-variants #share,
-  body.remote-plan #share {
-    gap: 0;
-    padding: 0 8px;
-    font-size: 0;
-  }
+.topbar.fit-topics .topics button {
+  gap: 0;
+  padding: 0 8px;
 }
 
-@media (max-width: 1640px) {
-  body.has-variants .topics button span,
-  body.remote-plan .topics button span {
-    display: none;
-  }
+.topbar.fit-brand .brand-name {
+  display: none;
+}
 
-  body.has-variants .topics button,
-  body.remote-plan .topics button {
-    gap: 0;
-    padding: 0 8px;
-  }
+/* The dividers hide last. In a bar with two rows, a divider must not start a row. */
+.topbar.fit-dividers .divider {
+  display: none;
 }
 
 @media (max-width: 760px) {
@@ -760,7 +734,11 @@ body.wide .empty-state {
   align-items: center;
   gap: 2px;
   padding: 4px;
-  max-width: calc(100% - 24px);
+  /* With "left: 50%", the width of the content is at most half the pane. The palette can use
+     the full pane. */
+  width: max-content;
+  /* The compass is at the top right, so the palette keeps the same space free at each side. */
+  max-width: calc(100% - 152px);
   overflow-x: auto;
   scrollbar-width: none;
   border: 1px solid var(--line);
@@ -803,17 +781,26 @@ body.wide .empty-state {
   container-type: inline-size;
 }
 
-/* In a narrow 2D pane, the palette shows only the icons. */
-@container (max-width: 640px) {
-  .palette button {
-    padding: 0 8px;
-    font-size: 0;
-    gap: 0;
-  }
+/* In a narrow 2D pane, the palette hides the keys, then shows only the icons (`fitBar`). */
+.palette.fit-keys kbd {
+  display: none;
+}
 
-  .palette kbd {
-    display: none;
-  }
+.palette.fit-icons button {
+  padding: 0 8px;
+  font-size: 0;
+  gap: 0;
+}
+
+/* If the icons do not fit either, the palette gets a second row, so that each tool stays
+   visible. On a phone, the palette scrolls with the finger. */
+body:not(.compact) .palette.fit-none {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+body:not(.compact) .palette.fit-none .divider {
+  display: none;
 }
 
 /* The start card lies in the first row of the grid of the area, over the columns of the 2D and
@@ -1720,6 +1707,14 @@ body.wide:not(.compact) #panel > section .field.stacked {
 @container (max-width: 640px) {
   .compass {
     top: 60px;
+  }
+
+  body:not(.compact) #plan-2d:has(.palette.fit-none) .compass {
+    top: 102px;
+  }
+
+  .palette {
+    max-width: calc(100% - 24px);
   }
 }
 
@@ -2729,13 +2724,6 @@ body.overview #layers-button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* In a bar with two rows, a divider can start a row, so the dividers hide. */
-@media (max-width: 1100px) {
-  .topbar .divider {
-    display: none;
-  }
 }
 
 /* The variants of the renovation: each one is a group of the panel. Its head has the name, the

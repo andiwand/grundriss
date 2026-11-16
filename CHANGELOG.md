@@ -13,6 +13,10 @@ The changes that a user notices.
   joins as the 3D view.
 - 2D and 3D: where three or more walls meet, each wall meets the next wall around the joint in a
   clean miter. Before, each wall went on by half its thickness, so a thick wall stuck out.
+- The top bar and the tool palette get shorter in steps until they fit, also with the longer
+  German texts: first the keys and the labels go, then only the icons stay. The palette can use
+  the full width of the 2D view, and in a narrow view it gets a second row, so each tool stays
+  visible.
 
 ## 0.4.0 – 2026-11-09
 

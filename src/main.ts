@@ -81,6 +81,7 @@ import { topView } from "./view3d/models";
 import { buildModelAsync } from "./view3d/view3d";
 
 import { MAP_SOURCES, type MapSourceId } from "./io/tiles";
+import { fitBar, inOneRow, noScroll } from "./ui/fit";
 
 translatePage();
 fillIcons();
@@ -802,6 +803,12 @@ editor.onSelect = () => {
   view3d.setSelection(editor.selection);
 };
 setupEdit3d();
+
+// The top bar and the palette get shorter in steps, so that the long German texts fit too.
+const topbar = $(".topbar");
+fitBar(topbar, ["views", "topics", "brand", "dividers"], () => inOneRow(topbar));
+const palette = $("#tools");
+fitBar(palette, ["keys", "icons"], () => noScroll(palette));
 
 setupCompact({
   onCompact: () => {

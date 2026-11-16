@@ -187,6 +187,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/conflicts.ts`      | The list of the collisions in the panel.                                                 |
 | `src/ui/edit3d.ts`         | The editing in the 3D view: select, hover, and move.                                     |
 | `src/ui/notes.ts`          | The notes and photos of the objects, and the circuit field.                              |
+| `src/ui/fit.ts`            | The top bar and the palette get shorter in steps until they fit (`fitBar`).              |
 | `src/ui/compact.ts`        | The layout for a phone: the bar at the bottom, the sheet, and the Done button.           |
 | `src/ui/shortcuts.ts`      | The help of the keyboard shortcuts.                                                      |
 | `src/i18n/`                | The languages: `t()`, the German dictionary, and the translation of the page.            |
