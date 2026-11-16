@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.5.0 – 2026-11-16
+
 - Server: all people who can edit a plan now edit it at the same time. Each change goes to the
   others at once, and the changes of different people merge by object, so a wall that one person
   moves and a door that another person adds both stay. Undo takes back only your own changes.
