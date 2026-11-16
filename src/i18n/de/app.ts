@@ -123,6 +123,10 @@ export const APP: Record<string, string> = {
   Cellar: "Keller",
   "A story under the lowest story": "Ein Geschoss unter dem untersten Geschoss",
   "Print at a standard scale": "Druck in einem Normmaßstab",
+  "Export a PDF": "PDF exportieren",
+  "Wall lengths: inside the rooms and outside": "Wandlängen: in den Räumen und außen",
+  "The PDF has one page for each story, at a standard scale.":
+    "Das PDF hat eine Seite pro Geschoss, in einem Normmaßstab.",
   "Vector drawing in meters": "Vektorzeichnung in Metern",
   "For CAD programs": "Für CAD-Programme",
   "3D model": "3D-Modell",
@@ -144,8 +148,8 @@ export const APP: Record<string, string> = {
     "Klicken Sie auf eine Wand, um ein Fenster einzusetzen.",
   "Click two points to measure the distance between them. The points snap to the corners and the faces of the walls. The plan does not change. Shift: 45° steps. Alt: no snap.":
     "Klicken Sie zwei Punkte, um den Abstand zwischen ihnen zu messen. Die Punkte rasten an den Ecken und den Flächen der Wände ein. Der Plan ändert sich nicht. Umschalt: 45°-Schritte. Alt: ohne Einrasten.",
-  "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.":
-    "Klicken Sie auf die beiden Enden der Strecke und dann dorthin, wo die Maßlinie liegen soll. Umschalt: 45°-Schritte. Alt: ohne Raster.",
+  "Click the two ends of the distance, then click where the dimension line goes. The ends snap to the corners and the faces of the walls. Shift: 45° steps. Alt: no snap.":
+    "Klicken Sie auf die beiden Enden der Strecke und dann dorthin, wo die Maßlinie liegen soll. Die Enden rasten an den Ecken und den Flächen der Wände ein. Umschalt: 45°-Schritte. Alt: ohne Einrasten.",
   "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.":
     "Klicken Sie auf den Antritt der Treppe und dann auf das obere Ende des Laufs. Die Treppe führt zum nächsten Geschoss.",
   "Click to place the device. A device for a wall goes against the nearest wall. Alt: no snap. Esc: stop.":

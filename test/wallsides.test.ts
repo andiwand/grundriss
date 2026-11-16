@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
 import {
+  alignWalls,
   lineCanChange,
   lineSide,
   mergeProblem,
   mergeWalls,
   splitInTwo,
+  wallDimensions,
   setLineLength,
   setPartLength,
   setSideLength,
@@ -262,5 +264,72 @@ describe("walls in one line", () => {
     // The door goes from 1.7 to 2.7: the nearer free place is at 1.69.
     expect(p.vertices[2].x).toBeCloseTo(1.69);
     expect(p.openings[0]).toMatchObject({ offset: expect.closeTo(0.51) });
+  });
+});
+
+describe("the dimension lines of the walls", () => {
+  it("has each inside length of a room once, and each outside face", () => {
+    const p = plan(room());
+    const lines = wallDimensions(p);
+    const length = (d: (typeof lines)[number]) =>
+      Math.round(Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) * 100) / 100;
+    const inside = lines
+      .filter((d) => Math.abs(d.offset) === 0.3)
+      .map(length)
+      .sort();
+    const outside = lines
+      .filter((d) => Math.abs(d.offset) === 0.8)
+      .map(length)
+      .sort();
+    expect(inside).toEqual([2.8, 3.8]);
+    expect(outside).toEqual([3.2, 3.2, 4.2, 4.2]);
+  });
+
+  it("puts the inside line in the room and the outside line outside", () => {
+    const p = plan(room());
+    for (const d of wallDimensions(p)) {
+      const n = { x: -(d.b.y - d.a.y), y: d.b.x - d.a.x };
+      const scale = d.offset / Math.hypot(n.x, n.y);
+      const mid = { x: (d.a.x + d.b.x) / 2 + n.x * scale, y: (d.a.y + d.b.y) / 2 + n.y * scale };
+      const inRoom = mid.x > 0 && mid.x < 4 && mid.y > 0 && mid.y < 3;
+      expect(inRoom).toBe(Math.abs(d.offset) === 0.3);
+    }
+  });
+});
+
+describe("the alignment of walls", () => {
+  const angle = (p: Plan, i: number) => {
+    const [a, b] = [p.walls[i].a, p.walls[i].b].map((id) => p.vertices.find((v) => v.id === id)!);
+    return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  };
+
+  it("turns a wall parallel, and a wall near a right angle to a right angle", () => {
+    const p = plan([
+      [P(0, 0), P(4, 0)],
+      [P(0, 2), P(4, 2.2)],
+      [P(6, 0), P(6.1, 3)],
+    ]);
+    const ids = p.walls.map((w) => w.id);
+    expect(alignWalls(p, ids)).toEqual({ stuck: [], turned: 2 });
+    expect(angle(p, 1)).toBeCloseTo(0);
+    expect(angle(p, 2)).toBeCloseTo(90);
+    // The walls keep their lengths.
+    const [a, b] = [p.walls[1].a, p.walls[1].b].map((id) => p.vertices.find((v) => v.id === id)!);
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(Math.hypot(4, 0.2));
+  });
+
+  it("turns around the pinned corner, and not a wall with two pinned corners", () => {
+    const p = plan([
+      [P(0, 0), P(4, 0)],
+      [P(0, 2), P(4, 2.2)],
+      [P(0, 4), P(4, 4.2)],
+    ]);
+    p.vertices[3].pinned = true;
+    p.vertices[4].pinned = true;
+    p.vertices[5].pinned = true;
+    const ids = p.walls.map((w) => w.id);
+    expect(alignWalls(p, ids)).toEqual({ stuck: [ids[2]], turned: 1 });
+    expect(p.vertices[3]).toMatchObject({ x: 4, y: 2.2 });
+    expect(p.vertices[2].y).toBeCloseTo(2.2);
   });
 });

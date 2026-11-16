@@ -208,7 +208,8 @@ internet.
 6. Select **Measure** (M) and click two points: the plan shows the distance between them. The
    points snap to the corners and the faces of the walls. The measure does not change the plan,
    so it works also in a plan that you can only view. Select **Dimension** (L) to add a
-   dimension line to the plan: click the two ends, then click where the line goes.
+   dimension line to the plan: click the two ends, then click where the line goes. The ends
+   snap to the corners and the faces of the walls, like the points of **Measure**.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
    the selection.
@@ -220,6 +221,9 @@ internet.
    Select walls in one straight line (Shift+click) to see and type their lengths like one wall,
    and the length of each part. A new length of a part moves the parts after it. If no other
    wall meets the line between its ends, **Merge into one wall** makes one wall of them.
+   With more walls selected, **Align with the first wall** turns the others parallel or at a
+   right angle to the wall that you selected first. Each wall keeps its length, and a pinned
+   corner stays in its place.
    **Split into two walls** cuts a selected wall in the middle, or beside a door or a window
    there, and selects the two parts, so that you can type their lengths.
 8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
@@ -249,7 +253,9 @@ internet.
     its floor, and a selected door or window to move it along its wall. The mouse over an object
     shows it in a color.
 16. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
-    model.
+    model. The PDF asks for its options: **Wall lengths** adds the lengths of the walls (in each
+    room the length along its walls, from wall to wall, and outside the length of each facade),
+    and **Furniture** shows or hides the furniture.
 
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |

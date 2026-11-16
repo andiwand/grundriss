@@ -35,7 +35,7 @@ export const HINTS: Record<Tool, string> = {
     "Click two points to measure the distance between them. The points snap to the corners and the faces of the walls. The plan does not change. Shift: 45° steps. Alt: no snap.",
   ),
   dimension: t(
-    "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.",
+    "Click the two ends of the distance, then click where the dimension line goes. The ends snap to the corners and the faces of the walls. Shift: 45° steps. Alt: no snap.",
   ),
   stair: t(
     "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.",

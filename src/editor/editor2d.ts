@@ -1023,13 +1023,17 @@ export class Editor2D {
     const world = this.toWorld(e);
     const drag = this.drag;
     if (!drag) {
-      const snapping = ["wall", "dimension", "stair", "chimney", "run"].includes(this.currentTool);
+      const snapping = ["wall", "stair", "chimney", "run"].includes(this.currentTool);
+      // The third click of a dimension line sets its offset: that point does not snap.
+      const ends = this.currentTool === "dimension" && this.measure.length < 2;
       this.cursor =
-        this.currentTool === "measure"
+        this.currentTool === "measure" || ends
           ? this.measureSnap(world, e)
-          : snapping
-            ? this.snap(world, e)
-            : { point: world };
+          : this.currentTool === "dimension"
+            ? { point: world }
+            : snapping
+              ? this.snap(world, e)
+              : { point: world };
       this.render();
       return;
     }
@@ -1458,16 +1462,20 @@ export class Editor2D {
   }
 
   /**
-   * Snaps the pointer of the measure tool: first to a corner of a wall (a vertex or an end of a
-   * face), then to a face or the center line of a wall. So a distance between two faces is
-   * exact. With a start point, the direction snaps to 15° (Shift: 45° steps). Alt: no snap.
-   * The measure tool has no grid: it measures the plan as it is.
+   * Snaps the pointer of the measure tool and of the ends of a dimension line: first to a
+   * corner of a wall (a vertex or an end of a face), then to a face or the center line of a
+   * wall. So a distance between two faces is exact. With a start point, the direction snaps to
+   * 15° (Shift: 45° steps). Alt: no snap. The measure tool has no grid: it measures the plan as
+   * it is. The dimension tool snaps to the grid where no wall is near.
    */
   private measureSnap(world: Point, keys: { altKey: boolean; shiftKey: boolean }): Snap {
-    const start = this.ruler.length === 1 ? this.ruler[0] : undefined;
+    const dimension = this.currentTool === "dimension";
+    const points = dimension ? this.measure : this.ruler;
+    const start = points.length === 1 ? points[0] : undefined;
     const free = (value: number) => value;
+    const step = dimension ? (value: number) => Math.round(value / GRID_STEP) * GRID_STEP : free;
     if (start && keys.shiftKey)
-      return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, free) };
+      return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, step) };
     if (keys.altKey) return { point: world };
     const plan = this.doc.plan;
     if (this.rulerTargets?.plan !== plan) {
@@ -1519,7 +1527,7 @@ export class Editor2D {
       const degrees = (Math.min(difference, 2 * Math.PI - difference) * 180) / Math.PI;
       if (degrees < ANGLE_TOLERANCE) return { point: along };
     }
-    return { point: world };
+    return { point: dimension ? snapToGrid(world, GRID_STEP) : world };
   }
 
   /** The offset of a dimension line from `a` to `b` that goes through the point `p`. */
@@ -1534,7 +1542,9 @@ export class Editor2D {
   /** The dimension tool: a click on each end, and a third click that sets the offset. */
   private addMeasurePoint(world: Point, e: PointerEvent): void {
     if (this.measure.length < 2) {
-      const point = this.snap(world, e).point;
+      const point = (
+        this.currentTool === "dimension" ? this.measureSnap(world, e) : this.snap(world, e)
+      ).point;
       if (this.measure.length === 1 && distance(this.measure[0], point) < 1e-6) return;
       this.measure.push(point);
       if (this.currentTool === "stair" && this.measure.length === 2) {
@@ -2195,7 +2205,10 @@ export class Editor2D {
     if (this.currentTool === "dimension") {
       const cursor = this.cursor;
       if (this.measure.length < 2 && cursor) {
-        marker(cursor.point, cursor.vertexId ? "on-vertex" : cursor.wallId ? "on-wall" : "");
+        marker(
+          cursor.point,
+          cursor.on === "point" ? "on-vertex" : cursor.on === "line" ? "on-wall" : "",
+        );
       }
       for (const p of this.measure) marker(p);
       const [a, b] = this.measure;

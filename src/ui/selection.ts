@@ -24,6 +24,7 @@ import {
 } from "../model/plan";
 import { roomReadiness } from "../model/radiators";
 import {
+  alignWalls,
   lineCanChange,
   lineSide,
   mergeProblem,
@@ -284,8 +285,43 @@ function renderMany(items: Item[]): void {
       .filter(([count]) => count !== "0"),
   );
   paragraph(t("Drag the selection or use the arrow keys to move it."), "note");
+  alignButton(items);
   button(t("Duplicate"), () => editor.duplicate(), { icon: "copy" });
   deleteButton();
+}
+
+/**
+ * Turns the selected walls parallel or at a right angle to the wall that the user selected
+ * first. Shift+click adds to the end of the selection, so the first one is the first click.
+ */
+function alignButton(items: Item[]): void {
+  const walls = items.filter((item) => item.kind === "wall").map((item) => item.id);
+  if (walls.length < 2) return;
+  button(
+    t("Align with the first wall"),
+    () => {
+      let stuck: Id[] = [];
+      doc.editIf((p) => {
+        const result = alignWalls(p, walls);
+        stuck = result.stuck;
+        return result.turned > 0;
+      });
+      if (stuck.length > 0) {
+        showStatus(
+          t("{count} walls did not turn, because both of their corners are pinned.", {
+            count: stuck.length,
+          }),
+        );
+      }
+    },
+    { icon: "rotate" },
+  );
+  paragraph(
+    t(
+      "The other walls turn to be parallel or at a right angle to the wall that you selected first.",
+    ),
+    "note",
+  );
 }
 
 function renderDimension(plan: Story, id: Id): void {
@@ -634,9 +670,9 @@ function lengthFields(plan: Story, ids: Id[], rooms: Room[]): void {
     label: string,
     value: number,
     open: boolean,
-    set: (p: Story, v: number) => void,
+    set: (p: Story, v: number) => boolean,
   ) => {
-    const input = numberField(label, value, (v) => doc.edit((p) => void set(p, v)));
+    const input = numberField(label, value, (v) => doc.editIf((p) => set(p, v)));
     if (!open) {
       input.disabled = true;
       input.title = t("Both ends of this length are pinned.");
@@ -704,7 +740,7 @@ function renderLine(plan: Story, items: Item[]): void {
       t("Merge into one wall"),
       () => {
         let id = null as Id | null;
-        doc.edit((p) => (id = mergeWalls(p, ids)));
+        doc.editIf((p) => (id = mergeWalls(p, ids)) !== null);
         if (id) editor.select({ kind: "wall", id });
       },
       { icon: "wall" },
@@ -735,7 +771,7 @@ function renderWall(plan: Story, id: Id): void {
     t("Split into two walls"),
     () => {
       let parts = null as [Id, Id] | null;
-      doc.edit((p) => (parts = splitInTwo(p, id)));
+      doc.editIf((p) => (parts = splitInTwo(p, id)) !== null);
       if (parts) editor.select(parts.map((part) => ({ kind: "wall" as const, id: part })));
     },
     { icon: "wall" },

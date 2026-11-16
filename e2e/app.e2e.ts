@@ -149,6 +149,23 @@ test("exports the report and the quantities", async ({ page }) => {
   }
 });
 
+test("exports a PDF with the wall lengths and without the furniture", async ({ page }) => {
+  await openApp(page);
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  if (await isPhone(page)) {
+    await page.locator("#more-button").click();
+    await page.locator('[data-more="export"]').click();
+  } else await page.locator("#export").click();
+  await page.locator('[data-export="pdf"]').click();
+  const dialog = page.locator("dialog[open]");
+  await dialog.getByText("Wall lengths", { exact: false }).click();
+  await dialog.getByText("Furniture", { exact: true }).click();
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Export" }).click();
+  const bytes = readFileSync((await (await download).path())!);
+  expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+});
+
 test("moves a project to the trash and restores it", async ({ page }) => {
   await openApp(page);
   // A project goes into the store of the browser, as an autosave would put it: the list entry

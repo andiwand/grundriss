@@ -26,6 +26,13 @@ The changes that a user notices.
   with a chain of dimensions for the parts. Each part has its own length; a new length of a part
   moves the parts after it. If no other wall meets the line between its ends, the walls merge
   into one wall, with their doors and windows.
+- Export: the PDF has options. "Wall lengths" adds dimension lines for the walls: in each room
+  the length along its walls from wall to wall (once for each length and direction), and
+  outside the length of each facade. "Furniture" shows or hides the furniture.
+- 2D: "Align with the first wall" turns the selected walls parallel or at a right angle to the
+  wall that was selected first. Each wall keeps its length, and a pinned corner stays.
+- 2D: the ends of a dimension line snap to the corners and the faces of the walls, so an inside
+  or outside length is exact. Where no wall is near, they snap to the grid as before.
 - 2D: a wall splits into two walls with one click, in the middle or beside a door or a window
   there. A note of the wall stays with the first part.
 - The top bar and the tool palette get shorter in steps until they fit, also with the longer

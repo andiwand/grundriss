@@ -13,7 +13,8 @@
 
 import { perpendicular } from "./geometry";
 import { getVertex, splitWall, wallEnds } from "./plan";
-import type { Id, Plan, Point, Wall } from "./types";
+import { findRooms, pointInPolygon } from "./rooms";
+import type { Dimension, Id, Plan, Point, Wall } from "./types";
 import { MAX_MITER, meet, STRAIGHT } from "./walljoin";
 
 /** A side of a wall: +1 is the side of `perpendicular(b - a)`, −1 the other side. */
@@ -379,4 +380,103 @@ export function splitInTwo(plan: Plan, wallId: Id): [Id, Id] | null {
   const first = plan.walls.find((w) => w.b === vertex.id && w.a === wall.a)!;
   const second = plan.walls.find((w) => w.a === vertex.id && w.b === wall.b)!;
   return [first.id, second.id];
+}
+
+/** The distance of a dimension line from the face of the wall: inside a room, and outside. */
+export const INSIDE_OFFSET = 0.3;
+export const OUTSIDE_OFFSET = 0.8;
+
+/**
+ * The dimension lines of the walls for a drawing: on each face, from wall to wall. A face in a
+ * room gets its line in the room, and a face outside gets its line outside. A face that more
+ * walls share (a facade of walls in one line) gets one line, and so does a length that a room
+ * has twice in the same direction. The lines are not in the plan.
+ */
+export function wallDimensions(plan: Plan): Dimension[] {
+  const rooms = findRooms(plan);
+  const seen = new Set<string>();
+  const dimensions: Dimension[] = [];
+  const key = (p: Point) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
+  for (const wall of plan.walls) {
+    for (const side of [1, -1] as const) {
+      const run = sideRun(plan, wall, side);
+      if (!run || run.length < 0.2) continue;
+      const id = [key(run.from), key(run.to)].sort().join("|");
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const d = unit(run.from, run.to);
+      const n = perpendicular(d);
+      // A point just beyond the middle of the face: in a room, or outside.
+      const probe = {
+        x: (run.from.x + run.to.x) / 2 + n.x * side * 0.05,
+        y: (run.from.y + run.to.y) / 2 + n.y * side * 0.05,
+      };
+      const room = rooms.find((r) => pointInPolygon(probe, r.polygon));
+      const inside = room !== undefined;
+      if (room) {
+        // A room needs one line for each length in each direction: in a rectangular room the
+        // opposite wall has the same length.
+        const angle = ((Math.atan2(d.y, d.x) * 180) / Math.PI + 180) % 180;
+        const same = `${room.key}|${Math.round(angle) % 180}|${run.length.toFixed(3)}`;
+        if (seen.has(same)) continue;
+        seen.add(same);
+      }
+      dimensions.push({
+        id: `wall-${dimensions.length}`,
+        a: run.from,
+        b: run.to,
+        offset: side * (inside ? INSIDE_OFFSET : OUTSIDE_OFFSET),
+      });
+    }
+  }
+  return dimensions;
+}
+
+/**
+ * Turns the walls so that each one is parallel or at a right angle to the first wall: by the
+ * smallest angle. Each wall keeps its length. It turns around its pinned corner, or else around
+ * the corner that it shares with a wall that is already aligned, or else around its middle. A
+ * wall with two pinned corners does not turn. It gives the ids of the walls that did not turn,
+ * and the number of walls that turned.
+ */
+export function alignWalls(plan: Plan, wallIds: Id[]): { stuck: Id[]; turned: number } {
+  const walls = wallIds.map((id) => plan.walls.find((w) => w.id === id)).filter((w) => !!w);
+  if (walls.length < 2) return { stuck: [], turned: 0 };
+  const [first, ...rest] = walls as Wall[];
+  let turned = 0;
+  const [a, b] = wallEnds(plan, first);
+  const reference = Math.atan2(b.y - a.y, b.x - a.x);
+  const aligned = new Set([first.a, first.b]);
+  const stuck: Id[] = [];
+  const turn = (p: Point, center: Point, angle: number) => {
+    const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+    const [x, y] = [p.x - center.x, p.y - center.y];
+    p.x = center.x + x * cos - y * sin;
+    p.y = center.y + x * sin + y * cos;
+  };
+  for (const wall of rest) {
+    const [p, q] = wallEnds(plan, wall);
+    const quarter = Math.PI / 2;
+    const raw = reference - Math.atan2(q.y - p.y, q.x - p.x);
+    const angle = raw - Math.round(raw / quarter) * quarter;
+    // A turn smaller than this changes nothing that the user sees.
+    if (Math.abs(angle) > 1e-9) {
+      const [pinA, pinB] = [p.pinned === true, q.pinned === true];
+      if (pinA && pinB) {
+        stuck.push(wall.id);
+        continue;
+      }
+      turned++;
+      if (pinA || (!pinB && aligned.has(wall.a))) turn(q, p, angle);
+      else if (pinB || aligned.has(wall.b)) turn(p, q, angle);
+      else {
+        const middle = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+        turn(p, middle, angle);
+        turn(q, middle, angle);
+      }
+    }
+    aligned.add(wall.a);
+    aligned.add(wall.b);
+  }
+  return { stuck, turned };
 }

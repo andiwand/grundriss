@@ -13,6 +13,7 @@ import {
   type Arc,
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
+import { wallDimensions } from "../model/wallsides";
 import type { Building, Plan, Point } from "../model/types";
 import { furnitureSymbol } from "../model/furniture";
 import { fixtureSymbol, runKind } from "../model/services";
@@ -180,20 +181,43 @@ function arcCurve(arc: Arc, map: (p: Point) => Point): string {
   return `${n(p1.x)} ${n(p1.y)} ${n(p2.x)} ${n(p2.y)} ${n(p3.x)} ${n(p3.y)} c`;
 }
 
-/** The box around the plan and around the chimneys that pass through it. */
-function storyBounds(plan: Plan, extras: StoryExtras): Box | null {
-  return grow(
-    withFurniture(planBounds(plan), plan),
-    (extras.through ?? []).flatMap((c) => chimneySymbol(c).outline),
-  );
+/** The options of the plan pages. */
+export interface PlanOptions {
+  /** The lengths of the walls: on each face, inside the rooms and outside. */
+  wallLengths?: boolean;
+  /** The furniture. Without this option, the pages show it. */
+  furniture?: boolean;
+}
+
+/** The dimension lines of a page: the ones of the user, and else the lengths of the walls. */
+function pageDimensions(plan: Plan, options: PlanOptions) {
+  return [...plan.dimensions, ...(options.wallLengths ? wallDimensions(plan) : [])];
+}
+
+/** The box around the plan, the chimneys that pass through it, and the dimension lines. */
+function storyBounds(plan: Plan, extras: StoryExtras, options: PlanOptions = {}): Box | null {
+  const dimensions = options.wallLengths ? wallDimensions(plan) : [];
+  const plain = planBounds(plan);
+  return grow(options.furniture === false ? plain : withFurniture(plain, plan), [
+    ...(extras.through ?? []).flatMap((c) => chimneySymbol(c).outline),
+    // The text of a line is beside it: the box takes a little more than the line.
+    ...dimensions.flatMap((d) => {
+      const shape = dimensionShape({ ...d, offset: d.offset * 1.6 });
+      return shape.line;
+    }),
+  ]);
 }
 
 /** Exports one story as a PDF with one page. */
-export function planToPdf(plan: Plan, extras: StoryExtras = {}): Uint8Array {
-  const box = storyBounds(plan, extras) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+export function planToPdf(
+  plan: Plan,
+  extras: StoryExtras = {},
+  options: PlanOptions = {},
+): Uint8Array {
+  const box = storyBounds(plan, extras, options) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   const layout = chooseLayout(box.maxX - box.minX, box.maxY - box.minY);
   const title = `Grundriss · 1:${layout.denominator} · ${layout.paper}`;
-  const content = pageContent(plan, extras, box, layout, title);
+  const content = pageContent(plan, extras, box, layout, title, options);
   return writePdf([{ content, width: layout.width, height: layout.height }]);
 }
 
@@ -202,13 +226,16 @@ export function planToPdf(plan: Plan, extras: StoryExtras = {}): Uint8Array {
  * pages have the same scale and paper, and the same place on the page for the same point of the
  * plan. A story without objects gets no page, but the PDF has at least one page.
  */
-export function buildingToPdf(building: Building): Uint8Array {
-  const { contents, width, height } = planPages(building);
+export function buildingToPdf(building: Building, options: PlanOptions = {}): Uint8Array {
+  const { contents, width, height } = planPages(building, options);
   return writePdf(contents.map((content) => ({ content, width, height })));
 }
 
 /** The plan pages of the building: one for each story, all at one scale on one paper. */
-export function planPages(building: Building): {
+export function planPages(
+  building: Building,
+  options: PlanOptions = {},
+): {
   contents: string[];
   width: number;
   height: number;
@@ -221,7 +248,7 @@ export function planPages(building: Building): {
     pages.push({ story, extras: storyExtras(building, story) });
   }
   const corners = pages.flatMap(({ story, extras }) => {
-    const b = storyBounds(story, extras);
+    const b = storyBounds(story, extras, options);
     return b
       ? [
           { x: b.minX, y: b.minY },
@@ -238,6 +265,7 @@ export function planPages(building: Building): {
       box,
       layout,
       `Grundriss · ${story.name} · 1:${layout.denominator} · ${layout.paper}`,
+      options,
     ),
   );
   return { contents, width: layout.width, height: layout.height };
@@ -250,6 +278,7 @@ function pageContent(
   box: Box,
   layout: PageLayout,
   title: string,
+  options: PlanOptions = {},
 ): string {
   const planWidth = box.maxX - box.minX;
   const planHeight = box.maxY - box.minY;
@@ -300,7 +329,7 @@ function pageContent(
 
   // The furniture is above the rooms and below the walls. The box of a piece is nearly white, so
   // that it covers the room fill.
-  if (plan.furniture.length > 0) {
+  if (plan.furniture.length > 0 && options.furniture !== false) {
     ops.push("0.357 0.392 0.455 RG 0.3 w 1 j");
     for (const piece of plan.furniture) {
       const symbol = furnitureSymbol(piece);
@@ -396,7 +425,7 @@ function pageContent(
   }
 
   ops.push("0.184 0.420 1 RG 0.184 0.420 1 rg 0.4 w");
-  for (const dimension of plan.dimensions) {
+  for (const dimension of pageDimensions(plan, options)) {
     const shape = dimensionShape(dimension);
     for (const [a, b] of [shape.line, ...shape.extensions, ...shape.ticks]) line(a, b);
     // The text stands on the side of the line that is away from the measured points.

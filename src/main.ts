@@ -57,7 +57,9 @@ import { slug, storyExtras } from "./export/context";
 
 import { buildingToDxf } from "./export/dxf";
 
-import { buildingToPdf } from "./export/pdf";
+import { buildingToPdf, type PlanOptions } from "./export/pdf";
+import { checkbox } from "./ui/controls";
+import { actionButton, dialog, footer, note } from "./ui/dialog";
 
 import { planToSvg } from "./export/svg";
 
@@ -554,12 +556,16 @@ function readableTime(time: number): string {
 type ExportFormat = keyof typeof EXPORT_TYPES;
 
 /** The file of one export format. SVG is for the active story, the others for all stories. */
-async function exportFile(building: Building, format: ExportFormat): Promise<Uint8Array | string> {
+async function exportFile(
+  building: Building,
+  format: ExportFormat,
+  pdf: PlanOptions = {},
+): Promise<Uint8Array | string> {
   const story = findStory(building, doc.activeStoryId) ?? building.stories[0];
   if (format === "svg") {
     return planToSvg(story, { ...storyExtras(building, story), background: false });
   }
-  if (format === "pdf") return buildingToPdf(building);
+  if (format === "pdf") return buildingToPdf(building, pdf);
   if (format === "dxf") return buildingToDxf(building);
   // The model has the whole building, also the stories that the 3D view hides now.
   return new Uint8Array(await exportGlb(await buildModelAsync(building)));
@@ -577,10 +583,10 @@ const MIME: Record<ExportFormat, string> = {
   glb: "model/gltf-binary",
 };
 
-async function exportPlan(format: ExportFormat): Promise<void> {
+async function exportPlan(format: ExportFormat, pdf: PlanOptions = {}): Promise<void> {
   closeMenus();
   try {
-    const data = await exportFile(doc.building, format);
+    const data = await exportFile(doc.building, format, pdf);
     const base = exportBase();
     const name = format === "svg" ? `${base}-${slug(doc.plan.name)}` : base;
     const blob = new Blob([data as BlobPart], { type: MIME[format] });
@@ -589,6 +595,42 @@ async function exportPlan(format: ExportFormat): Promise<void> {
   } catch (error) {
     showStatus(t(error instanceof Error ? error.message : String(error)), true);
   }
+}
+
+/** The key of the PDF options in the storage of the browser: a convenience, not a setting. */
+const PDF_OPTIONS_KEY = "grundriss-pdf-options";
+
+/** The options of the PDF: the lengths of the walls and the furniture. It remembers them. */
+function pdfDialog(): void {
+  closeMenus();
+  let options: PlanOptions = { wallLengths: false, furniture: true };
+  try {
+    options = { ...options, ...JSON.parse(localStorage.getItem(PDF_OPTIONS_KEY) ?? "{}") };
+  } catch {
+    // Without the storage, the defaults apply.
+  }
+  const { element, body } = dialog(t("Export a PDF"));
+  for (const [key, label] of [
+    ["wallLengths", t("Wall lengths: inside the rooms and outside")],
+    ["furniture", t("Furniture")],
+  ] as const) {
+    body.append(checkbox(label, options[key] === true, (on) => (options[key] = on)).element);
+  }
+  note(body, t("The PDF has one page for each story, at a standard scale."));
+  const save = actionButton(
+    t("Export"),
+    () => {
+      element.close();
+      try {
+        localStorage.setItem(PDF_OPTIONS_KEY, JSON.stringify(options));
+      } catch {
+        // The options are only a convenience.
+      }
+      void exportPlan("pdf", options);
+    },
+    true,
+  );
+  footer(element, save);
 }
 
 /** The name of the open plan without its extension, for the names of the exports. */
@@ -908,7 +950,11 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-report
   );
 }
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-export]")) {
-  element.addEventListener("click", () => void exportPlan(element.dataset.export as ExportFormat));
+  element.addEventListener("click", () => {
+    const format = element.dataset.export as ExportFormat;
+    if (format === "pdf") pdfDialog();
+    else void exportPlan(format);
+  });
 }
 
 $("#empty-background").addEventListener("click", () => void loadBackground());

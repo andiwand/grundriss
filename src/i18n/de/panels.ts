@@ -164,6 +164,11 @@ export const PANELS: Record<string, string> = {
   "{count} walls in a line": "{count} Wände in einer Linie",
   "Merge into one wall": "Zu einer Wand verbinden",
   "Split into two walls": "In zwei Wände teilen",
+  "Align with the first wall": "An der ersten Wand ausrichten",
+  "{count} walls did not turn, because both of their corners are pinned.":
+    "{count} Wände haben sich nicht gedreht, weil beide Ecken fixiert sind.",
+  "The other walls turn to be parallel or at a right angle to the wall that you selected first.":
+    "Die anderen Wände drehen sich parallel oder rechtwinklig zur zuerst gewählten Wand.",
   "Other walls meet these walls between their ends, so they stay separate walls.":
     "Zwischen ihren Enden treffen andere Wände auf diese Wände, daher bleiben es getrennte Wände.",
   "The walls differ in thickness, height, layers, or colors, so they cannot become one wall.":
