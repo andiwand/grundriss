@@ -93,7 +93,10 @@ import type {
   OpeningKind,
   Plan,
   Point,
+  Wall,
 } from "../model/types";
+import { wallFaces as faceExtents } from "../model/walljoin";
+import { sideRun } from "../model/wallsides";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const GRID_STEP = 0.05;
@@ -109,6 +112,7 @@ const TAP_TOOLS: Tool[] = [
   "wall",
   "door",
   "window",
+  "measure",
   "dimension",
   "stair",
   "fixture",
@@ -135,6 +139,7 @@ export type Tool =
   | "wall"
   | "door"
   | "window"
+  | "measure"
   | "dimension"
   | "stair"
   | "chimney"
@@ -152,6 +157,8 @@ interface Snap {
   point: Point;
   vertexId?: Id;
   wallId?: Id;
+  /** The measure tool: the point is a corner, or on a line of a wall. */
+  on?: "point" | "line";
 }
 
 type Drag =
@@ -213,6 +220,10 @@ export class Editor2D {
   private cursor: Snap | null = null;
   /** The points of the dimension tool: the two ends, then the click that sets the offset. */
   private measure: Point[] = [];
+  /** The two points of the measure tool. It shows the distance and does not change the plan. */
+  private ruler: Point[] = [];
+  /** The corners and the lines of the walls that the measure tool snaps to, for one plan. */
+  private rulerTargets: { plan: Plan; points: Point[]; lines: [Point, Point][] } | null = null;
   private calibration: Point[] = [];
   private spaceDown = false;
   private clipboard: Clip | null = null;
@@ -356,6 +367,7 @@ export class Editor2D {
     this.runFrom = null;
     this.chain = null;
     this.measure = [];
+    this.ruler = [];
     this.calibration = [];
     this.element.dataset.tool = tool;
     this.render();
@@ -475,6 +487,7 @@ export class Editor2D {
       this.runPoints = [];
       this.runFrom = null;
     } else if (this.measure.length > 0) this.measure = [];
+    else if (this.ruler.length > 0) this.ruler = [];
     else if (this.calibration.length > 0) this.calibration = [];
     else if (this.items.length > 0) this.select(null);
     this.render();
@@ -801,8 +814,10 @@ export class Editor2D {
       return;
     }
     if (e.button !== 0) return;
-    // A plan to view only selects. The tools that draw or move do not start.
-    if (this.doc.readOnly && this.currentTool !== "select") return;
+    // A plan to view only selects and measures. The tools that draw or move do not start.
+    if (this.doc.readOnly && this.currentTool !== "select" && this.currentTool !== "measure") {
+      return;
+    }
 
     switch (this.currentTool) {
       case "select":
@@ -829,6 +844,13 @@ export class Editor2D {
       case "window":
         this.placeOpening(this.currentTool, world);
         break;
+      case "measure": {
+        const point = this.measureSnap(world, e).point;
+        if (this.ruler.length !== 1) this.ruler = [point];
+        else if (distance(this.ruler[0], point) > 1e-6) this.ruler.push(point);
+        this.render();
+        break;
+      }
       case "dimension":
       case "stair":
         this.addMeasurePoint(world, e);
@@ -1003,7 +1025,12 @@ export class Editor2D {
     const drag = this.drag;
     if (!drag) {
       const snapping = ["wall", "dimension", "stair", "chimney", "run"].includes(this.currentTool);
-      this.cursor = snapping ? this.snap(world, e) : { point: world };
+      this.cursor =
+        this.currentTool === "measure"
+          ? this.measureSnap(world, e)
+          : snapping
+            ? this.snap(world, e)
+            : { point: world };
       this.render();
       return;
     }
@@ -1429,6 +1456,71 @@ export class Editor2D {
     const next: Snap = added ? { point: target.point, vertexId: end } : { point: target.point };
     this.chain = target.vertexId || target.wallId ? null : next;
     this.render();
+  }
+
+  /**
+   * Snaps the pointer of the measure tool: first to a corner of a wall (a vertex or an end of a
+   * face), then to a face or the center line of a wall. So a distance between two faces is
+   * exact. With a start point, the direction snaps to 15° (Shift: 45° steps). Alt: no snap.
+   * The measure tool has no grid: it measures the plan as it is.
+   */
+  private measureSnap(world: Point, keys: { altKey: boolean; shiftKey: boolean }): Snap {
+    const start = this.ruler.length === 1 ? this.ruler[0] : undefined;
+    const free = (value: number) => value;
+    if (start && keys.shiftKey)
+      return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, free) };
+    if (keys.altKey) return { point: world };
+    const plan = this.doc.plan;
+    if (this.rulerTargets?.plan !== plan) {
+      const points: Point[] = [];
+      const lines: [Point, Point][] = [];
+      for (const wall of plan.walls) {
+        const [a, b] = wallEnds(plan, wall);
+        const length = distance(a, b);
+        if (length < 1e-9) continue;
+        const d = scale(sub(b, a), 1 / length);
+        const n = scale(perpendicular(d), wall.thickness / 2);
+        const faces = faceExtents(plan, wall);
+        points.push({ x: a.x, y: a.y }, { x: b.x, y: b.y });
+        lines.push([a, b]);
+        for (const [side, [from, to]] of [
+          [1, faces.right],
+          [-1, faces.left],
+        ] as const) {
+          const face = (t: number) => add(add(a, scale(d, t)), scale(n, side));
+          points.push(face(from), face(to));
+          lines.push([face(from), face(to)]);
+        }
+      }
+      this.rulerTargets = { plan, points, lines };
+    }
+    const tolerance = this.snapPixels / this.zoom;
+    let best: Snap | null = null;
+    let bestDistance = tolerance;
+    for (const point of this.rulerTargets.points) {
+      const d = distance(world, point);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = { point, on: "point" };
+      }
+    }
+    if (best) return best;
+    for (const [a, b] of this.rulerTargets.lines) {
+      const hit = closestOnSegment(world, a, b);
+      if (hit.distance < bestDistance) {
+        bestDistance = hit.distance;
+        best = { point: hit.point, on: "line" };
+      }
+    }
+    if (best) return best;
+    if (start) {
+      const along = this.alongAngle(start, world, ANGLE_STEP, free);
+      const angle = (p: Point) => Math.atan2(p.y - start.y, p.x - start.x);
+      const difference = Math.abs(angle(world) - angle(along)) % (2 * Math.PI);
+      const degrees = (Math.min(difference, 2 * Math.PI - difference) * 180) / Math.PI;
+      if (degrees < ANGLE_TOLERANCE) return { point: along };
+    }
+    return { point: world };
   }
 
   /** The offset of a dimension line from `a` to `b` that goes through the point `p`. */
@@ -2035,10 +2127,7 @@ export class Editor2D {
     const group = svg("g", { class: "overlay" }, this.content);
     if (this.items.length === 1 && this.items[0].kind === "wall") {
       const wall = findWall(plan, this.items[0].id);
-      if (wall) {
-        const [a, b] = wallEnds(plan, wall);
-        this.label(group, scale(add(a, b), 0.5), `${fmt(distance(a, b), 2)} m`, "dimension");
-      }
+      if (wall) this.drawWallLengths(group, plan, wall);
     }
     if (this.drag?.kind === "marquee") {
       const { start, end } = this.drag;
@@ -2069,6 +2158,31 @@ export class Editor2D {
         const s = this.chain.point;
         svg("line", { x1: s.x, y1: s.y, x2: p.x, y2: p.y, class: "preview" }, group);
         this.label(group, scale(add(s, p), 0.5), `${fmt(distance(s, p), 2)} m`, "dimension");
+      }
+    }
+    if (this.currentTool === "measure") {
+      const cursor = this.cursor;
+      if (cursor) {
+        marker(
+          cursor.point,
+          cursor.on === "point" ? "on-vertex" : cursor.on === "line" ? "on-wall" : "",
+        );
+      }
+      for (const p of this.ruler) marker(p);
+      const [a, b] = this.ruler;
+      const end = b ?? (a && cursor ? cursor.point : undefined);
+      if (a && end && distance(a, end) > 1e-9) {
+        svg(
+          "line",
+          { x1: a.x, y1: a.y, x2: end.x, y2: end.y, class: b ? "ruler" : "preview" },
+          group,
+        );
+        // The text goes beside the line, so that it does not cover the points.
+        const length = distance(a, end);
+        let n = perpendicular(scale(sub(end, a), 1 / length));
+        if (n.y > 0 || (n.y === 0 && n.x > 0)) n = scale(n, -1);
+        const at = add(scale(add(a, end), 0.5), scale(n, (12 + Math.abs(n.x) * 20) / this.zoom));
+        this.label(group, at, `${fmt(length, 2)} m`, "dimension");
       }
     }
     if (this.currentTool === "dimension") {
@@ -2160,6 +2274,37 @@ export class Editor2D {
         const [s, p] = line;
         svg("line", { x1: s.x, y1: s.y, x2: p.x, y2: p.y, class: "preview" }, group);
       }
+    }
+  }
+
+  /**
+   * The lengths of the selected wall, the same as in the panel: the center line as a dash-dot
+   * line through the wall, with its length on it, and the length of each side as a thin line
+   * along the face, from wall to wall, with its length in the room.
+   */
+  private drawWallLengths(group: Element, plan: Plan, wall: Wall): void {
+    const [a, b] = wallEnds(plan, wall);
+    const length = distance(a, b);
+    if (length < 1e-9) return;
+    svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "axis-line" }, group);
+    this.label(group, scale(add(a, b), 0.5), `${fmt(length, 2)} m`, "dimension");
+    const normal = perpendicular(scale(sub(b, a), 1 / length));
+    const px = 1 / this.zoom;
+    for (const side of [1, -1] as const) {
+      const run = sideRun(plan, wall, side);
+      if (!run || run.length < 1e-6) continue;
+      const n = scale(normal, side);
+      const at = (p: Point, offset: number) => add(p, scale(n, offset * px));
+      const [p, q] = [at(run.from, 10), at(run.to, 10)];
+      svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "side-line" }, group);
+      for (const end of [run.from, run.to]) {
+        const [s, e] = [at(end, 5), at(end, 15)];
+        svg("line", { x1: s.x, y1: s.y, x2: e.x, y2: e.y, class: "side-line" }, group);
+      }
+      // The text stands upright, so it needs more room beside a wall that goes up and down.
+      const away = 18 + Math.abs(n.x) * 18;
+      const mid = at(scale(add(run.from, run.to), 0.5), away);
+      this.label(group, mid, `${fmt(run.length, 2)} m`, "dimension side-length");
     }
   }
 

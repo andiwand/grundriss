@@ -134,6 +134,7 @@ const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
   window: "structure",
   stair: "structure",
   chimney: "structure",
+  dimension: "structure",
   fixture: "utilities",
   run: "utilities",
   furniture: "interior",
@@ -233,7 +234,8 @@ function setTopic(next: Topic): void {
 }
 
 /** The tools that do not change the plan, so they also work in a plan to view. */
-const VIEW_TOOLS = new Set<Tool>(["select", "pan"]);
+// The measure tool shows a distance and does not change the plan, so a plan to view has it too.
+const VIEW_TOOLS = new Set<Tool>(["select", "pan", "measure"]);
 
 function setTool(tool: Tool): void {
   if (doc.readOnly && !VIEW_TOOLS.has(tool)) return doc.onBlocked();
@@ -938,7 +940,8 @@ const TOOL_KEYS: Record<string, Tool> = {
   w: "wall",
   d: "door",
   n: "window",
-  m: "dimension",
+  m: "measure",
+  l: "dimension",
   s: "stair",
   h: "chimney",
   c: "calibrate",

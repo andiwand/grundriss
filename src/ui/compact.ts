@@ -53,7 +53,16 @@ function setSheet(state: SheetState): void {
 }
 
 /** The drawing tools: a finger ends them with the "Done" button. */
-const DRAWING: Tool[] = ["wall", "dimension", "run", "rectify", "calibrate", "stair", "fixture"];
+const DRAWING: Tool[] = [
+  "wall",
+  "measure",
+  "dimension",
+  "run",
+  "rectify",
+  "calibrate",
+  "stair",
+  "fixture",
+];
 
 /** Shows the "Done" button for a drawing tool on a phone or a touch screen. */
 export function toolChanged(tool: Tool): void {

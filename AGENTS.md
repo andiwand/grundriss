@@ -141,6 +141,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/climate.ts`     | The stored climate: the series, the sun position, the irradiance on faces, PV, HDD.      |
 | `src/model/colors.ts`      | The colors of the wall sides (own, room, or facade) and the defaults of the colors.      |
 | `src/model/walljoin.ts`    | The ends of the two faces of a wall at its joins: flush, miter, or T.                    |
+| `src/model/wallsides.ts`   | The length of each side of a wall from wall to wall, and the change of it.               |
 | `src/model/heating.ts`     | The heating per year: a monthly balance, the heating system, hot water, cost, CO₂.       |
 | `src/model/variants.ts`    | The variants: the measures, the open variant, apply, and the comparison with the plan.   |
 | `src/model/layout.ts`      | The changes of the floor plan of a variant: walls to remove and to build, new openings.  |

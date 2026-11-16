@@ -8,7 +8,6 @@ import {
   mergeVertex,
   removeVertex,
   removeWall,
-  setWallLength,
   splitWall,
 } from "../src/model/plan";
 import type { Plan } from "../src/model/types";
@@ -140,13 +139,5 @@ describe("plan", () => {
     const plan = rectangle(4, 3);
     const door = addOpening(plan, plan.walls[0].id, "door", 10);
     expect(door.offset).toBeCloseTo(4 - door.width / 2);
-  });
-
-  it("does not change a wall to a length of zero", () => {
-    const plan = rectangle(4, 3);
-    setWallLength(plan, plan.walls[0].id, 0);
-    expect(plan.vertices[1]).toMatchObject({ x: 4, y: 0 });
-    setWallLength(plan, plan.walls[0].id, 2);
-    expect(plan.vertices[1]).toMatchObject({ x: 2, y: 0 });
   });
 });

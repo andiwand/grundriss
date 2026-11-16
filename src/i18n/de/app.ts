@@ -46,7 +46,9 @@ export const APP: Record<string, string> = {
   Select: "Auswählen",
   "Move the view (P, or hold Space)": "Ansicht verschieben (P oder Leertaste halten)",
   Pan: "Verschieben",
-  "Draw a dimension line (M)": "Maßlinie zeichnen (M)",
+  "Draw a dimension line (L)": "Maßlinie zeichnen (L)",
+  "Measure a distance. The plan does not change (M)":
+    "Einen Abstand messen. Der Plan ändert sich nicht (M)",
   Measure: "Messen",
   "Load a scan or a photo of a plan": "Scan oder Foto eines Plans laden",
   Background: "Hintergrund",
@@ -140,6 +142,8 @@ export const APP: Record<string, string> = {
   "Click on a wall to put a door in it.": "Klicken Sie auf eine Wand, um eine Tür einzusetzen.",
   "Click on a wall to put a window in it.":
     "Klicken Sie auf eine Wand, um ein Fenster einzusetzen.",
+  "Click two points to measure the distance between them. The points snap to the corners and the faces of the walls. The plan does not change. Shift: 45° steps. Alt: no snap.":
+    "Klicken Sie zwei Punkte, um den Abstand zwischen ihnen zu messen. Die Punkte rasten an den Ecken und den Flächen der Wände ein. Der Plan ändert sich nicht. Umschalt: 45°-Schritte. Alt: ohne Einrasten.",
   "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.":
     "Klicken Sie auf die beiden Enden der Strecke und dann dorthin, wo die Maßlinie liegen soll. Umschalt: 45°-Schritte. Alt: ohne Raster.",
   "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.":

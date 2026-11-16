@@ -301,20 +301,6 @@ export function normalize(plan: Plan): void {
   anchorRoomInfo(plan);
 }
 
-/**
- * Changes the length of a wall. The vertex `b` moves along the wall. A length of zero or less
- * changes nothing, because a wall must have a length.
- */
-export function setWallLength(plan: Plan, wallId: Id, length: number): void {
-  const wall = getWall(plan, wallId);
-  const [a, b] = wallEnds(plan, wall);
-  const current = distance(a, b);
-  if (current === 0 || !(length > 0)) return;
-  const end = add(a, scale(sub(b, a), length / current));
-  b.x = end.x;
-  b.y = end.y;
-}
-
 // ----- More than one object -----
 
 /** True if the item is in the plan. */

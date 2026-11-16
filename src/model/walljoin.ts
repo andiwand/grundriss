@@ -36,9 +36,9 @@ export interface WallFaces {
 }
 
 /** Two directions are opposite (a straight line through the vertex) within this tolerance. */
-const STRAIGHT = 0.9995;
+export const STRAIGHT = 0.9995;
 /** A miter of a very sharp corner goes no further than this many times the wall thickness. */
-const MAX_MITER = 3;
+export const MAX_MITER = 3;
 
 const unit = (p: Point, q: Point): Point => {
   const length = Math.hypot(q.x - p.x, q.y - p.y);
@@ -51,7 +51,14 @@ const cross = (p: Point, q: Point) => p.x * q.y - p.y * q.x;
  * The distance t along `u` from the vertex where the line V + o·n + t·u meets the line
  * V + o2·n2 + t2·u2, or null if the lines are parallel.
  */
-function meet(n: Point, o: number, u: Point, n2: Point, o2: number, u2: Point): number | null {
+export function meet(
+  n: Point,
+  o: number,
+  u: Point,
+  n2: Point,
+  o2: number,
+  u2: Point,
+): number | null {
   const det = cross(u, u2);
   if (Math.abs(det) < 1e-9) return null;
   // (o·n + t·u) − (o2·n2 + t2·u2) = 0  →  t = cross(o2·n2 − o·n, u2) / cross(u, u2)

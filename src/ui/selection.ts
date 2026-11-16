@@ -21,10 +21,10 @@ import {
   removeOpening,
   removeVertex,
   removeWall,
-  setWallLength,
   wallLength,
 } from "../model/plan";
 import { roomReadiness } from "../model/radiators";
+import { setCenterLength, setSideLength, sideRun } from "../model/wallsides";
 import { editRoomInfo, findRoom, findRooms, netRoomArea, type Room } from "../model/rooms";
 import {
   findFixture,
@@ -606,13 +606,34 @@ function renderWall(plan: Story, id: Id): void {
   if (!wall) return;
   const edit = editOf(findWall, id);
   heading(t("Wall"), "wall");
-  numberField(t("Length"), wallLength(plan, wall), (value) =>
-    doc.edit((plan) => setWallLength(plan, id, value)),
+  // The length on the center line, and on each side from wall to wall. The plan shows the same
+  // lengths at the selected wall: on the wall, and along each face.
+  const rooms = findRooms(plan);
+  numberField(t("Length, center line"), wallLength(plan, wall), (value) =>
+    doc.edit((plan) => setCenterLength(plan, id, value)),
   );
+  const sides = ([1, -1] as const)
+    .map((side) => ({
+      side,
+      run: sideRun(plan, wall, side),
+      room: roomOnSide(plan, wall, side, rooms),
+    }))
+    // The sides in rooms first: their length is the one that a user measures most often.
+    .sort((p, q) => Number(!p.room) - Number(!q.room));
+  for (const { side, run, room } of sides) {
+    if (!run) continue;
+    const label = room
+      ? room.info?.name
+        ? t("Length, {name}", { name: room.info.name })
+        : t("Length, room side")
+      : t("Length, outside");
+    numberField(label, run.length, (value) =>
+      doc.edit((plan) => setSideLength(plan, id, side, value)),
+    );
+  }
   numberOf(t("Thickness"), wall, "thickness", edit);
   numberOf(t("Height"), wall, "height", edit);
   // The color of each side: its own color, or the color of the room or the facade there.
-  const rooms = findRooms(plan);
   for (const side of [1, -1] as const) {
     const key = side === 1 ? "right" : "left";
     const room = roomOnSide(plan, wall, side, rooms);

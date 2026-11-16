@@ -67,6 +67,12 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await viewer.mouse.up();
   await expect(viewer.locator("#panel input:not([disabled])")).toHaveCount(0);
   await expect(viewer.locator("#panel button:not([hidden]):not([data-view])")).toHaveCount(0);
+  // The measure tool does not change the plan, so the viewer has it too.
+  await viewer.locator('#tools [data-tool="measure"]').click();
+  await viewer.mouse.click(center.x, center.y);
+  await viewer.mouse.click(center.x + 80, center.y + 40);
+  await expect(viewer.locator("#plan-2d .overlay .ruler")).toHaveCount(1);
+  await viewer.locator('#tools [data-tool="select"]').click();
 
   // The editor deletes all walls; the viewer sees it at once.
   await page

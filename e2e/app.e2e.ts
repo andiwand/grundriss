@@ -41,6 +41,17 @@ test("draws a room, saves it in the browser, and opens it again after a reload",
   await expect(page.locator("#plan-2d .room-label")).toHaveCount(1);
 });
 
+test("measures a distance without a change of the plan", async ({ page }) => {
+  await openApp(page);
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  await page.locator('#tools [data-tool="measure"]').click();
+  await clickPlan(page, 100, 300);
+  await clickPlan(page, 300, 300);
+  await expect(page.locator("#plan-2d .overlay .ruler")).toHaveCount(1);
+  await expect(page.locator("#plan-2d .overlay .dimension")).toContainText(/\d m/);
+  await expect(page.locator("#undo")).toBeDisabled();
+});
+
 test("shows each topic with its panel", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();

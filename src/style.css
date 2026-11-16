@@ -1358,6 +1358,28 @@ body.wide:not(.compact) #panel > section .field.stacked {
   stroke-dasharray: 6 4;
 }
 
+/* The lengths of the selected wall: the center line as a dash-dot line (the sign of an axis in a
+   drawing), and the length of each side as a thin line along its face. */
+.overlay .axis-line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 10 3 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .side-line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The distance of the measure tool. */
+.overlay .ruler {
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .overlay .cursor {
   fill: none;
   stroke: var(--accent);
@@ -3858,7 +3880,7 @@ body.compact #share {
 }
 
 /* A plan to view (body.read-only): only the tools to view, and no handles that change the plan. */
-body.read-only #tools > :not([data-tool="select"], [data-tool="pan"]),
+body.read-only #tools > :not([data-tool="select"], [data-tool="pan"], [data-tool="measure"]),
 body.read-only .group:has(#undo),
 body.read-only .group:has(#undo) + .divider,
 body.read-only #stories .add,

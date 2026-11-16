@@ -150,6 +150,10 @@ export const PANELS: Record<string, string> = {
   // selection.ts: a wall.
   Wall: "Wand",
   Length: "Länge",
+  "Length, center line": "Länge Achse",
+  "Length, {name}": "Länge {name}",
+  "Length, room side": "Länge Raumseite",
+  "Length, outside": "Länge außen",
   Thickness: "Dicke",
   "Side to {name}": "Seite zu {name}",
   "Side to the room": "Seite zum Raum",

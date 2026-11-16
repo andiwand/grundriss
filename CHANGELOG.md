@@ -13,6 +13,14 @@ The changes that a user notices.
   joins as the 3D view.
 - 2D and 3D: where three or more walls meet, each wall meets the next wall around the joint in a
   clean miter. Before, each wall went on by half its thickness, so a thick wall stuck out.
+- 2D: the new Measure tool (M) shows the distance between two points and does not change the
+  plan, so it works also in a plan to view. Its points snap to the corners and the faces of the
+  walls. The dimension lines have their own tool, Dimension (L), in Structure.
+- 2D: a selected wall shows the length of each side from wall to wall, as a thin line along the
+  face, and its length on the center line as a dash-dot line. The panel has the same three
+  lengths, and you can type each one. A new length, also on the center line, moves the wall at
+  the end, which keeps its angle. Before, the next wall turned, so a rectangular room lost its
+  right angles.
 - The top bar and the tool palette get shorter in steps until they fit, also with the longer
   German texts: first the keys and the labels go, then only the icons stay. The palette can use
   the full width of the 2D view, and in a narrow view it gets a second row, so each tool stays

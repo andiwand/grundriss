@@ -31,6 +31,9 @@ export const HINTS: Record<Tool, string> = {
   ),
   door: t("Click on a wall to put a door in it."),
   window: t("Click on a wall to put a window in it."),
+  measure: t(
+    "Click two points to measure the distance between them. The points snap to the corners and the faces of the walls. The plan does not change. Shift: 45° steps. Alt: no snap.",
+  ),
   dimension: t(
     "Click the two ends of the distance, then click where the dimension line goes. Shift: 45° steps. Alt: no grid.",
   ),

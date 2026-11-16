@@ -205,10 +205,17 @@ internet.
    wall, so that it does not overlap another opening. The panel sets how it opens (a hinged
    leaf, sliding, or fixed), one or two leaves, the hinge, and the swing. A window wider than
    1 m gets two leaves.
-6. Select **Measure** to add a dimension line: click the two ends, then click where the line goes.
+6. Select **Measure** (M) and click two points: the plan shows the distance between them. The
+   points snap to the corners and the faces of the walls. The measure does not change the plan,
+   so it works also in a plan that you can only view. Select **Dimension** (L) to add a
+   dimension line to the plan: click the two ends, then click where the line goes.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
    the selection.
+   A selected wall shows its lengths: the length on the center line (the dash-dot line through
+   the wall), and the length of each side from wall to wall (the thin line along the face). The
+   panel has the same lengths, and you can type each one. A new length moves the wall at the
+   end, and that wall keeps its angle, so a rectangular room stays rectangular.
 8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
    the stories. The walls of the story below show as dashed lines, so you can draw on top of
    them. Each story has its own background.
@@ -240,7 +247,8 @@ internet.
 
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |
-| V, P, W, D, N, M, C      | Select, Pan, Wall, Door, Window, Measure, Scale   |
+| V, P, W, D, N, C         | Select, Pan, Wall, Door, Window, Scale            |
+| M, L                     | Measure, Dimension                                |
 | Shift+click              | Add an object to the selection, or remove it      |
 | Drag on the empty plan   | Select the objects in a box                       |
 | Shift (wall tool)        | Keep the direction at a multiple of 45°           |
