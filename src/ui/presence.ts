@@ -180,7 +180,7 @@ export function personSeen(person: Person): void {
     client: person.client,
     name: person.name,
     write: person.write,
-    state: (person.state as PresenceState | null) ?? null,
+    state: validState(person.state),
     color: known?.color ?? colorOf(person.client),
   };
   others.set(person.client, next);
@@ -196,6 +196,49 @@ export function personSeen(person: Person): void {
 export function personSeenSelf(): void {
   renderPeople();
   schedule();
+}
+
+const isNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+const isPoint = (value: unknown): value is Point =>
+  !!value && isNumber((value as Point).x) && isNumber((value as Point).y);
+const isTriple = (value: unknown) =>
+  Array.isArray(value) && value.length === 3 && value.every(isNumber);
+const VIEWS = new Set<unknown>(["2d", "split", "3d"]);
+const TOPICS = new Set<unknown>([
+  "overview",
+  "structure",
+  "utilities",
+  "interior",
+  "energy",
+  "renovation",
+]);
+
+/** The state of another tab, or null if it is not one: another tab can send anything. */
+function validState(value: unknown): PresenceState | null {
+  if (!value || typeof value !== "object") return null;
+  const s = value as Record<string, unknown>;
+  const box = s.box as PresenceState["box"];
+  const camera = s.camera as PresenceState["camera"];
+  const ok =
+    typeof s.story === "string" &&
+    TOPICS.has(s.topic) &&
+    VIEWS.has(s.view) &&
+    (s.cursor === null || isPoint(s.cursor)) &&
+    Array.isArray(s.selection) &&
+    s.selection.every(
+      (item) => item && typeof item.kind === "string" && typeof item.id === "string",
+    ) &&
+    (box === null ||
+      (!!box &&
+        isNumber(box.x) &&
+        isNumber(box.y) &&
+        isNumber(box.width) &&
+        isNumber(box.height))) &&
+    (camera === null || (!!camera && isTriple(camera.position) && isTriple(camera.target))) &&
+    typeof s.viewing === "boolean" &&
+    (s.following === null || typeof s.following === "string");
+  return ok ? (value as PresenceState) : null;
 }
 
 /** The people of a new stream, for example after a lost connection. This tab tells its state. */
@@ -539,11 +582,16 @@ export function setupPresence(): void {
   };
   editor.onRender = changed;
   view3d.onCamera = changed;
+  let stories = "";
   doc.subscribe(() => {
     if (!context || doc.inTransaction) return;
     changed();
-    // The names of the stories and the stories of the people can change.
-    renderPeople();
+    // The marks name the story of each person.
+    const names = JSON.stringify(doc.building.stories.map((s) => [s.id, s.name]));
+    if (names !== stories) {
+      stories = names;
+      renderPeople();
+    }
     redraw();
   });
 }

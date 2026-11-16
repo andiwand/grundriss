@@ -233,6 +233,8 @@ export const PROJECTS: Record<string, string> = {
   "Your name…": "Ihr Name …",
   "You follow {name}": "Sie folgen {name}",
   "Stop following": "Nicht mehr folgen",
+  "The server did not take your last change: {error}":
+    "Der Server hat Ihre letzte Änderung nicht übernommen: {error}",
   "{name} closed the plan.": "{name} hat den Plan geschlossen.",
   views: "sieht an",
   edits: "bearbeitet",

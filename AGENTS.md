@@ -48,8 +48,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   change since the last revision that it knows as a patch (`src/model/patch.ts`: the objects by
   id, so a patch applies after other changes) to `POST plans/<id>/changes`. The server applies
   the patches in their order, saves each one as a revision, and sends it on the stream of the
-  plan (`revision` with `patch`). Each tab applies them to `saved` and moves its own changes on
-  top (`rebase`). The history keeps the building before and after each change, so an undo after
+  plan (`revision` with the change that the file has). Each tab applies them to `saved` and puts its own changes on
+  top: the patch on its way (`inflight`), and the changes after it. The history keeps the building before and after each change, so an undo after
   the changes of others applies the change back as a patch. `src/ui/presence.ts` sends the
   state of the tab (`POST plans/<id>/presence`: story, topic, view, cursor, selection, camera)
   and shows the others, their cursors, and the follow. A server without `live` in `me` has the

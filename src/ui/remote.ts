@@ -6,7 +6,7 @@
 // ("live"): the app sends the changes of its user as a patch (`src/model/patch.ts`) after a short
 // wait, and the server applies the patches in their order and sends each one to the other tabs
 // on a stream. Each tab applies them to the last revision that it knows (`saved`) and moves its
-// own changes that the server does not have yet on top (`rebase`). A person can also only view,
+// own changes that the server does not have yet on top (`adopt`). A person can also only view,
 // and follow another person (`presence.ts`).
 //
 // An older server has no patches: then the app takes the edit lease of the plan, and only the tab
@@ -36,7 +36,7 @@ import {
 } from "../io/server";
 import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
-import { diffBuildings, patchBuilding, rebase, type Patch } from "../model/patch";
+import { diffBuildings, patchBuilding, type Patch } from "../model/patch";
 import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
 import { actionButton, dialog, footer, note, row } from "./dialog";
@@ -212,8 +212,13 @@ interface Session {
   waiting: Map<string, Change>;
   /** The functions that wait until the session knows a revision. */
   waiters: { revision: string; done: () => void }[];
-  /** The last patch that this tab sent, to stop a loop if the server gives another result. */
-  lastSent: string;
+  /**
+   * The patch that this tab sent and the stream did not bring back yet, and the revision that
+   * the server gave it (once the answer is there). The own changes after it are the difference
+   * between `saved` with this patch and the building of the document.
+   */
+  inflight: Patch | null;
+  inflightRevision: string;
   /** The timer of the load of the whole plan when a change of the server did not come. */
   gap: number;
   /** The timer of the copy in the browser, which waits for a pause of the changes. */
@@ -301,7 +306,8 @@ export async function openRemote(address: string, planId: string): Promise<void>
       viewOnly: false,
       waiting: new Map(),
       waiters: [],
-      lastSent: "",
+      inflight: null,
+      inflightRevision: "",
       gap: 0,
       copyTimer: 0,
     };
@@ -390,7 +396,8 @@ async function openOffline(
     viewOnly: false,
     waiting: new Map(),
     waiters: [],
-    lastSent: "",
+    inflight: null,
+    inflightRevision: "",
     gap: 0,
     copyTimer: 0,
   };
@@ -491,8 +498,12 @@ function listen(current: Session): void {
     if (session !== current) return;
     if (current.live) {
       const change = read(event) as Change;
-      // Each change comes once to each tab, also to the tab that sent it.
-      if (revisionNumber(change.id) <= revisionNumber(current.revision)) return;
+      // Each change comes once to each tab, also to the tab that sent it. A known own change is
+      // in `saved` already, for example after a load of the whole plan.
+      if (revisionNumber(change.id) <= revisionNumber(current.revision)) {
+        if (change.client === current.client.client) current.inflight = null;
+        return;
+      }
       current.waiting.set(change.parent ?? "", change);
       advance(current);
       return;
@@ -533,13 +544,36 @@ function listen(current: Session): void {
 
 // ----- Live editing -----
 
+/** The own changes that the server does not have yet, also not in the patch on its way. */
+function unsent(current: Session): Patch | undefined {
+  const ahead = current.inflight ? patchBuilding(current.saved, current.inflight) : current.saved;
+  return diffBuildings(ahead, doc.building);
+}
+
+/**
+ * Makes `next` the building of the server, and shows it with the own changes on top: the patch on
+ * its way, and the changes after it. Without own changes, the document gets the building of the
+ * server itself, so that the plan has no unsaved changes.
+ */
+function adopt(current: Session, next: Building, own: Patch | undefined): void {
+  current.saved = next;
+  const ahead = current.inflight ? patchBuilding(next, current.inflight) : next;
+  const local = own ? patchBuilding(ahead, own) : ahead;
+  if (diffBuildings(next, local)) doc.applyRemote(local);
+  else {
+    doc.applyRemote(next);
+    doc.markSaved(next);
+  }
+}
+
 /**
  * Applies the changes of the server that follow the known revision, in their order. The own
  * changes that the server does not have yet move on top of them. During a drag, the changes wait
- * until its end.
+ * until its end (`setupRemote` calls this again after it).
  */
 function advance(current: Session): void {
   if (session !== current || doc.inTransaction) return;
+  const own = unsent(current);
   const before = current.saved;
   let next = before;
   let whole = false;
@@ -554,13 +588,14 @@ function advance(current: Session): void {
     }
     next = patchBuilding(next, change.patch);
     current.revision = change.id;
+    // The own patch is in the building of the server now.
+    if (change.client === current.client.client) current.inflight = null;
   }
   for (const key of current.waiting.keys()) {
     if (revisionNumber(key) < revisionNumber(current.revision)) current.waiting.delete(key);
   }
   if (next !== before) {
-    current.saved = next;
-    adopt(current, rebase(before, doc.building, next));
+    adopt(current, next, own);
     storeCopySoon(current);
     updateRemoteState();
   }
@@ -579,20 +614,6 @@ function advance(current: Session): void {
 }
 
 /**
- * Shows the building with the changes of the server and the own changes on top. Without own
- * changes that the server does not have, it is the building of the server itself, so that the
- * plan has no unsaved changes.
- */
-function adopt(current: Session, local: Building): void {
-  const sent = !diffBuildings(current.saved, local);
-  doc.applyRemote(sent ? current.saved : local);
-  if (sent) {
-    doc.markSaved(current.saved);
-    current.lastSent = "";
-  }
-}
-
-/**
  * Loads the last revision of the server, and moves the own changes that it does not have on
  * top of it, for example after a lost connection.
  */
@@ -602,18 +623,24 @@ async function catchUp(current: Session): Promise<void> {
   try {
     const plan = await current.client.plan(current.planId);
     if (session !== current || request !== current.loading) return;
-    if (revisionNumber(plan.revision) <= revisionNumber(current.revision)) return;
     // A drag keeps its copy of the building: the new revision waits for its end.
     while (doc.inTransaction) {
       await new Promise((done) => window.setTimeout(done, 200));
       if (session !== current) return;
     }
-    const next = parseBuilding(plan.data);
-    const local = rebase(current.saved, doc.building, next);
-    current.saved = next;
+    if (revisionNumber(plan.revision) <= revisionNumber(current.revision)) return;
+    const own = unsent(current);
     current.revision = plan.revision;
-    current.waiting.clear();
-    adopt(current, local);
+    if (
+      current.inflightRevision &&
+      revisionNumber(current.inflightRevision) <= revisionNumber(plan.revision)
+    ) {
+      current.inflight = null;
+    }
+    for (const key of current.waiting.keys()) {
+      if (revisionNumber(key) < revisionNumber(plan.revision)) current.waiting.delete(key);
+    }
+    adopt(current, parseBuilding(plan.data), own);
     storeCopy(current, plan.name, plan.data);
     app.fileName = `${plan.name}.grundriss`;
     updateTitle();
@@ -644,21 +671,13 @@ function knows(current: Session, revision: string): Promise<void> {
 
 /** Sends the own changes that the server does not have yet. */
 async function sendChanges(current: Session): Promise<void> {
-  const building = doc.building;
-  const patch = diffBuildings(current.saved, building);
+  const patch = diffBuildings(current.saved, doc.building);
   if (!patch) {
-    if (doc.dirty) doc.markSaved(building);
+    if (doc.dirty) doc.markSaved(doc.building);
     return;
   }
-  const text = JSON.stringify(patch);
-  // The server has the change, but with another result, for example after a repair: the plan
-  // of the server wins, so that the tab does not send the same change again and again.
-  if (text === current.lastSent) {
-    current.lastSent = "";
-    doc.applyRemote(current.saved);
-    doc.markSaved(current.saved);
-    return;
-  }
+  current.inflight = patch;
+  current.inflightRevision = "";
   try {
     const plan = await current.client.sendChanges(
       current.planId,
@@ -666,7 +685,7 @@ async function sendChanges(current: Session): Promise<void> {
       patch,
       projectName(),
     );
-    current.lastSent = text;
+    current.inflightRevision = plan.revision;
     current.failed = false;
     // The change comes back on the stream, with the changes of the others before it.
     await knows(current, plan.revision);
@@ -679,11 +698,25 @@ async function sendChanges(current: Session): Promise<void> {
       showStatus(t("Your link can only view this plan."), true);
       return;
     }
-    if (error instanceof ServerError && error.status === 400) return conflict(current);
+    if (error instanceof ServerError && error.status === 400) {
+      // The server does not take the change: the plan of the server wins, the history stays.
+      showStatus(
+        t("The server did not take your last change: {error}", { error: errorText(error) }),
+        true,
+      );
+      current.inflight = null;
+      await catchUp(current);
+      if (session === current) adopt(current, current.saved, undefined);
+      return;
+    }
     if (!current.failed) {
       showStatus(t("The server did not save the plan: {error}", { error: errorText(error) }), true);
     }
     current.failed = true;
+  } finally {
+    // Without an answer, the patch may or may not be on the server: its echo or a load of the
+    // whole plan decides. With the answer, `knows` waited for it.
+    if (session === current && current.inflightRevision) current.inflight = null;
   }
 }
 
@@ -692,7 +725,7 @@ async function setViewOnly(current: Session, value: boolean): Promise<void> {
   if (session !== current || !current.write || current.viewOnly === value) return;
   if (value) {
     doc.cancel();
-    await save();
+    while (session === current && !current.failed && unsentChanges(current)) await save();
   }
   if (session !== current) return;
   current.viewOnly = value;
@@ -1672,7 +1705,11 @@ export function setupRemote(): void {
     if (session) void shareDialog(session.client, session.planId, projectName());
     else uploadDialog(null);
   });
-  doc.subscribe(() => updateRemoteState());
+  doc.subscribe(() => {
+    updateRemoteState();
+    // The changes of the others that came during a drag.
+    if (session?.live && !doc.inTransaction && session.waiting.size) advance(session);
+  });
   window.addEventListener("pagehide", () => {
     if (session?.live) session.client.leaveOnUnload(session.planId);
     else if (session?.editing) session.client.releaseOnUnload(session.planId);

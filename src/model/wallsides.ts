@@ -122,10 +122,9 @@ export function lineSide(plan: Plan, line: WallLine, side: Side): SideRun | null
    * vertex where the walls stop, the length of the walls after the line, the half thickness
    * there, and the position t of the end of the face: + back into the line, − beyond the vertex.
    */
-  const follow = (vertexId: Id, out: Point, startHalf: number) => {
+  const follow = (vertexId: Id, out: Point, half: number) => {
     const seen = new Set(own);
     let extra = 0;
-    const half = startHalf;
     for (;;) {
       const vertex = getVertex(plan, vertexId);
       const u = { x: -out.x, y: -out.y };
@@ -183,7 +182,7 @@ export function sideRun(plan: Plan, wall: Wall, side: Side): SideRun | null {
 }
 
 /** True if the vertex is pinned. */
-export function isPinned(plan: Plan, id: Id): boolean {
+function isPinned(plan: Plan, id: Id): boolean {
   return plan.vertices.find((v) => v.id === id)?.pinned === true;
 }
 
@@ -545,7 +544,7 @@ export function canTurnWalls(plan: Plan, wallIds: Id[]): boolean {
  * corner or their middle. Their doors and windows go with them. It gives false if they cannot
  * turn, or if the turn is zero.
  */
-export function turnWalls(plan: Plan, wallIds: Id[], degrees: number): boolean {
+function turnWalls(plan: Plan, wallIds: Id[], degrees: number): boolean {
   const turn = turnCenter(plan, wallIds);
   if (!turn || Math.abs(degrees) < 1e-9) return false;
   // On the screen the y axis points down, so a turn counterclockwise is a negative angle.

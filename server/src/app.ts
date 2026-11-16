@@ -10,7 +10,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 import { planPreview } from "../../src/export/preview";
 import { parseBuilding, serializeBuilding } from "../../src/model/file";
-import { patchBuilding, type Patch } from "../../src/model/patch";
+import { diffBuildings, patchBuilding, type Patch } from "../../src/model/patch";
 import type { Building } from "../../src/model/types";
 import { Store, StoreError, type PlanRecord, type TokenRecord } from "./store";
 
@@ -89,6 +89,8 @@ export function createHandler(store: Store, config: Config) {
   const leases = new Map<string, Lease>();
   /** The open streams of the events of each plan. */
   const streams = new Map<string, Map<ServerResponse, TokenRecord>>();
+  /** The tab id of each stream that named one. */
+  const streamClients = new Map<ServerResponse, string>();
   /** The people who have each plan open, by the id of their tab. */
   const people = new Map<string, Map<string, Presence>>();
   /** The building of the last revision of each plan, for the patches. */
@@ -413,22 +415,26 @@ export function createHandler(store: Store, config: Config) {
         // The patch names the objects by id, so it applies to the last revision also when other
         // people saved after its parent. Their changes stay, and the later change of a field wins.
         const parent = latest.revisions.at(-1)!.id;
-        let building: Building;
+        const before = latestBuilding(latest);
         let data: string;
         try {
-          building = patchBuilding(latestBuilding(latest), patch);
-          data = serializeBuilding(building);
+          data = serializeBuilding(patchBuilding(before, patch));
         } catch {
           throw new StoreError(400, "The changes do not fit the plan.");
         }
-        const revision = store.saveRevision(token, latest, parent, checkPlan(data), value.name);
+        // The file is what counts: its reader corrects bad values, and the others get the change
+        // that the file has, not the patch of the client.
+        const building = parseBuilding(checkPlan(data));
+        const applied = diffBuildings(before, building);
+        if (!applied) return json(res, 200, planInfo(latest));
+        const revision = store.saveRevision(token, latest, parent, data, value.name);
         buildings.set(latest.id, { revision: revision.id, building });
         send(plan.id, "revision", {
           ...revision,
           name: latest.name,
           client,
           base: value.parent ?? null,
-          patch,
+          patch: applied,
         });
         return json(res, 200, planInfo(latest));
       }
@@ -438,7 +444,12 @@ export function createHandler(store: Store, config: Config) {
         const value = (await input()) as { name?: string; state?: unknown };
         if (JSON.stringify(value.state ?? null).length > MAX_PRESENCE)
           throw new StoreError(413, "The state is too large.");
+        // Old entries go first, so that ids without a stream do not stay.
+        present(plan.id);
         const set = people.get(plan.id) ?? new Map<string, Presence>();
+        // Each tab id belongs to the token that first used it: the ids are not secret.
+        if (set.get(client) && set.get(client)!.token.id !== token.id)
+          throw new StoreError(403, "Another person uses this id.");
         people.set(plan.id, set);
         const name = typeof value.name === "string" ? value.name.trim().slice(0, 40) : "";
         const person: Presence = {
@@ -504,6 +515,7 @@ export function createHandler(store: Store, config: Config) {
         const set = streams.get(plan.id) ?? new Map();
         set.set(res, token);
         streams.set(plan.id, set);
+        if (streamClient) streamClients.set(res, streamClient);
         const ping = setInterval(() => {
           if (!store.active(token)) return void res.end();
           res.write(": ping\n\n");
@@ -516,9 +528,15 @@ export function createHandler(store: Store, config: Config) {
         req.on("close", () => {
           clearInterval(ping);
           set.delete(res);
+          streamClients.delete(res);
           if (set.size === 0) streams.delete(plan.id);
-          // The tab is gone, or it opens a new stream at once, which sends its state again.
-          if (streamClient && people.get(plan.id)?.get(streamClient)?.token.id === token.id)
+          // The tab is gone. A tab that opened a new stream already stays.
+          const again = [...set.keys()].some((other) => streamClients.get(other) === streamClient);
+          if (
+            streamClient &&
+            !again &&
+            people.get(plan.id)?.get(streamClient)?.token.id === token.id
+          )
             leave(plan.id, streamClient);
         });
         return;

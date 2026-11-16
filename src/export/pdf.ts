@@ -191,10 +191,18 @@ export interface PlanOptions {
   furniture?: boolean;
 }
 
+/** The dimension lines of the walls of each plan, by the options: the box and the page use them. */
+const lengthCache = new WeakMap<Plan, Map<string, ReturnType<typeof wallDimensions>>>();
+
 /** The dimension lines of the walls that the options ask for. */
 function lengthDimensions(plan: Plan, options: PlanOptions) {
   const which = { inside: !!options.insideLengths, outside: !!options.outsideLengths };
-  return which.inside || which.outside ? wallDimensions(plan, which) : [];
+  if (!which.inside && !which.outside) return [];
+  const key = `${which.inside}${which.outside}`;
+  const known = lengthCache.get(plan) ?? new Map<string, ReturnType<typeof wallDimensions>>();
+  lengthCache.set(plan, known);
+  if (!known.has(key)) known.set(key, wallDimensions(plan, which));
+  return known.get(key)!;
 }
 
 /** The dimension lines of a page: the ones of the user, and the lengths of the walls. */

@@ -452,6 +452,44 @@ describe("live editing", () => {
     expect((await change(root, patch)).status).toBe(200);
   });
 
+  it("sends the change that the file has, and saves no revision without a change", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const watcher = await events(root, house.id, "watcher");
+    await watcher.next((e) => e.event === "hello");
+    const change = (patch: unknown) =>
+      call(root, `plans/${house.id}/changes`, {
+        method: "POST",
+        headers: { "X-Client": "a" },
+        json: { parent: "1", patch },
+      });
+    // The reader of the file replaces a bad value; the others get the value of the file.
+    expect((await change({ t: "keys", keys: { north: { t: "set", v: "x" } } })).status).toBe(200);
+    expect((await change({ t: "keys", keys: { north: { t: "set", v: 0 } } })).body.revision).toBe(
+      "1",
+    );
+    const sent = await change({ t: "keys", keys: { north: { t: "set", v: 30 } } });
+    expect(sent.body.revision).toBe("2");
+    const seen = await watcher.next((e) => e.event === "revision");
+    expect(seen.data.patch).toEqual({ t: "keys", keys: { north: { t: "set", v: 30 } } });
+    watcher.close();
+  });
+
+  it("keeps the presence of a tab to the token that has it", async () => {
+    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
+    const { body: link } = await call(root, "tokens", {
+      method: "POST",
+      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
+    });
+    const post = (token: string, name: string) =>
+      call(token, `plans/${house.id}/presence`, {
+        method: "POST",
+        headers: { "X-Client": "anna" },
+        json: { name, state: null },
+      });
+    expect((await post(root, "Anna")).status).toBe(200);
+    expect((await post(link.token, "Not Anna")).status).toBe(403);
+  });
+
   it("shows who has the plan open, also to readers, until the tab goes", async () => {
     const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
     const { body: link } = await call(root, "tokens", {

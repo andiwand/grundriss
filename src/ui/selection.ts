@@ -38,6 +38,7 @@ import {
   setPartLength,
   setSideLength,
   wallLine,
+  type WallLine,
   type MergeProblem,
 } from "../model/wallsides";
 import { editRoomInfo, findRoom, findRooms, netRoomArea, type Room } from "../model/rooms";
@@ -196,13 +197,9 @@ export function renderPanel(): void {
   if (editor.tool === "calibrate") return renderCalibration(plan);
   const items = editor.selection;
   if (items.length > 1 && items.every((item) => item.kind === "wall")) {
-    if (
-      wallLine(
-        plan,
-        items.map((item) => item.id),
-      )
-    )
-      return renderLine(plan, items);
+    const ids = items.map((item) => item.id);
+    const line = wallLine(plan, ids);
+    if (line) return renderLine(plan, ids, line);
   }
   if (items.length > 1) return renderMany(items);
   const selection = items[0];
@@ -712,8 +709,7 @@ function renderChimney(plan: Story, id: Id): void {
  * wall, and of each part. The plan shows the same lengths at the selection. A pinned corner
  * stays in its place, so a length with pinned corners at both ends cannot change.
  */
-function lengthFields(plan: Story, ids: Id[], rooms: Room[]): void {
-  const line = wallLine(plan, ids);
+function lengthFields(plan: Story, ids: Id[], rooms: Room[], line = wallLine(plan, ids)): void {
   if (!line) return;
   const can = lineCanChange(plan, line);
   let locked = false;
@@ -775,11 +771,9 @@ function lengthFields(plan: Story, ids: Id[], rooms: Room[]): void {
 }
 
 /** Walls in one line: their lengths like one wall, and a merge into one wall. */
-function renderLine(plan: Story, items: Item[]): void {
-  const ids = items.map((item) => item.id);
-  const line = wallLine(plan, ids)!;
+function renderLine(plan: Story, ids: Id[], line: WallLine): void {
   heading(t("{count} walls in a line", { count: ids.length }), "wall");
-  lengthFields(plan, ids, findRooms(plan));
+  lengthFields(plan, ids, findRooms(plan), line);
   directionFields(plan, ids);
   const problem = mergeProblem(plan, line);
   if (problem === null) {
