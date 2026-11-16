@@ -221,6 +221,10 @@ internet.
    Select walls in one straight line (Shift+click) to see and type their lengths like one wall,
    and the length of each part. A new length of a part moves the parts after it. If no other
    wall meets the line between its ends, **Merge into one wall** makes one wall of them.
+   **Direction** turns the selected wall, or the selected walls together: drag the line of the
+   small dial, or type the angle (0° to the right, 90° up). A wall has no front, so the angle is
+   from 0° to 180°. **Straighten the wall** turns it to the nearest of 0°, 90°, 180°, and 270°.
+   The walls turn around a pinned corner, or else around their middle.
    With more walls selected, **Align with the first wall** turns the others parallel or at a
    right angle to the wall that you selected first. Each wall keeps its length, and a pinned
    corner stays in its place.
@@ -253,9 +257,9 @@ internet.
     its floor, and a selected door or window to move it along its wall. The mouse over an object
     shows it in a color.
 16. Click **Save** to write the plan to a file. **Export** writes a PDF, an SVG, a DXF, or a glTF
-    model. The PDF asks for its options: **Wall lengths** adds the lengths of the walls (in each
-    room the length along its walls, from wall to wall, and outside the length of each facade),
-    and **Furniture** shows or hides the furniture.
+    model. The PDF asks for its options: **Inside lengths** adds the lengths in each room along
+    its walls, from wall to wall, **Outside lengths** adds the length of each facade, and
+    **Furniture** shows or hides the furniture.
 
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |

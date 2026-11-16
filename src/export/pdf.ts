@@ -183,20 +183,28 @@ function arcCurve(arc: Arc, map: (p: Point) => Point): string {
 
 /** The options of the plan pages. */
 export interface PlanOptions {
-  /** The lengths of the walls: on each face, inside the rooms and outside. */
-  wallLengths?: boolean;
+  /** The lengths of the walls in the rooms: along each face, from wall to wall. */
+  insideLengths?: boolean;
+  /** The lengths of the walls outside: along each facade. */
+  outsideLengths?: boolean;
   /** The furniture. Without this option, the pages show it. */
   furniture?: boolean;
 }
 
-/** The dimension lines of a page: the ones of the user, and else the lengths of the walls. */
+/** The dimension lines of the walls that the options ask for. */
+function lengthDimensions(plan: Plan, options: PlanOptions) {
+  const which = { inside: !!options.insideLengths, outside: !!options.outsideLengths };
+  return which.inside || which.outside ? wallDimensions(plan, which) : [];
+}
+
+/** The dimension lines of a page: the ones of the user, and the lengths of the walls. */
 function pageDimensions(plan: Plan, options: PlanOptions) {
-  return [...plan.dimensions, ...(options.wallLengths ? wallDimensions(plan) : [])];
+  return [...plan.dimensions, ...lengthDimensions(plan, options)];
 }
 
 /** The box around the plan, the chimneys that pass through it, and the dimension lines. */
 function storyBounds(plan: Plan, extras: StoryExtras, options: PlanOptions = {}): Box | null {
-  const dimensions = options.wallLengths ? wallDimensions(plan) : [];
+  const dimensions = lengthDimensions(plan, options);
   const plain = planBounds(plan);
   return grow(options.furniture === false ? plain : withFurniture(plain, plan), [
     ...(extras.through ?? []).flatMap((c) => chimneySymbol(c).outline),

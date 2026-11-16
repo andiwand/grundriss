@@ -1373,6 +1373,55 @@ body.wide:not(.compact) #panel > section .field.stacked {
   vector-effect: non-scaling-stroke;
 }
 
+/* The direction of walls in the panel: a small dial and a field in degrees. */
+.angle-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.angle-field > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.dial {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  touch-action: none;
+}
+
+.dial.enabled {
+  cursor: grab;
+}
+
+.dial.enabled:active {
+  cursor: grabbing;
+}
+
+.dial-ring {
+  fill: var(--surface-2);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.dial-mark {
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+}
+
+.dial-needle {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.dial-hub {
+  fill: var(--accent);
+}
+
 /* A pinned corner: it stays in its place when a length of a wall changes. */
 .overlay .pinned {
   fill: var(--paper);

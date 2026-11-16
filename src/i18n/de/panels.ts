@@ -165,6 +165,16 @@ export const PANELS: Record<string, string> = {
   "Merge into one wall": "Zu einer Wand verbinden",
   "Split into two walls": "In zwei Wände teilen",
   "Align with the first wall": "An der ersten Wand ausrichten",
+  Direction: "Richtung",
+  "Direction of the first wall": "Richtung der ersten Wand",
+  "Two or more corners are pinned, so the walls cannot turn.":
+    "Zwei oder mehr Ecken sind fixiert, daher können sich die Wände nicht drehen.",
+  "Straighten the wall": "Wand begradigen",
+  "Straighten the walls": "Wände begradigen",
+  "The walls turn together to the nearest of 0°, 90°, 180°, and 270°, around a pinned corner or their middle.":
+    "Die Wände drehen sich gemeinsam auf den nächsten Winkel von 0°, 90°, 180° und 270°, um eine fixierte Ecke oder ihre Mitte.",
+  "The wall turns to the nearest of 0°, 90°, 180°, and 270°, around a pinned corner or its middle.":
+    "Die Wand dreht sich auf den nächsten Winkel von 0°, 90°, 180° und 270°, um eine fixierte Ecke oder ihre Mitte.",
   "{count} walls did not turn, because both of their corners are pinned.":
     "{count} Wände haben sich nicht gedreht, weil beide Ecken fixiert sind.",
   "The other walls turn to be parallel or at a right angle to the wall that you selected first.":

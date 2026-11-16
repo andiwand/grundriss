@@ -158,7 +158,8 @@ test("exports a PDF with the wall lengths and without the furniture", async ({ p
   } else await page.locator("#export").click();
   await page.locator('[data-export="pdf"]').click();
   const dialog = page.locator("dialog[open]");
-  await dialog.getByText("Wall lengths", { exact: false }).click();
+  await dialog.getByText("Inside lengths", { exact: false }).click();
+  await dialog.getByText("Outside lengths", { exact: false }).click();
   await dialog.getByText("Furniture", { exact: true }).click();
   const download = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Export" }).click();

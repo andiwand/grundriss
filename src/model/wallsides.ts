@@ -17,6 +17,9 @@ import { findRooms, pointInPolygon } from "./rooms";
 import type { Dimension, Id, Plan, Point, Wall } from "./types";
 import { MAX_MITER, meet, STRAIGHT } from "./walljoin";
 
+/** A join of two walls at most 10° from a straight line is a small kink. */
+const NEAR_STRAIGHT = Math.cos((10 * Math.PI) / 180);
+
 /** A side of a wall: +1 is the side of `perpendicular(b - a)`, −1 the other side. */
 export type Side = 1 | -1;
 
@@ -149,6 +152,9 @@ export function lineSide(plan: Plan, line: WallLine, side: Side): SideRun | null
         vertexId = next.to.id;
         continue;
       }
+      // A wall that goes on almost straight, at a small kink: the faces meet far away if the
+      // walls differ in thickness. The face then ends at the vertex.
+      if (dot(next.u, u) < -NEAR_STRAIGHT) return { vertexId, extra, half, t: 0 };
       const n2 = turn > 0 ? { x: next.u.y, y: -next.u.x } : { x: -next.u.y, y: next.u.x };
       const t = meet(face, half, u, n2, next.half, next.u);
       const limit = MAX_MITER * Math.max(half, next.half) * 2;
@@ -390,9 +396,13 @@ export const OUTSIDE_OFFSET = 0.8;
  * The dimension lines of the walls for a drawing: on each face, from wall to wall. A face in a
  * room gets its line in the room, and a face outside gets its line outside. A face that more
  * walls share (a facade of walls in one line) gets one line, and so does a length that a room
- * has twice in the same direction. The lines are not in the plan.
+ * has twice in the same direction. The lines are not in the plan. `which` chooses the lines in
+ * the rooms, the lines outside, or both.
  */
-export function wallDimensions(plan: Plan): Dimension[] {
+export function wallDimensions(
+  plan: Plan,
+  which: { inside: boolean; outside: boolean } = { inside: true, outside: true },
+): Dimension[] {
   const rooms = findRooms(plan);
   const seen = new Set<string>();
   const dimensions: Dimension[] = [];
@@ -413,6 +423,7 @@ export function wallDimensions(plan: Plan): Dimension[] {
       };
       const room = rooms.find((r) => pointInPolygon(probe, r.polygon));
       const inside = room !== undefined;
+      if (inside ? !which.inside : !which.outside) continue;
       if (room) {
         // A room needs one line for each length in each direction: in a rectangular room the
         // opposite wall has the same length.
@@ -429,7 +440,41 @@ export function wallDimensions(plan: Plan): Dimension[] {
       });
     }
   }
-  return dimensions;
+  return withoutOverlaps(dimensions);
+}
+
+/**
+ * The dimension lines without the ones on top of a longer line: almost parallel, near it, and
+ * along a good part of it. This happens at walls with a small kink. One length is enough there.
+ */
+function withoutOverlaps(dimensions: Dimension[]): Dimension[] {
+  const lines = dimensions.map((dimension) => {
+    const d = unit(dimension.a, dimension.b);
+    const n = perpendicular(d);
+    const shift = (p: Point) => ({
+      x: p.x + n.x * dimension.offset,
+      y: p.y + n.y * dimension.offset,
+    });
+    return { dimension, p: shift(dimension.a), q: shift(dimension.b), d };
+  });
+  lines.sort((x, y) => span(y.p, y.q) - span(x.p, x.q));
+  const kept: typeof lines = [];
+  for (const line of lines) {
+    const length = span(line.p, line.q);
+    const covered = kept.some((other) => {
+      if (Math.abs(dot(line.d, other.d)) < NEAR_STRAIGHT) return false;
+      const middle = { x: (line.p.x + line.q.x) / 2, y: (line.p.y + line.q.y) / 2 };
+      const apart = Math.abs(cross(other.d, { x: middle.x - other.p.x, y: middle.y - other.p.y }));
+      if (apart > 0.4) return false;
+      // The part of this line along the other line.
+      const along = (p: Point) => dot(other.d, { x: p.x - other.p.x, y: p.y - other.p.y });
+      const [s, e] = [along(line.p), along(line.q)].sort((x, y) => x - y);
+      const overlap = Math.min(e, span(other.p, other.q)) - Math.max(s, 0);
+      return overlap > 0.2 * length;
+    });
+    if (!covered) kept.push(line);
+  }
+  return dimensions.filter((dimension) => kept.some((line) => line.dimension === dimension));
 }
 
 /**
@@ -479,4 +524,87 @@ export function alignWalls(plan: Plan, wallIds: Id[]): { stuck: Id[]; turned: nu
     aligned.add(wall.b);
   }
   return { stuck, turned };
+}
+
+/**
+ * The direction of the wall from `a` to `b` in degrees, as on a protractor: 0 to the right, 90
+ * up on the screen. The plan y points down, so the angle uses −y. 0 ≤ angle < 360.
+ */
+export function wallAngle(plan: Plan, wall: Wall): number {
+  const [a, b] = wallEnds(plan, wall);
+  const degrees = (Math.atan2(-(b.y - a.y), b.x - a.x) * 180) / Math.PI;
+  return ((degrees % 360) + 360) % 360;
+}
+
+/**
+ * The vertices of the walls and the point that they turn around: the pinned vertex, or else the
+ * middle of their box. Null if two or more of them are pinned, because then they cannot turn.
+ */
+function turnCenter(plan: Plan, wallIds: Id[]): { ids: Id[]; center: Point } | null {
+  const walls = wallIds.map((id) => plan.walls.find((w) => w.id === id)).filter((w) => !!w);
+  const ids = [...new Set((walls as Wall[]).flatMap((w) => [w.a, w.b]))];
+  if (ids.length === 0) return null;
+  const vertices = ids.map((id) => getVertex(plan, id));
+  const pinned = vertices.filter((v) => v.pinned);
+  if (pinned.length > 1) return null;
+  if (pinned.length === 1) return { ids, center: { x: pinned[0].x, y: pinned[0].y } };
+  const xs = vertices.map((v) => v.x);
+  const ys = vertices.map((v) => v.y);
+  return {
+    ids,
+    center: {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    },
+  };
+}
+
+/** True if the walls can turn: at most one of their corners is pinned. */
+export function canTurnWalls(plan: Plan, wallIds: Id[]): boolean {
+  return turnCenter(plan, wallIds) !== null;
+}
+
+/**
+ * Turns the walls together by `degrees` counterclockwise on the screen, around their pinned
+ * corner or their middle. Their doors and windows go with them. It gives false if they cannot
+ * turn, or if the turn is zero.
+ */
+export function turnWalls(plan: Plan, wallIds: Id[], degrees: number): boolean {
+  const turn = turnCenter(plan, wallIds);
+  if (!turn || Math.abs(degrees) < 1e-9) return false;
+  // On the screen the y axis points down, so a turn counterclockwise is a negative angle.
+  const angle = (-degrees * Math.PI) / 180;
+  const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+  for (const id of turn.ids) {
+    const v = getVertex(plan, id);
+    const [x, y] = [v.x - turn.center.x, v.y - turn.center.y];
+    v.x = turn.center.x + x * cos - y * sin;
+    v.y = turn.center.y + x * sin + y * cos;
+  }
+  return true;
+}
+
+/**
+ * Turns the walls together, so that the first wall has the direction `degrees`. A wall has no
+ * front, so 3° and 183° are the same direction: the walls take the smaller turn, at most 90°.
+ */
+export function setWallsAngle(plan: Plan, wallIds: Id[], degrees: number): boolean {
+  const first = plan.walls.find((w) => w.id === wallIds[0]);
+  if (!first) return false;
+  const change = degrees - wallAngle(plan, first);
+  // A turn of exactly 90° in either direction gives the same line: it turns counterclockwise.
+  return turnWalls(plan, wallIds, change - Math.round(change / 180 - 1e-9) * 180);
+}
+
+/** True if the angle is 0, 90, 180, or 270 degrees, within a small tolerance. */
+export function isStraight(degrees: number): boolean {
+  return Math.abs(degrees - Math.round(degrees / 90) * 90) < 0.01;
+}
+
+/** Turns the walls together, so that the first wall goes to the nearest of 0, 90, 180, 270°. */
+export function straightenWalls(plan: Plan, wallIds: Id[]): boolean {
+  const first = plan.walls.find((w) => w.id === wallIds[0]);
+  if (!first) return false;
+  const angle = wallAngle(plan, first);
+  return setWallsAngle(plan, wallIds, Math.round(angle / 90) * 90);
 }

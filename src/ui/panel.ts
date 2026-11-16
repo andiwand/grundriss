@@ -448,3 +448,94 @@ export function placeMenu(menu: HTMLElement, button: HTMLElement): void {
     : `${Math.max(8, rect.top - menu.offsetHeight - 6)}px`;
   menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
 }
+
+/** The dial snaps to 0, 90, 180, or 270 degrees within this angle. */
+const DIAL_SNAP = 4;
+
+/**
+ * A field for the direction of a line in degrees, as on a protractor: 0 to the right, 90 up. A
+ * line has no front, so the direction is from 0 to less than 180. A small dial shows the line,
+ * with marks at 0, 90, 180, and 270. A drag of the line changes the direction, and the plan
+ * changes when the user releases it. Near a mark, the line snaps to it.
+ */
+export function angleField(
+  text: string,
+  degrees: number,
+  change: (degrees: number) => void,
+  enabled = true,
+): void {
+  const box = document.createElement("span");
+  box.className = "angle-field";
+  const ns = "http://www.w3.org/2000/svg";
+  const make = (name: string, attributes: Record<string, string | number>, parent: Element) => {
+    const element = document.createElementNS(ns, name);
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+    parent.append(element);
+    return element;
+  };
+  const dial = make("svg", { viewBox: "-22 -22 44 44", class: "dial" }, box) as SVGSVGElement;
+  make("circle", { r: 20, class: "dial-ring" }, dial);
+  for (const mark of [0, 90, 180, 270]) {
+    const rad = (mark * Math.PI) / 180;
+    const [x, y] = [Math.cos(rad), -Math.sin(rad)];
+    make("line", { x1: x * 15, y1: y * 15, x2: x * 20, y2: y * 20, class: "dial-mark" }, dial);
+  }
+  const needle = make("line", { class: "dial-needle" }, dial);
+  make("circle", { r: 2.5, class: "dial-hub" }, dial);
+  const input = numberInput(Math.round(degrees * 10) / 10, { step: 1, min: -360, max: 720 });
+  const show = (value: number) => {
+    const rad = (value * Math.PI) / 180;
+    const [x, y] = [Math.cos(rad) * 16, -Math.sin(rad) * 16];
+    needle.setAttribute("x1", String(-x));
+    needle.setAttribute("y1", String(-y));
+    needle.setAttribute("x2", String(x));
+    needle.setAttribute("y2", String(y));
+  };
+  show(degrees);
+  const normal = (value: number) => ((value % 180) + 180) % 180;
+  input.disabled = !enabled;
+  input.addEventListener("change", () => {
+    if (Number.isFinite(input.valueAsNumber)) change(normal(input.valueAsNumber));
+  });
+  if (enabled) {
+    dial.classList.add("enabled");
+    let dragging = false;
+    let value = degrees;
+    const at = (event: PointerEvent) => {
+      const rect = dial.getBoundingClientRect();
+      const x = event.clientX - (rect.left + rect.width / 2);
+      const y = event.clientY - (rect.top + rect.height / 2);
+      const raw = normal((Math.atan2(-y, x) * 180) / Math.PI);
+      const mark = Math.round(raw / 90) * 90;
+      return normal(Math.abs(raw - mark) < DIAL_SNAP ? mark : Math.round(raw));
+    };
+    dial.addEventListener("pointerdown", (event) => {
+      // The row is a label: a click on the dial must not go to the field.
+      event.preventDefault();
+      dial.setPointerCapture(event.pointerId);
+      dragging = true;
+      value = at(event);
+      show(value);
+      input.value = String(value);
+    });
+    dial.addEventListener("pointermove", (event) => {
+      if (!dragging) return;
+      value = at(event);
+      show(value);
+      input.value = String(value);
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      change(value);
+    };
+    dial.addEventListener("pointerup", end);
+    dial.addEventListener("pointercancel", () => {
+      dragging = false;
+      show(degrees);
+      input.value = String(Math.round(degrees * 10) / 10);
+    });
+  }
+  box.append(withUnit(input, "°"));
+  section.append(fieldRow(text, box));
+}

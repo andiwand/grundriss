@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
 import {
   alignWalls,
+  canTurnWalls,
+  setWallsAngle,
+  straightenWalls,
+  wallAngle,
   lineCanChange,
   lineSide,
   mergeProblem,
@@ -285,6 +289,14 @@ describe("the dimension lines of the walls", () => {
     expect(outside).toEqual([3.2, 3.2, 4.2, 4.2]);
   });
 
+  it("gives only the inside lines or only the outside lines", () => {
+    const p = plan(room());
+    const inside = wallDimensions(p, { inside: true, outside: false });
+    const outside = wallDimensions(p, { inside: false, outside: true });
+    expect(inside.map((d) => Math.abs(d.offset))).toEqual([0.3, 0.3]);
+    expect(outside.map((d) => Math.abs(d.offset))).toEqual([0.8, 0.8, 0.8, 0.8]);
+  });
+
   it("puts the inside line in the room and the outside line outside", () => {
     const p = plan(room());
     for (const d of wallDimensions(p)) {
@@ -331,5 +343,110 @@ describe("the alignment of walls", () => {
     expect(alignWalls(p, ids)).toEqual({ stuck: [ids[2]], turned: 1 });
     expect(p.vertices[3]).toMatchObject({ x: 4, y: 2.2 });
     expect(p.vertices[2].y).toBeCloseTo(2.2);
+  });
+});
+
+describe("the turn of walls", () => {
+  it("gives the angle as on a protractor: 90 is up on the screen", () => {
+    const p = plan([
+      [P(0, 0), P(4, 0)],
+      [P(0, 0), P(0, -3)],
+    ]);
+    expect(wallAngle(p, p.walls[0])).toBeCloseTo(0);
+    expect(wallAngle(p, p.walls[1])).toBeCloseTo(90);
+  });
+
+  it("straightens a wall that is a little off, around its middle", () => {
+    const p = plan([[P(0, 0), P(4, 0.2)]]);
+    expect(straightenWalls(p, [p.walls[0].id])).toBe(true);
+    expect(wallAngle(p, p.walls[0]) % 360).toBeCloseTo(0);
+    // The middle stays, and the length stays.
+    expect(p.vertices[0].x + p.vertices[1].x).toBeCloseTo(4);
+    expect(p.vertices[0].y).toBeCloseTo(0.1);
+    expect(p.vertices[1].x - p.vertices[0].x).toBeCloseTo(Math.hypot(4, 0.2));
+  });
+
+  it("takes the smaller turn: a wall at 180° goes to 3° by a turn of 3°", () => {
+    const p = plan([[P(4, 0), P(0, 0)]]);
+    expect(wallAngle(p, p.walls[0])).toBeCloseTo(180);
+    setWallsAngle(p, [p.walls[0].id], 3);
+    expect(wallAngle(p, p.walls[0])).toBeCloseTo(183);
+  });
+
+  it("turns walls together around a pinned corner", () => {
+    const p = plan([
+      [P(0, 0), P(4, 0)],
+      [P(4, 0), P(4, 3)],
+    ]);
+    p.vertices[0].pinned = true;
+    expect(
+      setWallsAngle(
+        p,
+        p.walls.map((w) => w.id),
+        90,
+      ),
+    ).toBe(true);
+    expect(p.vertices[0]).toMatchObject({ x: 0, y: 0 });
+    expect(p.vertices[1].x).toBeCloseTo(0);
+    expect(p.vertices[1].y).toBeCloseTo(-4);
+    // The corner between the walls stays a right angle.
+    expect(p.vertices[2].x).toBeCloseTo(3);
+    expect(p.vertices[2].y).toBeCloseTo(-4);
+  });
+
+  it("does not turn walls with two pinned corners", () => {
+    const p = plan([[P(0, 0), P(4, 0.2)]]);
+    p.vertices[0].pinned = true;
+    p.vertices[1].pinned = true;
+    expect(canTurnWalls(p, [p.walls[0].id])).toBe(false);
+    expect(straightenWalls(p, [p.walls[0].id])).toBe(false);
+  });
+});
+
+describe("a wall with a small kink", () => {
+  // A room 6 × 4 m. The top wall has a kink at (3, 0.08), and its two parts differ in thickness.
+  const kinked = () => {
+    const p = emptyPlan();
+    const ids = [P(0, 0), P(3, 0.08), P(6, 0), P(6, 4), P(0, 4)].map((q) => addVertex(p, q).id);
+    const thickness = [0.3, 0.2, 0.3, 0.3, 0.3];
+    ids.forEach((id, i) =>
+      addWall(p, id, ids[(i + 1) % ids.length], { thickness: thickness[i], height: 2.5 }),
+    );
+    return p;
+  };
+
+  it("ends each face at the kink", () => {
+    const p = kinked();
+    for (const side of [1, -1] as const) {
+      const run = sideRun(p, p.walls[0], side)!;
+      expect(run.to.x).toBeCloseTo(3, 1);
+    }
+  });
+
+  it("keeps one of two lines on top of each other: a wall traced twice", () => {
+    const p = plan([
+      [P(0, 0), P(4, 0)],
+      [P(0, 0.25), P(4, 0.25)],
+    ]);
+    // The y of each dimension line. Without the filter, two pairs are only 0.25 m apart.
+    const ys = wallDimensions(p)
+      .map((d) => {
+        const dx = d.b.x - d.a.x;
+        return (d.a.y + d.b.y) / 2 + (Math.sign(dx) || 1) * d.offset;
+      })
+      .sort((a, b) => a - b);
+    expect(ys).toHaveLength(2);
+    expect(ys[1] - ys[0]).toBeGreaterThan(0.4);
+  });
+
+  it("has no dimension line on top of another one", () => {
+    const p = kinked();
+    const lines = wallDimensions(p);
+    for (const [i, x] of lines.entries()) {
+      for (const y of lines.slice(i + 1)) {
+        const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 0.05;
+        expect(same(x.a, y.a) && same(x.b, y.b)).toBe(false);
+      }
+    }
   });
 });

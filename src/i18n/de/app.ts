@@ -124,7 +124,8 @@ export const APP: Record<string, string> = {
   "A story under the lowest story": "Ein Geschoss unter dem untersten Geschoss",
   "Print at a standard scale": "Druck in einem Normmaßstab",
   "Export a PDF": "PDF exportieren",
-  "Wall lengths: inside the rooms and outside": "Wandlängen: in den Räumen und außen",
+  "Inside lengths: the walls of each room": "Innenmaße: die Wände jedes Raums",
+  "Outside lengths: the facades": "Außenmaße: die Fassaden",
   "The PDF has one page for each story, at a standard scale.":
     "Das PDF hat eine Seite pro Geschoss, in einem Normmaßstab.",
   "Vector drawing in meters": "Vektorzeichnung in Metern",

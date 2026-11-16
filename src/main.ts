@@ -603,15 +603,22 @@ const PDF_OPTIONS_KEY = "grundriss-pdf-options";
 /** The options of the PDF: the lengths of the walls and the furniture. It remembers them. */
 function pdfDialog(): void {
   closeMenus();
-  let options: PlanOptions = { wallLengths: false, furniture: true };
+  let options: PlanOptions = { insideLengths: false, outsideLengths: false, furniture: true };
   try {
-    options = { ...options, ...JSON.parse(localStorage.getItem(PDF_OPTIONS_KEY) ?? "{}") };
+    const stored = JSON.parse(localStorage.getItem(PDF_OPTIONS_KEY) ?? "{}");
+    // An older app stored one option for both lengths.
+    if (typeof stored.wallLengths === "boolean") {
+      stored.insideLengths = stored.outsideLengths = stored.wallLengths;
+      delete stored.wallLengths;
+    }
+    options = { ...options, ...stored };
   } catch {
     // Without the storage, the defaults apply.
   }
   const { element, body } = dialog(t("Export a PDF"));
   for (const [key, label] of [
-    ["wallLengths", t("Wall lengths: inside the rooms and outside")],
+    ["insideLengths", t("Inside lengths: the walls of each room")],
+    ["outsideLengths", t("Outside lengths: the facades")],
     ["furniture", t("Furniture")],
   ] as const) {
     body.append(checkbox(label, options[key] === true, (on) => (options[key] = on)).element);

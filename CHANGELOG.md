@@ -26,9 +26,16 @@ The changes that a user notices.
   with a chain of dimensions for the parts. Each part has its own length; a new length of a part
   moves the parts after it. If no other wall meets the line between its ends, the walls merge
   into one wall, with their doors and windows.
-- Export: the PDF has options. "Wall lengths" adds dimension lines for the walls: in each room
-  the length along its walls from wall to wall (once for each length and direction), and
-  outside the length of each facade. "Furniture" shows or hides the furniture.
+- Export: the PDF has options. "Inside lengths" adds dimension lines in each room along its
+  walls, from wall to wall (once for each length and direction). "Outside lengths" adds the
+  length of each facade outside. "Furniture" shows or hides the furniture.
+- 2D: the panel of one or more walls has their direction: a small dial to drag and a field in
+  degrees. "Straighten" turns them to the nearest of 0°, 90°, 180°, and 270°. More walls turn
+  together, around a pinned corner or their middle.
+- The length of a wall side at a small kink (up to 10°) ends at the kink. Before, if the two
+  walls differed in thickness, the face went on up to 0.9 m beyond the kink, so the lengths were
+  wrong and the dimension lines in the PDF lay on top of each other. The PDF also keeps only one
+  of two dimension lines that lie on top of each other.
 - 2D: "Align with the first wall" turns the selected walls parallel or at a right angle to the
   wall that was selected first. Each wall keeps its length, and a pinned corner stays.
 - 2D: the ends of a dimension line snap to the corners and the faces of the walls, so an inside

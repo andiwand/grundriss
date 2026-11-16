@@ -25,6 +25,11 @@ import {
 import { roomReadiness } from "../model/radiators";
 import {
   alignWalls,
+  canTurnWalls,
+  isStraight,
+  setWallsAngle,
+  straightenWalls,
+  wallAngle,
   lineCanChange,
   lineSide,
   mergeProblem,
@@ -68,6 +73,7 @@ import {
   field,
   heading,
   layerEditor,
+  angleField,
   numberField,
   paragraph,
   selectField,
@@ -285,9 +291,55 @@ function renderMany(items: Item[]): void {
       .filter(([count]) => count !== "0"),
   );
   paragraph(t("Drag the selection or use the arrow keys to move it."), "note");
+  if (items.every((item) => item.kind === "wall")) {
+    directionFields(
+      doc.plan,
+      items.map((item) => item.id),
+    );
+  }
   alignButton(items);
   button(t("Duplicate"), () => editor.duplicate(), { icon: "copy" });
   deleteButton();
+}
+
+/**
+ * The direction of the walls: a dial and a field in degrees, and a button that straightens them
+ * to 0, 90, 180, or 270 degrees. More walls turn together, with the direction of the first one.
+ * They turn around a pinned corner, or else around their middle.
+ */
+function directionFields(plan: Story, ids: Id[]): void {
+  const first = findWall(plan, ids[0]);
+  if (!first) return;
+  // A wall has no front: its direction is from 0° to less than 180°.
+  const angle = wallAngle(plan, first) % 180;
+  const can = canTurnWalls(plan, ids);
+  angleField(
+    ids.length > 1 ? t("Direction of the first wall") : t("Direction"),
+    angle,
+    (value) => doc.editIf((p) => setWallsAngle(p, ids, value)),
+    can,
+  );
+  if (!can) {
+    paragraph(t("Two or more corners are pinned, so the walls cannot turn."), "note");
+    return;
+  }
+  if (!isStraight(angle)) {
+    button(
+      ids.length > 1 ? t("Straighten the walls") : t("Straighten the wall"),
+      () => doc.editIf((p) => straightenWalls(p, ids)),
+      { icon: "rotate" },
+    );
+    paragraph(
+      ids.length > 1
+        ? t(
+            "The walls turn together to the nearest of 0°, 90°, 180°, and 270°, around a pinned corner or their middle.",
+          )
+        : t(
+            "The wall turns to the nearest of 0°, 90°, 180°, and 270°, around a pinned corner or its middle.",
+          ),
+      "note",
+    );
+  }
 }
 
 /**
@@ -734,6 +786,7 @@ function renderLine(plan: Story, items: Item[]): void {
   const line = wallLine(plan, ids)!;
   heading(t("{count} walls in a line", { count: ids.length }), "wall");
   lengthFields(plan, ids, findRooms(plan));
+  directionFields(plan, ids);
   const problem = mergeProblem(plan, line);
   if (problem === null) {
     button(
@@ -766,6 +819,7 @@ function renderWall(plan: Story, id: Id): void {
   heading(t("Wall"), "wall");
   const rooms = findRooms(plan);
   lengthFields(plan, [id], rooms);
+  directionFields(plan, [id]);
   // The two parts stay selected, so that the panel shows the length of each part.
   button(
     t("Split into two walls"),
