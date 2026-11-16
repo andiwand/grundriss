@@ -6,7 +6,7 @@
 // where a wall of the room on its other side meets it still has the full length of its room.
 
 import { perpendicular } from "./geometry";
-import { getVertex, wallEnds, wallMoveTargets } from "./plan";
+import { getVertex, wallEnds } from "./plan";
 import type { Id, Plan, Point, Wall } from "./types";
 import { MAX_MITER, meet, STRAIGHT } from "./walljoin";
 
@@ -98,54 +98,25 @@ export function sideRun(plan: Plan, wall: Wall, side: Side): SideRun | null {
 }
 
 /**
- * Moves the end of a line of walls by `change` meters in the direction `out`. A wall at a corner
- * there moves with it and keeps its angle, so a rectangular room stays rectangular. A free end
- * moves alone. It gives false for other ends, for example a T, because a move there bends a
- * wall.
- */
-function moveEnd(plan: Plan, vertexId: Id, out: Point, change: number): boolean {
-  const vertex = getVertex(plan, vertexId);
-  const walls = plan.walls.filter((w) => w.a === vertexId || w.b === vertexId);
-  const direction = (w: Wall) => unit(vertex, getVertex(plan, w.a === vertexId ? w.b : w.a));
-  const across = walls.filter((w) => Math.abs(dot(direction(w), out)) < STRAIGHT);
-  if (walls.length - across.length !== 1) return false;
-  if (across.length === 0) {
-    vertex.x += out.x * change;
-    vertex.y += out.y * change;
-    return true;
-  }
-  if (across.length !== 1) return false;
-  const [p, q] = wallEnds(plan, across[0]);
-  const s = dot(out, perpendicular(unit(p, q)));
-  // A corner at a very sharp angle moves too far.
-  if (Math.abs(s) < 0.2) return false;
-  const targets = wallMoveTargets(plan, across[0].id, [{ ...p }, { ...q }], change * s);
-  Object.assign(p, targets[0]);
-  Object.assign(q, targets[1]);
-  return true;
-}
-
-/**
- * Changes a length of the wall to `length`. `measure` gives the length now and the vertices at
- * its ends. The end after the vertex `b` moves along the wall, or else the end before `a`. A
- * join at an angle changes its miter when the end moves, so a few steps make the length exact.
+ * Changes a length of the wall to `length`. `measure` gives the length now and the vertex at its
+ * end after `b`. Only that vertex moves, along the wall. No other wall moves; the walls at the
+ * vertex follow it. A join at an angle changes its miter when the vertex moves, so a few steps
+ * make the length exact.
  */
 function setLength(
   plan: Plan,
   wall: Wall,
   length: number,
-  measure: () => { length: number; start: Id; end: Id } | null,
+  measure: () => { length: number; end: Id } | null,
 ): void {
   if (!(length > 0)) return;
   const [a, b] = wallEnds(plan, wall);
   const d = unit(a, b);
-  const back = { x: -d.x, y: -d.y };
   for (let step = 0; step < 8; step++) {
     const now = measure();
     if (!now) return;
     const change = length - now.length;
     if (Math.abs(change) < 1e-7) return;
-    if (moveEnd(plan, now.end, d, change) || moveEnd(plan, now.start, back, change)) continue;
     const end = getVertex(plan, now.end);
     end.x += d.x * change;
     end.y += d.y * change;
@@ -158,13 +129,13 @@ export function setSideLength(plan: Plan, wallId: Id, side: Side, length: number
   if (wall) setLength(plan, wall, length, () => sideRun(plan, wall, side));
 }
 
-/** Sets the length of the wall on its center line, the same way as the length of a side. */
+/** Sets the length of the wall on its center line. The vertex `b` moves along the wall. */
 export function setCenterLength(plan: Plan, wallId: Id, length: number): void {
   const wall = plan.walls.find((w) => w.id === wallId);
   if (!wall) return;
   setLength(plan, wall, length, () => {
     const [a, b] = wallEnds(plan, wall);
     const now = Math.hypot(b.x - a.x, b.y - a.y);
-    return now > 1e-9 ? { length: now, start: wall.a, end: wall.b } : null;
+    return now > 1e-9 ? { length: now, end: wall.b } : null;
   });
 }

@@ -214,8 +214,8 @@ internet.
    the selection.
    A selected wall shows its lengths: the length on the center line (the dash-dot line through
    the wall), and the length of each side from wall to wall (the thin line along the face). The
-   panel has the same lengths, and you can type each one. A new length moves the wall at the
-   end, and that wall keeps its angle, so a rectangular room stays rectangular.
+   panel has the same lengths, and you can type each one. A new length moves only the end
+   of the wall.
 8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
    the stories. The walls of the story below show as dashed lines, so you can draw on top of
    them. Each story has its own background.

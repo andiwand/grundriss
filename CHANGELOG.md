@@ -18,9 +18,7 @@ The changes that a user notices.
   walls. The dimension lines have their own tool, Dimension (L), in Structure.
 - 2D: a selected wall shows the length of each side from wall to wall, as a thin line along the
   face, and its length on the center line as a dash-dot line. The panel has the same three
-  lengths, and you can type each one. A new length, also on the center line, moves the wall at
-  the end, which keeps its angle. Before, the next wall turned, so a rectangular room lost its
-  right angles.
+  lengths, and you can type each one. A new length moves only the end of the wall.
 - The top bar and the tool palette get shorter in steps until they fit, also with the longer
   German texts: first the keys and the labels go, then only the icons stay. The palette can use
   the full width of the 2D view, and in a narrow view it gets a second row, so each tool stays

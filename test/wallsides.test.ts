@@ -70,17 +70,16 @@ describe("the length of a wall on each side", () => {
     const side = sideRun(p, p.walls[0], 1)!.length < 4 ? 1 : -1;
     setSideLength(p, p.walls[0].id, side, 3.5);
     expect(sideRun(p, p.walls[0], side)!.length).toBeCloseTo(3.5, 6);
-    // The right wall moves to x = 3.7 and stays upright, so the room stays rectangular.
-    const right = p.vertices.filter((v) => v.x > 1);
-    expect(right.map((v) => v.x)).toEqual([expect.closeTo(3.7, 6), expect.closeTo(3.7, 6)]);
+    // Only the corner at the end of the wall moves. The far corner of the right wall stays.
+    expect(p.vertices.filter((v) => v.y === 0).map((v) => v.x)).toEqual([0, expect.any(Number)]);
+    expect(p.vertices.some((v) => v.x === 4 && v.y === 3)).toBe(true);
   });
 
-  it("sets the length on the center line the same way", () => {
+  it("sets the length on the center line: only the vertex b moves", () => {
     const p = plan(room());
     setCenterLength(p, p.walls[0].id, 3);
-    // The right wall moves to x = 3 and stays upright.
-    const right = p.vertices.filter((v) => v.x > 1);
-    expect(right.map((v) => v.x)).toEqual([expect.closeTo(3, 6), expect.closeTo(3, 6)]);
+    expect(p.vertices[1]).toMatchObject({ x: 3, y: 0 });
+    expect(p.vertices[2]).toMatchObject({ x: 4, y: 3 });
   });
 
   it("does not change a wall to a length of zero", () => {
@@ -89,7 +88,7 @@ describe("the length of a wall on each side", () => {
     expect(p.vertices[1]).toMatchObject({ x: 4, y: 0 });
   });
 
-  it("moves the free end if the other end is at a T", () => {
+  it("keeps the T where a wall starts", () => {
     const p = plan([
       [P(0, 0), P(2, 0)],
       [P(2, 0), P(4, 0)],
