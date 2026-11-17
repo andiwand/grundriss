@@ -46,7 +46,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   GitHub Pages has no server. People log in with an account (a name and a password, scrypt in
   `server/src/store.ts`). A login makes a session: a random string in an httpOnly cookie, and the
   store keeps only its hash. A session has an account or none, and the grants of the share links
-  that the browser opened (`/s/<token>` adds the grant and goes on to `/app/?plan=<id>`). The
+  that the browser opened (`/s/<token>` adds the grant and goes on to `/app/plans/<id>`). The
   rights of a request are the rights of the account and of the grants (`Access`). The setup of
   the admin, an invite, and a new password are links for one use (`/setup/<code>`,
   `/invite/<code>`, `/reset/<code>`), which go on to the app with the code in the fragment. A

@@ -2,6 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- The address of a plan of a server is …/app/plans/<id>. The files of the app have relative
+         paths (./assets/…), so on that address they need the folder of the app as their base.
+         The script runs before the browser loads any file, also offline and on GitHub Pages. -->
+    <script>
+      {
+        const app = /^(.*\/)plans\/[^/]+\/?$/.exec(location.pathname);
+        if (app) {
+          const base = document.createElement("base");
+          base.href = app[1];
+          document.head.prepend(base);
+        }
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Grundriss</title>

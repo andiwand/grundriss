@@ -110,6 +110,7 @@ async function shared(planId: string, write = false) {
   const browser = new Browser();
   const opened = await browser.fetch(link.path);
   expect(opened.status).toBe(302);
+  expect(opened.headers.get("location")).toBe(`/app/plans/${planId}`);
   return { link, browser };
 }
 
@@ -120,6 +121,9 @@ describe("the paths of the server", () => {
     expect(await page.text()).toContain("Grundriss");
     expect(page.headers.get("referrer-policy")).toBe("no-referrer");
     expect((await admin.fetch("/app")).headers.get("location")).toBe("/app/");
+    // The address of a plan is the page of the app; the page sets the base of its files.
+    expect(await (await admin.fetch("/app/plans/abc")).text()).toContain("Grundriss");
+    expect((await admin.fetch("/app/plans/abc/x.js")).status).toBe(404);
     expect((await admin.fetch("/")).headers.get("location")).toBe("/app/");
     for (const path of ["/nothing", "/app/nothing.js", "/app/../data/data.yaml", "/s/nothing"]) {
       expect((await admin.fetch(path)).status).toBe(404);

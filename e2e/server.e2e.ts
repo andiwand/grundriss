@@ -73,8 +73,11 @@ test("shows two people who edit through share links, and their changes", async (
     const two = await b.newPage();
     await openServerApp(one, base, `/s/${first.token}`);
     await expect(one.locator("#remote-state")).toHaveText("Grundriss");
-    // The token is not in the address of the app.
-    expect(one.url()).not.toContain(first.token);
+    // The address names the plan, not the token, and a reload opens the plan again.
+    expect(one.url()).toBe(`${base}/app/plans/${plan.id}`);
+    await one.reload();
+    await expect(one.locator("#remote-state")).toHaveText("Grundriss");
+    await expect(one.locator("#plan-2d svg").first()).toBeVisible();
     await openServerApp(two, base, `/s/${second.token}`);
     // Both edit at once; each sees the other, by the label of the link.
     await expect(two.locator("#remote-state")).toHaveText("Grundriss");

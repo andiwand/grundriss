@@ -133,7 +133,7 @@ const dateText = (time: number) => new Date(time).toLocaleDateString(locale());
  */
 async function findServer(): Promise<ServerState | null> {
   if (!/^https?:$/.test(location.protocol)) return null;
-  const base = new URL("../", location.href).href.replace(/\/+$/, "");
+  const base = new URL("../", document.baseURI).href.replace(/\/+$/, "");
   let known: { base: string; name: string } | null = null;
   try {
     known = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? "null");
@@ -174,6 +174,13 @@ function remember(base: string, name: string): void {
     // Without the storage, the copies do not open without the network.
   }
 }
+
+/**
+ * The address of the app with a plan open (`/app/plans/<id>`), or of the app alone. The base of
+ * the document is the folder of the app, also on the address of a plan (index.html).
+ */
+const planAddress = (planId: string | null) =>
+  new URL(planId ? `plans/${encodeURIComponent(planId)}` : "./", document.baseURI).href;
 
 /** Takes a new session of the server, for example after a login, and shows it. */
 function setSession(info: SessionInfo): void {
@@ -310,7 +317,7 @@ export async function openRemote(planId: string): Promise<void> {
     doc.readOnly = !current.editing;
     storeCopy(current, plan.name, plan.data);
     // The address names the plan, for a bookmark.
-    history.replaceState(null, "", `${location.pathname}?plan=${encodeURIComponent(planId)}`);
+    history.replaceState(null, "", planAddress(planId));
     listen(current);
     startPresence({
       client: current.client,
@@ -693,7 +700,7 @@ function endSession(): void {
   current.events?.close();
   endPresence();
   doc.readOnly = false;
-  if (location.search) history.replaceState(null, "", location.pathname);
+  if (location.href !== planAddress(null)) history.replaceState(null, "", planAddress(null));
   updateRemoteState();
 }
 
@@ -1532,7 +1539,8 @@ function renderServers(list: HTMLElement): void {
   const state = server;
   if (!state) return;
   // The home page has no open plan, so the address names none.
-  if (!app.planOpen && location.search) history.replaceState(null, "", location.pathname);
+  if (!app.planOpen && location.href !== planAddress(null))
+    history.replaceState(null, "", planAddress(null));
   const me = account();
   const section = document.createElement("section");
   section.className = "project-section server-section";
@@ -1744,7 +1752,7 @@ function remoteCard(client: ServerClient, plan: RemotePlan): HTMLElement {
 
 /**
  * Sets the hooks of the projects and the buttons of the top bar, and finds the server of the app.
- * Then it opens a link for one use (`#invite=…`) or a plan (`?plan=…`) of the address.
+ * Then it opens a link for one use (`#invite=…`) or a plan (`/app/plans/<id>`) of the address.
  */
 export function setupRemote(): Promise<void> {
   remoteHooks.active = () => session !== null;
@@ -1791,9 +1799,9 @@ async function start(): Promise<void> {
   if (!server) return;
   updateRemoteState();
   const link = /#(setup|invite|reset)=([^&]+)/.exec(location.hash);
-  if (link) history.replaceState(null, "", `${location.pathname}${location.search}`);
-  const plan = new URLSearchParams(location.search).get("plan");
-  if (plan && !app.planOpen) await openRemote(plan);
+  if (link) history.replaceState(null, "", location.pathname);
+  const plan = /\/plans\/([^/]+)\/?$/.exec(location.pathname)?.[1];
+  if (plan && !app.planOpen) await openRemote(decodeURIComponent(plan));
   else if (!app.planOpen) renderHome();
   if (link) return linkDialog(link[1], decodeURIComponent(link[2]));
   // A browser without a login and without a shared plan: the login is the way in.

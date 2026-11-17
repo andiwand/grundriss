@@ -190,7 +190,7 @@ The addresses of the server:
 
 | Path                                               | What                                                        |
 | -------------------------------------------------- | ----------------------------------------------------------- |
-| `/app/`                                            | The app. `/app/?plan=<id>` opens a plan.                    |
+| `/app/`, `/app/plans/<id>`                         | The app, and the app with a plan open.                      |
 | `/api/…`                                           | The API. The session is an httpOnly cookie.                 |
 | `/s/<token>`                                       | A share link: the browser gets the plan, then opens it.     |
 | `/setup/<code>`, `/invite/<code>`, `/reset/<code>` | A link for one use: the app asks for a name and a password. |

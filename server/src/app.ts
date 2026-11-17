@@ -1,7 +1,7 @@
 // The HTTP handler of the server.
 //
 //   /                                    The website (with GRUNDRISS_PUBLIC_SITE), else to /app/.
-//   /app/                                The app. `?plan=<id>` opens a plan.
+//   /app/, /app/plans/<id>               The app, and the app with a plan open.
 //   /api/…                               The API, with the session in a cookie.
 //   /s/<token>                           A share link: adds its grant to the session of the
 //                                        browser (a new session if there is none), and goes on
@@ -199,7 +199,7 @@ export function createHandler(store: Store, config: Config) {
           access = store.access(sessionOf(res))!;
         }
         store.addGrant(access.session.id, share);
-        res.writeHead(302, { Location: `/app/?plan=${encodeURIComponent(share.planId)}` });
+        res.writeHead(302, { Location: `/app/plans/${encodeURIComponent(share.planId)}` });
         return void res.end();
       }
 
@@ -214,6 +214,9 @@ export function createHandler(store: Store, config: Config) {
         res.writeHead(301, { Location: "/app/" });
         return void res.end();
       }
+      // The address of a plan is the app itself: its page sets the base of its files.
+      if (parts[0] === "app" && parts[1] === "plans" && parts.length === 3)
+        return serveFile(res, config.appDir, []);
       if (url.pathname.startsWith("/app/")) return serveFile(res, config.appDir, parts.slice(1));
       if (config.siteDir) return serveFile(res, config.siteDir, parts);
       if (url.pathname === "/") {

@@ -103,7 +103,10 @@ beforeEach(async () => {
     clearTimeout,
     addEventListener: vi.fn(),
   });
-  vi.stubGlobal("document", { body: { classList: { toggle: vi.fn() } } });
+  vi.stubGlobal("document", {
+    body: { classList: { toggle: vi.fn() } },
+    baseURI: "https://server/app/",
+  });
   vi.stubGlobal("location", {
     protocol: "https:",
     href: "https://server/app/",
@@ -111,7 +114,12 @@ beforeEach(async () => {
     search: "",
     hash: "",
   });
-  vi.stubGlobal("history", { replaceState: vi.fn() });
+  // Like a browser, a new address changes the location.
+  vi.stubGlobal("history", {
+    replaceState: vi.fn((_state: unknown, _title: string, url: string) =>
+      Object.assign(location, { href: url, pathname: new URL(url).pathname }),
+    ),
+  });
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
   vi.stubGlobal(
     "confirm",
@@ -150,6 +158,17 @@ describe("remote sessions", () => {
     await openRemote("house");
     expect(remoteHooks.active()).toBe(true);
     expect(doc.readOnly).toBe(false);
+  });
+
+  it("names the open plan in the address, and the app without it", async () => {
+    await openRemote("house");
+    expect(history.replaceState).toHaveBeenLastCalledWith(
+      null,
+      "",
+      "https://server/app/plans/house",
+    );
+    remoteHooks.end();
+    expect(history.replaceState).toHaveBeenLastCalledWith(null, "", "https://server/app/");
   });
 
   it("opens a plan of a link that only views as read only", async () => {

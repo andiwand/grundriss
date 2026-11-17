@@ -14,7 +14,7 @@ The changes that a user notices.
   sets the defaults (`GRUNDRISS_QUOTA_MB`, `GRUNDRISS_MAX_PLANS`).
 - Server: a share link is now `/s/<token>`. It needs no account: the browser keeps the plan, and
   the Projects page shows it, also after a login. The app of the server is at `/app/`, and
-  `/app/?plan=<id>` opens a plan.
+  `/app/plans/<id>` opens a plan.
 - Server: the website of the server shows "Log in", or the name of the account.
 - Server: the app of a server talks only to its own server. The app on GitHub Pages has no
   server any more: "Connect a server", the mode `api`, `GRUNDRISS_ORIGINS`, `GRUNDRISS_APP_URL`,
