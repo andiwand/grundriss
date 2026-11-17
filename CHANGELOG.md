@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.5.2 – 2026-11-17
+
 - Server: on a phone, the mark of the server in the top bar shows the name of the server when the
   bar has room for it. Before, it showed only the cloud.
 
