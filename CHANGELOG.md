@@ -4,6 +4,10 @@ The changes that a user notices.
 
 ## Unreleased
 
+- The app has the look of the website: a floating top bar of glass, rounder panels with soft
+  shadows, and the blue-to-violet gradient of the brand on the main buttons and on the active
+  topic, view, tool, and story. The 3D view shows the building under a sky, on a disc of ground,
+  in the light of a sun with soft shadows, in place of the grid. The dark theme has a night sky.
 - 2D: **Roof** at the top of the list of the stories shows the roofs of all stories from above,
   with their faces, ridges, dormers, roof windows, and chimneys, and the walls of all stories as
   thin lines. A click selects a roof, and a drag or the arrow keys move it. A roof of a lower

@@ -1,7 +1,11 @@
 /* The theme. The dark theme replaces the same variables. */
 
 :root {
-  --bg: #eef0f3;
+  --bg: #e9edf5;
+  /* A faint light of the brand colors at the top of the page, like on the website. */
+  --bg-glow:
+    radial-gradient(1200px 500px at 20% -10%, rgb(124 92 255 / 0.1), transparent 60%),
+    radial-gradient(1000px 500px at 90% 0%, rgb(47 107 255 / 0.1), transparent 60%);
   --surface: #ffffff;
   --surface-2: #f5f6f8;
   --surface-glass: rgb(255 255 255 / 0.86);
@@ -16,9 +20,15 @@
   --danger: #d93b3b;
   --danger-soft: rgb(217 59 59 / 0.1);
   --good: #2b8a3e;
-  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 6px 20px rgb(16 24 40 / 0.08);
-  --radius: 12px;
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05), 0 10px 30px -12px rgb(30 45 90 / 0.18);
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 10px 28px -12px rgb(30 45 90 / 0.3);
+  --radius: 18px;
+  /* The brand gradient of the website: the main button, and the active topic, tool, and story. */
+  --brand-gradient: linear-gradient(135deg, #3d7bff 0%, #2f6bff 45%, #7c5cff 100%);
+  --brand-glow: 0 6px 16px -6px rgb(47 107 255 / 0.8);
+  /* The edge of a floating part: a thin light line, like glass. */
+  --glass-edge: rgb(255 255 255 / 0.8);
+  --topbar-bg: rgb(255 255 255 / 0.72);
   --radius-sm: 8px;
   /* The controls: buttons, fields, and lists (see "Controls" below and src/ui/controls.ts). */
   --control-height: 32px;
@@ -38,9 +48,10 @@
   --room-ink: #7a6542;
   --glass: #3a8ee6;
 
-  /* The 3D view. */
-  --scene-top: #f7f8fa;
-  --scene-bottom: #e3e7ed;
+  /* The 3D view: a sky, and a disc of ground under the building. */
+  --scene-top: #a9c0ea;
+  --scene-bottom: #f4e9df;
+  --scene-ground: rgb(255 255 255);
 
   font-family:
     Inter,
@@ -58,7 +69,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1218;
+    --bg: #0e121a;
+    --bg-glow:
+      radial-gradient(1200px 500px at 20% -10%, rgb(124 92 255 / 0.12), transparent 60%),
+      radial-gradient(1000px 500px at 90% 0%, rgb(47 107 255 / 0.1), transparent 60%);
     --surface: #171b23;
     --surface-2: #1e232d;
     --surface-glass: rgb(26 31 40 / 0.86);
@@ -72,8 +86,10 @@
     --danger: #ff6b6b;
     --danger-soft: rgb(255 107 107 / 0.12);
     --good: #69db7c;
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px -12px rgb(0 0 0 / 0.5);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -12px rgb(0 0 0 / 0.6);
+    --glass-edge: rgb(255 255 255 / 0.06);
+    --topbar-bg: rgb(26 31 40 / 0.72);
 
     --paper: #141821;
     --grid: #1d222c;
@@ -83,8 +99,9 @@
     --room-ink: #d6bf94;
     --glass: #6fb3ff;
 
-    --scene-top: #1b2029;
-    --scene-bottom: #10131a;
+    --scene-top: #16233d;
+    --scene-bottom: #2a2733;
+    --scene-ground: rgb(150 165 200 / 0.35);
   }
 }
 
@@ -101,7 +118,7 @@ body {
 body {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  background: var(--bg);
+  background: var(--bg-glow), var(--bg);
 }
 
 [hidden] {
@@ -148,14 +165,17 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  border-color: transparent;
+  background: var(--brand-gradient);
   color: var(--accent-ink);
+  box-shadow:
+    0 8px 22px -10px rgb(47 107 255 / 0.9),
+    inset 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
+  border-color: transparent;
+  background: var(--brand-gradient);
   filter: brightness(1.08);
 }
 
@@ -388,6 +408,16 @@ textarea.control {
   border-bottom: 1px solid var(--line);
 }
 
+/* Outside a phone, the top bar floats over the page as a bar of glass, like on the website. */
+body:not(.compact) .topbar {
+  margin: 10px 10px 0;
+  border: 1px solid var(--glass-edge);
+  border-radius: 16px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--shadow-sm);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -517,7 +547,7 @@ body:not(.no-plan) .brand:hover .brand-back {
   padding: 3px;
   gap: 2px;
   border-radius: 10px;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .segmented button {
@@ -535,9 +565,9 @@ body:not(.no-plan) .brand:hover .brand-back {
 
 .segmented button.active,
 .segmented button.active:hover {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: var(--brand-glow);
 }
 
 .segmented .icon {
@@ -602,8 +632,8 @@ body:not(.no-plan) #language {
   /* The width of the panel: medium for the renovation, which has more to show. */
   --panel-width: 272px;
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   min-height: 0;
   transition: grid-template-columns 200ms ease;
 }
@@ -676,7 +706,7 @@ body.wide .empty-state {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--radius);
   background: var(--paper);
   box-shadow: var(--shadow-sm);
@@ -741,8 +771,8 @@ body.wide .empty-state {
   max-width: calc(100% - 152px);
   overflow-x: auto;
   scrollbar-width: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--glass-edge);
+  border-radius: 14px;
   background: var(--surface-glass);
   backdrop-filter: blur(10px);
   box-shadow: var(--shadow);
@@ -764,8 +794,9 @@ body.wide .empty-state {
 
 .palette button.active,
 .palette button.active:hover:not(:disabled) {
-  background: var(--accent);
+  background: var(--brand-gradient);
   color: var(--accent-ink);
+  box-shadow: var(--brand-glow);
 }
 
 .palette button.active kbd {
@@ -871,7 +902,7 @@ body:not(.compact) .palette.fit-none .divider {
   gap: 12px;
   padding: 16px;
   overflow-y: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
@@ -918,16 +949,17 @@ body:not(.compact) .palette.fit-none .divider {
   align-items: center;
   gap: 8px;
   margin: 0 0 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink);
 }
 
 #panel h2 .icon {
   width: 15px;
   height: 15px;
+  color: var(--accent);
 }
 
 #panel p {
@@ -1745,7 +1777,7 @@ body.roof-level #tools .divider {
   gap: 2px;
   width: 168px;
   padding: 4px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--radius);
   background: var(--surface-glass);
   backdrop-filter: blur(10px);
@@ -1768,12 +1800,13 @@ body.roof-level #tools .divider {
 }
 
 .stories .story.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: var(--brand-glow);
 }
 
 .stories .story.active small {
-  color: var(--accent);
+  color: rgb(255 255 255 / 0.85);
 }
 
 .stories .ground {
@@ -2558,6 +2591,11 @@ body.overview #layers-button {
   letter-spacing: -0.01em;
 }
 
+#projects-title {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
 .home-note {
   margin: 0;
   padding: 0 20px 12px;
@@ -2606,6 +2644,7 @@ body.overview #layers-button {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: 0 10px 28px -16px rgb(30 45 90 / 0.3);
   overflow: hidden;
   transition:
     border-color 120ms,

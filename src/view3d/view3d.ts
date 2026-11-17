@@ -234,6 +234,15 @@ export class View3D {
   private camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
   private controls: OrbitControls;
   private content = new THREE.Group();
+  private sun = new THREE.DirectionalLight(0xffffff, 2.4);
+  private ground = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 96),
+    new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }),
+  );
+  private shadowLayer = new THREE.Mesh(
+    new THREE.PlaneGeometry(2, 2),
+    new THREE.ShadowMaterial({ opacity: 0.22 }),
+  );
   private north: THREE.Group;
   private frame = 0;
   private last: { building: Building; view: ViewOptions } | null = null;
@@ -246,19 +255,33 @@ export class View3D {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.append(this.renderer.domElement);
 
-    // The scene has no background color, so the CSS gradient of the pane shows through.
+    // The scene has no background color, so the CSS gradient of the pane (a sky) shows through.
+    // The light is the light of the website: a sun with soft shadows, and the sky from above.
     this.renderer.setClearColor(0x000000, 0);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2));
-    const sun = new THREE.DirectionalLight(0xffffff, 2);
-    sun.position.set(6, 12, 8);
-    this.scene.add(sun);
-    const grid = new THREE.GridHelper(60, 60, 0x8a93a3, 0x8a93a3);
-    grid.position.y = -0.002;
-    // A transparent grid shows on the light and on the dark theme.
-    const gridMaterial = grid.material as THREE.Material;
-    gridMaterial.transparent = true;
-    gridMaterial.opacity = 0.25;
-    this.scene.add(grid);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb0a48f, 1.4));
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.02;
+    this.scene.add(this.sun, this.sun.target);
+    // A disc of ground that fades out at its edge, and a layer that only takes the shadows.
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.position.y = -0.02;
+    this.ground.renderOrder = -1;
+    this.shadowLayer.rotation.x = -Math.PI / 2;
+    this.shadowLayer.position.y = -0.01;
+    this.shadowLayer.receiveShadow = true;
+    this.scene.add(this.ground, this.shadowLayer);
+    this.paintGround();
+    // The ground has the color of the theme (--scene-ground).
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => this.paintGround());
+    this.placeGround(new THREE.Box3(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5)));
     this.scene.add(this.content);
     this.north = northArrow();
     this.scene.add(this.north);
@@ -545,10 +568,70 @@ export class View3D {
           (roof.storyId === view.activeStoryId && !(active && storyAbove(building, active)))),
     );
     const layers = view.layers ?? ALL_LAYERS;
-    this.content.add(buildGroup(building, visible, roofs, layers, () => this.modelLoaded()));
+    const group = buildGroup(building, visible, roofs, layers, () => this.modelLoaded());
+    group.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+      }
+    });
+    this.content.add(group);
+    this.placeGround(new THREE.Box3().setFromObject(group));
     this.applyHighlight();
     this.placeNorth(building);
     this.requestRender();
+  }
+
+  /** The texture of the ground: the color of the theme, which fades out at the edge. */
+  private paintGround(): void {
+    const color =
+      getComputedStyle(this.container).getPropertyValue("--scene-ground").trim() ||
+      "rgb(255 255 255)";
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    const g = canvas.getContext("2d")!;
+    g.fillStyle = color;
+    const fill = g.fillStyle;
+    const gradient = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gradient.addColorStop(0, fill);
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = 1;
+    g.fillStyle = gradient;
+    g.fillRect(0, 0, 256, 256);
+    const material = this.ground.material as THREE.MeshBasicMaterial;
+    material.map?.dispose();
+    material.map = new THREE.CanvasTexture(canvas);
+    material.map.colorSpace = THREE.SRGBColorSpace;
+    material.opacity = 0.75;
+    material.needsUpdate = true;
+    this.requestRender();
+  }
+
+  /**
+   * The ground and the sun around the building: the disc is some times larger than the building,
+   * and the box of the shadows of the sun takes the whole building.
+   */
+  private placeGround(box: THREE.Box3): void {
+    if (box.isEmpty())
+      box = new THREE.Box3(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5));
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.z, 6);
+    this.ground.position.set(center.x, -0.02, center.z);
+    this.ground.scale.setScalar(radius * 2.2);
+    this.shadowLayer.position.set(center.x, -0.01, center.z);
+    this.shadowLayer.scale.setScalar(radius * 2.2);
+    // The sun comes from the south west and from high above, like in the website.
+    const reach = Math.max(size.x, size.y, size.z) + 10;
+    this.sun.position.set(center.x - 0.45 * reach, reach, center.z + 0.6 * reach);
+    this.sun.target.position.set(center.x, 0, center.z);
+    const shadow = this.sun.shadow.camera;
+    const half = Math.max(size.x, size.y, size.z) * 0.9 + 4;
+    shadow.left = shadow.bottom = -half;
+    shadow.right = shadow.top = half;
+    shadow.near = 0.5;
+    shadow.far = reach * 3;
+    shadow.updateProjectionMatrix();
   }
 
   /**
