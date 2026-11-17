@@ -67,6 +67,13 @@
   known limit; a tree that loses its leaves shades less in winter. The areas help to choose a
   mowing robot, with its zones; the floor area and no-go zones do the same for a vacuum robot.
   The plot and its content also give a site plan for a building permit.
+  - **Terraces first.** An outdoor surface belongs to a story: an outline that a new tool draws,
+    a kind (terrace, balcony, roof terrace, path, driveway), a height above the floor of the
+    story, and a thickness. The 2D plan hatches it, and the 3D view shows a slab. It is not
+    heated, so the energy leaves it out. The WoFlV living area counts a terrace or a balcony
+    with a quarter of its area (at most a half). Then a railing on chosen edges, for a balcony
+    or a roof terrace. A cover (a pergola, a carport) is a roof on the same story with its own
+    outline, on the roof level.
 - **The house as a library.** First a module that only builds the 3D scene from a building,
   without the editor: `buildGroup()` in `src/view3d/view3d.ts` today, mixed with the editing.
   Then a web component, `<grundriss-view src="house.grundriss">`, with a small API: lights on
