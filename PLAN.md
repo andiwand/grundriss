@@ -53,6 +53,66 @@
 
 ## Next
 
+- **Accounts.** The server gets accounts with a name and a password, without email. Accounts
+  replace the user tokens and the root token, because these give access without a password.
+  - At the first start, the log shows a setup link with a random string, like the root token
+    today. Only the person who can read the log can claim the server. The admin chooses a name
+    and a password there. The link ends after this one use, or after the time of the invite
+    links; while there is no admin, each start shows a new link.
+  - If the admin forgets the password, a restart with a setting (for example
+    `GRUNDRISS_ADMIN_RESET=true`) shows a new setup link in the log.
+  - The rights of a user token go to the account: make plans, see all plans, and make accounts.
+    The admin has all rights.
+  - The admin makes accounts with invite links. An invite link is like the setup link: a random
+    string for one person, which ends after one use or after a time that the server sets
+    (`GRUNDRISS_INVITE_HOURS`, for example 72). The admin chooses the rights and the space limit
+    of the new account. The person who opens the link chooses a name and a password.
+  - A session is a random string in an httpOnly cookie (`SameSite=Lax`), with an end date. The
+    server keeps only its hash. A session has an account or none, and a list of grants: one for
+    each share link that the browser opened. A login puts the account into the session. "Log
+    out" ends the session with its grants.
+  - Each request that changes something must have the `Origin` of the server, against CSRF.
+  - The server keeps only a hash of each password, with scrypt of `node:crypto` and a random salt.
+    The login has a rate limit.
+  - Without email, a forgotten password needs a reset link that the admin makes and sends. It
+    works and ends like an invite link.
+  - Each account has a space limit: its revisions and the images of its plans, each image
+    once. A save over the limit fails with a message in the app. The default comes from the
+    environment, and the admin can change it for each account. A limit for the number of plans
+    too.
+  - The share links of a plan stay and need no login. The owner of a plan makes them, with read
+    or write. A share link (`/s/<token>`) is only the way in: the server checks the token, adds a
+    grant for the plan to the session (it makes a session without an account if there is none),
+    and goes on to `/app/plans/<id>`. So the token is in the address only once. A grant refers to
+    its share link, so a removed link also ends its grants. A session has at most some dozen
+    grants.
+  - The rights of a request are the rights of the account and of the grants of the session.
+    The list of plans shows the own plans and the plans of the grants. A person who logged in
+    and opens a share link gets the plan too, with no second identity.
+  - The paths of the server:
+
+    | Path                                               | What                                                       |
+    | -------------------------------------------------- | ---------------------------------------------------------- |
+    | `/`                                                | The website (`GRUNDRISS_PUBLIC_SITE`), else to `/app/`.    |
+    | `/app/`                                            | The app. Without a session, it shows the login.            |
+    | `/app/plans/<id>`                                  | One plan, for a bookmark or a link to a person with login. |
+    | `/api/…`                                           | The one API, with the session cookie.                      |
+    | `/s/<token>`                                       | A share link: adds its grant, then goes to the plan.       |
+    | `/setup/<code>`, `/invite/<code>`, `/reset/<code>` | The links for one use: a form for a name and a password.   |
+
+  - The website of the server asks `/api/` for the session. If the server answers, the website
+    shows "Log in", or the name of the person and "Open the app". The website on GitHub Pages
+    gets no answer, so it shows only "Open the app", as today. "Sign up" comes with the open
+    sign-up.
+  - The app has one address on the server (`/app/`), and no mode with a token in the path.
+  - The app on GitHub Pages and the app of a server are separate. The app on GitHub Pages is
+    only local: no login, and no connection to a server. The app of a server talks only to its
+    own server, on the same address, so the session cookie is not a third-party cookie, and the
+    server needs no CORS. The mode `api`, `GRUNDRISS_ORIGINS`, and the list of the connections
+    to servers in the app go. A plan of the browser goes to a server as a file: save it in one
+    app, and open it in the other.
+  - The existing user tokens, the root token, and the share links need no migration: they stop
+    working.
 - Edits without the network: edit the offline copy of a server plan. The revision check then
   makes a copy if the server went on.
 - **The outdoor area.** The plot with its boundary, surfaces (lawn, paths, terrace, driveway),
@@ -78,9 +138,16 @@
 - **Live editing, offline.** Edits without the network that merge later. The patches by id
   already merge, so this needs a queue of patches in the browser, and a CRDT (Yjs or Automerge)
   only if the merge of the fields of one object is not enough.
-- **Accounts.** The tokens of the server are enough for a private server. A public service may need a
-  login: a link by email with a library in our server (for example Better Auth), or an external
-  service (Zitadel or Keycloak in the EU), never our own passwords.
+- **API tokens.** For clients that are not the app, for example a script, a backup, or the card
+  for Home Assistant: an account makes a token with its own rights and an end date. The client
+  sends it as `Authorization: Bearer …` to the same `/api/`, and the server takes the rights as
+  for a session.
+- **Open sign-up.** Everybody can make an account, with an email to confirm it and to reset the
+  password. The mail goes through SMTP (nodemailer), for example the mail server of stefl.at at
+  easyname. Against spam: a rate limit for each IP address, a proof of work that we host
+  ourselves (for example ALTCHA, no cookies and no Google), and the space limit of each account.
+  A person can delete the account with all its plans (GDPR). The website of the server then shows
+  "Sign up" next to "Log in".
 
 ## Business model
 
@@ -250,3 +317,6 @@ step.
 - **Snapshot undo.** The history keeps copies of the plan, not commands. That is simple and
   always correct for plans of this size.
 - **The background image is in the file** as a data URL, so that a file contains everything.
+- **YAML for the data of the server.** The accounts, the share links, and the plans are in one file,
+  `data.yaml`, because a server has few users and plans, and a person can read and fix the file.
+  The revisions stay JSON, because they are plan files.
