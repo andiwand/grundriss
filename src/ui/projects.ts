@@ -65,8 +65,6 @@ export const remoteHooks = {
   end: (): void => {},
   /** Adds the servers and their plans to the home page. */
   home: (_list: HTMLElement): void => {},
-  /** Opens the dialog to connect a server. */
-  connect: (): void => {},
   /** Opens the versions of the open plan of a server. */
   versions: (): void => {},
   /** True if a server can take plans of this browser. */
@@ -664,7 +662,6 @@ function fillProjects(projects: ProjectInfo[] | null): void {
     links.append(element);
     return element;
   };
-  link("cloud", t("Connect a server"), () => remoteHooks.connect());
   link("save", t("Back up all projects"), () => void backUpProjects());
   link("upload", t("Restore a backup"), () => void restoreProjects());
   list.append(links);

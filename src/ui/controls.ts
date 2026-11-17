@@ -77,10 +77,15 @@ function control<T extends HTMLElement>(element: T, options: InputOptions): T {
 /** A field for a text, an address, a date, or a search. */
 export function textInput(
   value = "",
-  options: InputOptions & { type?: "text" | "url" | "date" | "search" } = {},
+  options: InputOptions & {
+    type?: "text" | "url" | "date" | "search" | "password";
+    /** The hint for the password manager, for example "username" or "new-password". */
+    autocomplete?: string;
+  } = {},
 ): HTMLInputElement {
   const input = control(document.createElement("input"), options);
   input.type = options.type ?? "text";
+  if (options.autocomplete) input.autocomplete = options.autocomplete as AutoFill;
   input.value = value;
   if (options.placeholder) input.placeholder = options.placeholder;
   return input;

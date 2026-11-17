@@ -1,41 +1,34 @@
-// The app with a real Grundriss server (playwright.config.ts starts it in mode "api"): connect
-// with the root link, put a plan on the server, share it with a link to view, see the changes of
-// the editor in a second browser at once, and restore an old revision. Two people edit at the
-// same time, see each other, and one follows the other.
+// The app with a real Grundriss server (e2e/server-helpers.ts): the admin puts a plan on the
+// server, shares it with a link to view, a second browser sees the changes of the editor at once,
+// and the admin restores an old revision. Two people edit at the same time, see each other, and
+// one follows the other.
 
-import { expect, test } from "@playwright/test";
-import { SERVER_PORT, SERVER_ROOT } from "../playwright.config";
-import { isPhone, openApp } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import { openServerApp, startServer, stopServers } from "./server-helpers";
 
-// The tests share one server, and the first one counts its plans.
-test.describe.configure({ mode: "serial" });
+test.afterEach(stopServers);
 
-const SERVER = `http://localhost:${SERVER_PORT}`;
-
-/** The plans of the server, read with the root token. */
-const serverPlans = () =>
-  fetch(`${SERVER}/${SERVER_ROOT}/api/plans`).then(
-    (r) => r.json() as Promise<{ name: string; revision: string }[]>,
-  );
-
-test("shares a plan of a server, updates a viewer, and restores a revision", async ({
-  page,
-  browser,
-}) => {
-  await openApp(page);
-  test.skip(await isPhone(page), "The test deletes with the keyboard.");
-
-  // Connect with the root link.
-  await page.getByRole("button", { name: "Connect a server" }).click();
-  await page.locator(".app-dialog input").fill(`${SERVER}/${SERVER_ROOT}/`);
-  await page.locator(".app-dialog button.primary").click();
-  await expect(page.locator(".server-section")).toBeVisible();
-
-  // Put the example house on the server: it opens from there.
+/** Opens the app of the server as the admin, and puts the example house on the server. */
+async function putExample(page: Page) {
+  const server = await startServer();
+  await server.login(page.context());
+  await openServerApp(page, server.base);
+  await expect(page.locator(".server-head")).toContainText("Admin");
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await page.locator("#share").click();
   await page.locator(".app-dialog button.primary").click();
   await expect(page.locator("#remote-state")).toBeVisible();
+  return server;
+}
+
+test("shares a plan of a server, updates a viewer, and restores a revision", async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "The test deletes with the keyboard.");
+  // Put the example house on the server: it opens from there.
+  const { plans } = await putExample(page);
+  const serverPlans = async () => plans().map((p) => ({ revision: p.revisions.at(-1)!.id }));
   const walls = page.locator('#plan-2d [data-kind="wall"]');
   const count = await walls.count();
   expect(count).toBeGreaterThan(0);
@@ -45,8 +38,8 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await page.locator("#share").click();
   await page.locator(".app-dialog input").first().fill("Viewer");
   await page.locator(".app-dialog button.primary", { hasText: "Make a link" }).click();
-  const link = await page.locator(".new-link input").nth(1).inputValue();
-  expect(link).toContain("#connect=");
+  const link = await page.locator(".new-link input").inputValue();
+  expect(link).toMatch(/\/s\/[\w-]+$/);
   await page.keyboard.press("Escape");
   const context = await browser.newContext();
   const viewer = await context.newPage();
@@ -110,24 +103,22 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await context.close();
 });
 
-test("lets two people edit at once, see each other, and follow", async ({ page, browser }) => {
-  await openApp(page);
-  test.skip(await isPhone(page), "The test deletes with the keyboard and follows a mouse.");
-
-  await page.getByRole("button", { name: "Connect a server" }).click();
-  await page.locator(".app-dialog input").fill(`${SERVER}/${SERVER_ROOT}/`);
-  await page.locator(".app-dialog button.primary").click();
-  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
-  await page.locator("#share").click();
-  await page.locator(".app-dialog button.primary").click();
-  await expect(page.locator("#remote-state")).toBeVisible();
+test("lets two people edit at once, see each other, and follow", async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop",
+    "The test deletes with the keyboard and follows a mouse.",
+  );
+  await putExample(page);
 
   // A link to edit, for the second person.
   await page.locator("#share").click();
   await page.locator(".app-dialog input").first().fill("Ben");
   await page.locator(".app-dialog select").first().selectOption("write");
   await page.locator(".app-dialog button.primary", { hasText: "Make a link" }).click();
-  const link = await page.locator(".new-link input").nth(1).inputValue();
+  const link = await page.locator(".new-link input").inputValue();
   await page.keyboard.press("Escape");
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const ben = await context.newPage();

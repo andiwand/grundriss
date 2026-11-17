@@ -1,17 +1,14 @@
-// The plans on a Grundriss server (server/). The app keeps the addresses of its connections in
-// the browser. A connection is the address of a token: root and users see a list of plans, and
-// a plan token (a share link) gives one plan.
+// The plans on the Grundriss server that serves this app (server/). The app of a server is at
+// `/app/`, and the API at `/api/`; the app on GitHub Pages has no server, so this module does
+// nothing there. A person logs in with an account, or opens a share link (`/s/<token>`), which
+// adds the plan of the link to the session of the browser.
 //
-// An open plan of a server is a session. All people whose token can write edit at the same time
-// ("live"): the app sends the changes of its user as a patch (`src/model/patch.ts`) after a short
+// An open plan of the server is a session. All people who can edit the plan edit it at the same
+// time: the app sends the changes of its user as a patch (`src/model/patch.ts`) after a short
 // wait, and the server applies the patches in their order and sends each one to the other tabs
 // on a stream. Each tab applies them to the last revision that it knows (`saved`) and moves its
 // own changes that the server does not have yet on top (`adopt`). A person can also only view,
 // and follow another person (`presence.ts`).
-//
-// An older server has no patches: then the app takes the edit lease of the plan, and only the tab
-// with the lease edits and saves the whole plan. A save starts from the last known revision, so
-// it never replaces a revision that this tab did not see.
 
 import { planPreview } from "../export/preview";
 import { locale, t } from "../i18n";
@@ -26,16 +23,18 @@ import {
 import { icon, type IconName } from "../icons";
 import {
   API_VERSION,
-  normalizeAddress,
   ServerClient,
   ServerError,
-  type Me,
+  type Account,
+  type Invite,
   type Person,
   type RemotePlan,
-  type TokenInfo,
+  type SessionInfo,
+  type Share,
 } from "../io/server";
 import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
+import { fmt } from "../model/format";
 import { diffBuildings, patchBuilding, type Patch } from "../model/patch";
 import type { Building } from "../model/types";
 import { $, app, doc, shell, showStatus } from "./context";
@@ -50,7 +49,15 @@ import {
   personSeen,
   startPresence,
 } from "./presence";
-import { checkbox, iconButton, pair, radioGroup, selectInput, textInput } from "./controls";
+import {
+  checkbox,
+  iconButton,
+  numberInput,
+  pair,
+  radioGroup,
+  selectInput,
+  textInput,
+} from "./controls";
 import {
   addProject,
   ago,
@@ -66,147 +73,140 @@ import {
   updateTitle,
 } from "./projects";
 
-// ----- Connections -----
+// ----- The server -----
 
-/** A connection of the browser: the address of a token, and what the server told about it. */
-interface Connection {
-  address: string;
-  /** The name of the server. */
+/** The server of this app: its client, and the session of this browser (null without network). */
+interface ServerState {
+  client: ServerClient;
+  info: SessionInfo | null;
+  /** The name of the server, also without the network. */
   name: string;
-  token: TokenInfo | null;
 }
 
-const STORE_KEY = "grundriss-servers";
-/** The lease lasts 60 s on the server; the tab renews it well before. */
-const RENEW = 20_000;
+/** The server that this app knew the last time, for the copies of its plans without network. */
+const KNOWN_KEY = "grundriss-server";
 
-function connections(): Connection[] {
-  try {
-    const list = JSON.parse(localStorage.getItem(STORE_KEY) ?? "[]") as Connection[];
-    return Array.isArray(list) ? list.filter((c) => typeof c.address === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveConnections(list: Connection[]): void {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(list));
-  } catch {
-    showStatus(t("The browser cannot keep the connection."), true);
-  }
-}
-
-/**
- * The address of a token from a text that the user pastes: the address itself, with or without
- * a slash at the end, or a link of this app with `#connect=` and the address.
- */
-export function parseAddress(text: string): string {
-  let value = text.trim();
-  const fragment = /#connect=([^&]+)/.exec(value);
-  if (fragment) value = decodeURIComponent(fragment[1]);
-  value = normalizeAddress(value).replace(/\/api(\/.*)?$/, "");
-  const url = new URL(value);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Not a web address.");
-  return value;
-}
-
-/** Checks the address with the server, and keeps it. */
-async function addConnection(address: string): Promise<{ connection: Connection; me: Me }> {
-  const me = await new ServerClient(address).me();
-  if (me.api !== API_VERSION) {
-    throw new Error(
-      t(
-        "The server has another version of the API ({server}; the app knows {app}). Update the older one.",
-        {
-          server: me.api,
-          app: API_VERSION,
-        },
-      ),
-    );
-  }
-  const connection: Connection = { address, name: me.server, token: me.token };
-  const list = connections().filter((c) => c.address !== address);
-  list.push(connection);
-  saveConnections(list);
-  return { connection, me };
-}
-
-function removeConnection(address: string): void {
-  saveConnections(connections().filter((c) => c.address !== address));
-  // The copies of its plans belong to the connection.
-  void removeRemoteCopies(address).catch(() => undefined);
-}
-
-/** Updates the stored name and rights of a connection after a call of `me`. */
-function refreshConnection(address: string, me: Me): void {
-  const list = connections();
-  const connection = list.find((c) => c.address === address);
-  if (!connection) return;
-  connection.name = me.server;
-  connection.token = me.token;
-  saveConnections(list);
-}
+let server: ServerState | null = null;
 
 const errorText = (error: unknown) => (error instanceof Error ? t(error.message) : String(error));
 
-/** The text of the rights of a token, for the lists. */
-function rightsText(token: TokenInfo): string {
-  const parts = [token.write ? t("can edit") : t("can view")];
-  // A share link in the list of all links names its plan.
-  if (token.kind === "plan" && token.planName) {
-    parts.unshift(t("plan {name}", { name: token.planName }));
-  }
-  if (token.kind === "user") {
-    if (token.createPlans) parts.push(t("makes plans"));
-    if (token.seeAll) parts.push(t("sees all plans"));
-    if (token.makeUsers) parts.push(t("adds users"));
-  }
-  parts.push(
-    token.expires
-      ? t("until {date}", { date: new Date(token.expires).toLocaleDateString(locale()) })
-      : t("no end"),
-  );
-  return parts.join(" · ");
+const account = (): Account | null => server?.info?.account ?? null;
+const canCreate = () => {
+  const a = account();
+  return !!a && (a.admin || a.createPlans);
+};
+
+/** The size of the plans in MB, for the space of an account. */
+const megabytes = (bytes: number) => {
+  const mb = bytes / 1_048_576;
+  return `${fmt(mb, mb >= 10 || Number.isInteger(mb) ? 0 : 1)} MB`;
+};
+
+/** The space and the plans of an account: "12.5 MB of 500 MB, 3 of 100 plans". */
+function usageText(a: Account): string {
+  const space =
+    a.limit > 0
+      ? t("{used} of {limit}", { used: megabytes(a.used), limit: megabytes(a.limit) })
+      : megabytes(a.used);
+  const plans =
+    a.planLimit > 0
+      ? t("{count} of {limit} plans", { count: a.plans, limit: a.planLimit })
+      : t("{count} plans", { count: a.plans });
+  return `${space} · ${plans}`;
 }
 
-const kindText = (token: TokenInfo | null) =>
-  !token
-    ? ""
-    : token.kind === "root"
-      ? t("Root")
-      : token.kind === "plan"
-        ? t("Shared plan")
-        : token.label;
+/** The text of the rights of an account or an invite, for the lists. */
+function rightsText(rights: { createPlans: boolean; seeAll: boolean; makeAccounts: boolean }) {
+  const parts: string[] = [];
+  if (rights.createPlans) parts.push(t("makes plans"));
+  if (rights.seeAll) parts.push(t("sees all plans"));
+  if (rights.makeAccounts) parts.push(t("invites"));
+  return parts.join(" · ") || t("only shared plans");
+}
+
+const dateText = (time: number) => new Date(time).toLocaleDateString(locale());
+
+/**
+ * Finds the server of this app: the app at `/app/` asks `/api/session`. The app on GitHub Pages
+ * and the dev server get no JSON there, so they have no server. Without the network, the server
+ * that this app knew stays, so its copies open.
+ */
+async function findServer(): Promise<ServerState | null> {
+  if (!/^https?:$/.test(location.protocol)) return null;
+  const base = new URL("../", location.href).href.replace(/\/+$/, "");
+  let known: { base: string; name: string } | null = null;
+  try {
+    known = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? "null");
+  } catch {
+    // Without the storage, there are no copies to show either.
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${base}/api/session`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+  } catch {
+    return known?.base === base
+      ? { client: new ServerClient(base), info: null, name: known.name }
+      : null;
+  }
+  if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return null;
+  const info = (await response.json()) as SessionInfo;
+  if (info.api !== API_VERSION) {
+    showStatus(
+      t(
+        "The server has another version of the API ({server}; the app knows {app}). Load the page again.",
+        { server: info.api, app: API_VERSION },
+      ),
+      true,
+    );
+    return null;
+  }
+  remember(base, info.server);
+  return { client: new ServerClient(base), info, name: info.server };
+}
+
+function remember(base: string, name: string): void {
+  try {
+    localStorage.setItem(KNOWN_KEY, JSON.stringify({ base, name }));
+  } catch {
+    // Without the storage, the copies do not open without the network.
+  }
+}
+
+/** Takes a new session of the server, for example after a login, and shows it. */
+function setSession(info: SessionInfo): void {
+  if (!server) return;
+  server.info = info;
+  server.name = info.server;
+  remember(server.client.base, info.server);
+  if (!app.planOpen) renderHome();
+  updateRemoteState();
+}
 
 // ----- The session of an open plan -----
 
 interface Session {
-  address: string;
   client: ServerClient;
   planId: string;
   serverName: string;
-  me: Me;
   revision: string;
-  /** True if the token can write the plan. */
+  /** True if this person can edit the plan. */
   write: boolean;
-  /** True while this tab has the lease. */
+  /** True if this person can make share links of the plan. */
+  share: boolean;
+  /** True while this tab edits: it can write, and does not only view. */
   editing: boolean;
-  /** The person who has the lease, if another tab has it. */
-  holder: string | null;
   /** The building of the last revision of the server. */
   saved: Building;
   saving: Promise<void> | null;
   failed: boolean;
   events: EventSource | null;
-  renew: number;
-  taking: Promise<void> | null;
   loading: number;
   /** True for the copy of the browser, without the network: only to view. */
   offline: boolean;
-  /** True if the server merges the changes of many people. Else the lease decides who edits. */
-  live: boolean;
-  /** True if the user chose to only view the plan, although the token can write. */
+  /** True if the user chose to only view the plan, although the person can edit it. */
   viewOnly: boolean;
   /** The changes of the server that wait for the ones before them, by their parent revision. */
   waiting: Map<string, Change>;
@@ -231,7 +231,7 @@ interface Change {
   parent: string | null;
   client: string;
   name?: string;
-  /** The patch, or nothing for a save of the whole plan, for example by an older app. */
+  /** The patch, or nothing for a save of the whole plan. */
   patch?: Patch;
 }
 
@@ -241,7 +241,7 @@ const revisionNumber = (id: string | null) => Number(id ?? 0);
 /** Keeps the state of the plan in the browser, for use without the network. */
 function storeCopy(current: Session, name: string, data: string): void {
   void saveRemoteCopy(
-    current.address,
+    current.client.base,
     current.planId,
     name,
     current.revision,
@@ -267,42 +267,37 @@ const unsaved = (current: Session) => doc.building !== current.saved || current.
 const unsentChanges = (current: Session) =>
   doc.building !== current.saved && !!diffBuildings(current.saved, doc.building);
 
-/** Opens a plan of a server, and starts its session. */
-export async function openRemote(address: string, planId: string): Promise<void> {
+/** Opens a plan of the server, and starts its session. */
+export async function openRemote(planId: string): Promise<void> {
+  const state = server;
+  if (!state) return;
   const request = ++opening;
   if (!(await confirmDiscard())) return;
   if (request !== opening) return;
   const building = doc.building;
   const generation = doc.generation;
-  // Each session owns its lease, so an old release cannot release a new session's lease.
-  const client = new ServerClient(address, newProjectId());
+  // Each session has its own id of the tab, so an old stream cannot change a new session.
+  const client = new ServerClient(state.client.base, newProjectId());
   try {
-    const [me, plan] = await Promise.all([client.me(), client.plan(planId)]);
+    const plan = await client.plan(planId);
     if (request !== opening || generation !== doc.generation || building !== doc.building) return;
-    refreshConnection(address, me);
     const parsed = parseBuilding(plan.data);
     endSession();
-    doc.readOnly = true;
     load(parsed, `${plan.name}.grundriss`, null, "remote");
     const current: Session = {
-      address,
       client,
       planId,
-      serverName: me.server,
-      me,
+      serverName: state.name,
       revision: plan.revision,
       write: plan.write,
-      editing: false,
-      holder: plan.lease?.holder ?? null,
+      share: plan.share,
+      editing: plan.write,
       saved: doc.building,
       saving: null,
       failed: false,
       events: null,
-      renew: 0,
-      taking: null,
       loading: 0,
       offline: false,
-      live: !!me.live,
       viewOnly: false,
       waiting: new Map(),
       waiters: [],
@@ -312,87 +307,64 @@ export async function openRemote(address: string, planId: string): Promise<void>
       copyTimer: 0,
     };
     session = current;
+    doc.readOnly = !current.editing;
     storeCopy(current, plan.name, plan.data);
-    if (current.live) {
-      current.editing = current.write;
-      current.holder = null;
-      doc.readOnly = !current.editing;
-    } else {
-      if (current.write) current.renew = window.setInterval(() => void renewLease(current), RENEW);
-      await startEditing(current);
-    }
-    if (session !== current) return;
+    // The address names the plan, for a bookmark.
+    history.replaceState(null, "", `${location.pathname}?plan=${encodeURIComponent(planId)}`);
     listen(current);
-    if (current.live) {
-      startPresence({
-        client: current.client,
-        planId: current.planId,
-        me: current.me,
-        write: current.write,
-        viewOnly: () => current.viewOnly,
-        setViewOnly: (value) => setViewOnly(current, value),
-      });
-    }
+    startPresence({
+      client: current.client,
+      planId: current.planId,
+      name: account()?.name ?? "",
+      write: current.write,
+      viewOnly: () => current.viewOnly,
+      setViewOnly: (value) => setViewOnly(current, value),
+    });
     showStatus(
-      session.editing
+      current.editing
         ? t('Opened "{name}" on {server}. Each change saves to the server.', {
             name: plan.name,
-            server: me.server,
+            server: state.name,
           })
-        : session.holder
-          ? t("{holder} edits this plan. You see it, and it updates itself.", {
-              holder: session.holder,
-            })
-          : t('Opened "{name}" on {server} to view.', { name: plan.name, server: me.server }),
+        : t('Opened "{name}" on {server} to view.', { name: plan.name, server: state.name }),
     );
     shell.enterPlan("structure");
   } catch (error) {
     // Without the network, the copy of the browser opens to view.
     if (error instanceof ServerError && error.status === 0 && request === opening) {
-      if (await openOffline(address, planId, client)) return;
+      if (await openOffline(planId, client)) return;
     }
     showStatus(errorText(error), true);
+    // A plan that this browser cannot open: perhaps after a login.
+    if (error instanceof ServerError && (error.status === 401 || error.status === 404)) {
+      if (!account()) loginDialog();
+    }
   }
   updateRemoteState();
 }
 
-/** Opens the copy of a plan of a server that the browser keeps, only to view. */
-async function openOffline(
-  address: string,
-  planId: string,
-  client: ServerClient,
-): Promise<boolean> {
-  const copy = await loadRemoteCopy(address, planId).catch(() => undefined);
+/** Opens the copy of a plan of the server that the browser keeps, only to view. */
+async function openOffline(planId: string, client: ServerClient): Promise<boolean> {
+  const copy = await loadRemoteCopy(client.base, planId).catch(() => undefined);
   if (!copy) return false;
-  const connection = connections().find((c) => c.address === address);
+  const name = server?.name ?? "";
   endSession();
   doc.readOnly = true;
   load(parseBuilding(copy.data), `${copy.name}.grundriss`, null, "remote");
   session = {
-    address,
     client,
     planId,
-    serverName: connection?.name ?? "",
-    me: {
-      api: API_VERSION,
-      version: "",
-      server: connection?.name ?? "",
-      mode: "full",
-      token: connection?.token ?? ({ kind: "plan", write: false } as TokenInfo),
-    },
+    serverName: name,
     revision: copy.revision,
     write: false,
+    share: false,
     editing: false,
-    holder: null,
     saved: doc.building,
     saving: null,
     failed: false,
     events: null,
-    renew: 0,
-    taking: null,
     loading: 0,
     offline: true,
-    live: false,
     viewOnly: false,
     waiting: new Map(),
     waiters: [],
@@ -403,7 +375,7 @@ async function openOffline(
   };
   showStatus(
     t("No connection to {server}. You see the copy of this browser from {time}, only to view.", {
-      server: connection?.name ?? "",
+      server: name,
       time: ago(copy.time),
     }),
     true,
@@ -413,124 +385,36 @@ async function openOffline(
   return true;
 }
 
-/** Takes the edit lease, if the token can write and nobody else has it. */
-async function startEditing(current = session): Promise<void> {
-  if (!current || session !== current || !current.write || current.editing) return;
-  if (current.taking) return current.taking;
-  current.taking = (async () => {
-    try {
-      await current.client.takeLease(current.planId);
-      if (session !== current) {
-        void current.client.releaseLease(current.planId).catch(() => undefined);
-        return;
-      }
-      // Load changes made before we acquired the lease, but never replace our own unsaved work.
-      if (!unsaved(current) && !(await reload(current))) return;
-      if (session !== current) return;
-      current.editing = true;
-      current.holder = null;
-    } catch (error) {
-      if (session !== current) return;
-      current.editing = false;
-      if (error instanceof ServerError && error.status === 423) {
-        current.holder =
-          (error.body as { lease?: { holder?: string } } | null)?.lease?.holder ?? t("Somebody");
-      }
-    } finally {
-      current.taking = null;
-      if (session === current) {
-        doc.readOnly = !current.editing;
-        updateRemoteState();
-      }
-    }
-  })();
-  return current.taking;
-}
-
-async function renewLease(current: Session): Promise<void> {
-  if (session !== current) return;
-  if (!current.editing) return startEditing(current);
-  try {
-    await current.client.takeLease(current.planId);
-  } catch (error) {
-    if (session !== current) return;
-    current.editing = false;
-    doc.readOnly = true;
-    if (error instanceof ServerError && error.status === 423) {
-      showStatus(t("Somebody else edits the plan now. Save a copy to keep your changes."), true);
-    } else {
-      showStatus(errorText(error), true);
-    }
-    updateRemoteState();
-  }
-}
-
-/** The stream of the plan: the saves and the lease of the others. */
+/** The stream of the plan: the changes and the people. */
 function listen(current: Session): void {
   const events = current.client.events(current.planId);
   current.events = events;
   const read = (event: Event) => JSON.parse((event as MessageEvent<string>).data) as unknown;
   events.addEventListener("hello", (event) => {
     if (session !== current) return;
-    // After a lost connection, the stream starts again; a newer revision loads.
-    const hello = read(event) as {
-      revision: string | null;
-      lease?: { client: string; holder: string } | null;
-      people?: Person[];
-    };
-    if (current.live) {
-      // After a lost connection, the server forgot this tab: the list starts again.
-      peopleAgain(hello.people ?? []);
-      if (hello.revision && hello.revision !== current.revision) void catchUp(current);
-      return;
-    }
-    if (hello.lease && hello.lease.client !== current.client.client) {
-      current.holder = hello.lease.holder;
-      current.editing = false;
-      doc.readOnly = true;
-      updateRemoteState();
-    }
-    if (hello.revision && hello.revision !== current.revision && !current.editing) {
-      void reload(current);
-    }
+    // After a lost connection, the stream starts again: the server forgot this tab, and a newer
+    // revision loads.
+    const hello = read(event) as { revision: string | null; people?: Person[] };
+    peopleAgain(hello.people ?? []);
+    if (hello.revision && hello.revision !== current.revision) void catchUp(current);
   });
   events.addEventListener("revision", (event) => {
     if (session !== current) return;
-    if (current.live) {
-      const change = read(event) as Change;
-      // Each change comes once to each tab, also to the tab that sent it. A known own change is
-      // in `saved` already, for example after a load of the whole plan.
-      if (revisionNumber(change.id) <= revisionNumber(current.revision)) {
-        if (change.client === current.client.client) current.inflight = null;
-        return;
-      }
-      current.waiting.set(change.parent ?? "", change);
-      advance(current);
+    const change = read(event) as Change;
+    // Each change comes once to each tab, also to the tab that sent it. A known own change is
+    // in `saved` already, for example after a load of the whole plan.
+    if (revisionNumber(change.id) <= revisionNumber(current.revision)) {
+      if (change.client === current.client.client) current.inflight = null;
       return;
     }
-    const revision = read(event) as { id: string; client: string };
-    if (revision.client === current.client.client) return;
-    if (!current.editing) void reload(current);
+    current.waiting.set(change.parent ?? "", change);
+    advance(current);
   });
   events.addEventListener("presence", (event) => {
     if (session !== current) return;
     const person = read(event) as Person & { gone?: boolean };
     if (person.gone) personGone(person.client);
     else personSeen(person);
-  });
-  events.addEventListener("lease", (event) => {
-    const lease = read(event) as { holder: string; client: string } | null;
-    if (session !== current || current.live) return;
-    if (!lease) {
-      current.holder = null;
-      // The plan is free: a tab that can write takes it.
-      if (current.write && !current.editing) void startEditing(current);
-    } else if (lease.client !== current.client.client) {
-      current.holder = lease.holder;
-      current.editing = false;
-      doc.readOnly = true;
-    }
-    updateRemoteState();
   });
   events.addEventListener("removed", () => {
     if (session !== current) return;
@@ -582,7 +466,7 @@ function advance(current: Session): void {
     if (!change) break;
     current.waiting.delete(current.revision);
     if (!change.patch) {
-      // A save of the whole plan, for example by an older app: load it.
+      // A save of the whole plan, for example a restore of a version: load it.
       whole = true;
       break;
     }
@@ -691,11 +575,12 @@ async function sendChanges(current: Session): Promise<void> {
     await knows(current, plan.revision);
   } catch (error) {
     if (session !== current) return;
-    if (error instanceof ServerError && error.status === 403) {
+    if (error instanceof ServerError && (error.status === 403 || error.status === 401)) {
       current.write = false;
       current.editing = false;
       doc.readOnly = true;
-      showStatus(t("Your link can only view this plan."), true);
+      showStatus(t("You can only view this plan now. Save a copy to keep your changes."), true);
+      updateRemoteState();
       return;
     }
     if (error instanceof ServerError && error.status === 400) {
@@ -734,29 +619,21 @@ async function setViewOnly(current: Session, value: boolean): Promise<void> {
   updateRemoteState();
 }
 
-/** Loads the current revision of the server into the open plan. */
-async function reload(current: Session, discard = false): Promise<boolean> {
-  if (session !== current || current.saving || doc.inTransaction || (!discard && unsaved(current)))
-    return false;
-  const building = doc.building;
+/** Loads the current revision of the server into the open plan, and drops the own changes. */
+async function reload(current: Session): Promise<boolean> {
+  if (session !== current || current.saving || doc.inTransaction) return false;
   const request = ++current.loading;
   try {
     const plan = await current.client.plan(current.planId);
-    if (
-      session !== current ||
-      request !== current.loading ||
-      building !== doc.building ||
-      current.saving ||
-      doc.inTransaction
-    )
+    if (session !== current || request !== current.loading || current.saving || doc.inTransaction)
       return false;
-    if (!discard && plan.revision === current.revision) return true;
     const story = doc.activeStoryId;
     doc.replace(parseBuilding(plan.data));
     doc.setActiveStory(story);
     current.saved = doc.building;
     current.revision = plan.revision;
     current.waiting.clear();
+    current.inflight = null;
     storeCopy(current, plan.name, plan.data);
     app.fileName = `${plan.name}.grundriss`;
     updateTitle();
@@ -765,97 +642,27 @@ async function reload(current: Session, discard = false): Promise<boolean> {
   } catch (error) {
     if (session === current) showStatus(errorText(error), true);
     return false;
+  } finally {
+    if (request === current.loading) current.loading = 0;
   }
 }
 
-/** Saves the open plan to the server, if it changed. */
+/** Sends the changes of the open plan to the server. */
 async function save(): Promise<void> {
   const current = session;
   if (!current || !current.editing) return;
   if (current.saving) return current.saving;
-  const building = doc.building;
-  if (building === current.saved || doc.inTransaction) return;
-  if (current.live) {
-    current.saving = sendChanges(current).finally(() => {
-      current.saving = null;
-      updateRemoteState();
-      if (session === current && current.editing && !current.failed && unsentChanges(current)) {
-        window.setTimeout(() => void save(), 100);
-      }
-    });
-    updateRemoteState();
-    return current.saving;
-  }
-  const data = serializeBuilding(building);
-  current.saving = (async () => {
-    try {
-      const plan = await current.client.savePlan(
-        current.planId,
-        current.revision,
-        data,
-        projectName(),
-      );
-      current.revision = plan.revision;
-      current.saved = building;
-      current.failed = false;
-      storeCopy(current, plan.name, data);
-      // The plan is safe on the server, so the title shows no unsaved changes.
-      if (session === current) doc.markSaved(building);
-    } catch (error) {
-      if (session !== current) return;
-      if (error instanceof ServerError && error.status === 409) return conflict(current);
-      if (error instanceof ServerError && error.status === 423) {
-        current.editing = false;
-        doc.readOnly = true;
-        showStatus(t("Somebody else edits the plan now. Save a copy to keep your changes."), true);
-        return;
-      }
-      if (!current.failed) {
-        showStatus(
-          t("The server did not save the plan: {error}", { error: errorText(error) }),
-          true,
-        );
-      }
-      current.failed = true;
-    }
-  })().finally(() => {
+  if (doc.building === current.saved || doc.inTransaction) return;
+  current.saving = sendChanges(current).finally(() => {
     current.saving = null;
     updateRemoteState();
-    // A change during the save goes to the server after it.
-    if (
-      session === current &&
-      current.editing &&
-      doc.building !== current.saved &&
-      !current.failed
-    ) {
-      window.setTimeout(() => void save(), 300);
+    // A change during the send goes to the server after it.
+    if (session === current && current.editing && !current.failed && unsentChanges(current)) {
+      window.setTimeout(() => void save(), 100);
     }
   });
   updateRemoteState();
   return current.saving;
-}
-
-/** A newer revision came first: load it, or keep this version as a copy in the browser. */
-function conflict(current: Session): void {
-  if (session !== current) return;
-  current.editing = false;
-  doc.readOnly = true;
-  updateRemoteState();
-  const reloadIt = confirm(
-    t(
-      "Somebody saved a newer version of this plan. OK loads it. Cancel keeps your version as a copy in this browser.",
-    ),
-  );
-  if (reloadIt) {
-    // The save clears its pending promise before the replacement starts.
-    window.setTimeout(() => {
-      void reload(current, true).then((loaded) => {
-        if (loaded) return startEditing(current);
-      });
-    }, 0);
-  } else {
-    void keepCopy();
-  }
 }
 
 /** Ends the session and keeps the open plan as a new project in this browser. */
@@ -875,35 +682,31 @@ async function keepCopy(): Promise<void> {
   }
 }
 
-/** Ends the session of the open plan: the lease goes back, and the stream closes. */
+/** Ends the session of the open plan: the stream closes, and the others see that it left. */
 function endSession(): void {
   opening++;
   const current = session;
   if (!current) return;
   session = null;
-  window.clearInterval(current.renew);
   window.clearTimeout(current.gap);
   window.clearTimeout(current.copyTimer);
   current.events?.close();
-  if (current.live) endPresence();
-  else if (current.write) void current.client.releaseLease(current.planId).catch(() => undefined);
+  endPresence();
   doc.readOnly = false;
+  if (location.search) history.replaceState(null, "", location.pathname);
   updateRemoteState();
 }
 
 // ----- The top bar -----
 
-/** The mark of a plan of a server in the top bar, and the share button. */
+/** The mark of a plan of the server in the top bar, and the share button. */
 function updateRemoteState(): void {
   const state = $<HTMLButtonElement>("#remote-state");
   const share = $<HTMLButtonElement>("#share");
   const current = session;
-  // Share: the share links of a plan of a server, if the token can make them; else the move of
-  // the plan of the browser to a server.
+  // Share: the share links of a plan of the server; else the plan of the browser to the server.
   // The class plan-tools hides it on the Projects page.
-  share.hidden = current
-    ? !(current.write && canShare(current.me.token))
-    : !connections().some((c) => canCreate(c.token));
+  share.hidden = current ? !(current.share && !current.offline) : !canCreate();
   state.hidden = !current;
   document.body.classList.toggle("remote-plan", !!current);
   if (!current) return;
@@ -915,11 +718,9 @@ function updateRemoteState(): void {
         : current.failed
           ? ["alert", t("Not saved"), "bad"]
           : ["cloud", current.serverName, ""]
-      : current.holder
-        ? ["users", t("{holder} edits", { holder: current.holder }), "busy"]
-        : current.viewOnly
-          ? ["eye", t("Viewing"), ""]
-          : ["cloud", t("View only"), "busy"];
+      : current.viewOnly
+        ? ["eye", t("Viewing"), ""]
+        : ["cloud", t("View only"), "busy"];
   state.innerHTML = icon(iconName);
   state.append(text);
   state.className = `remote-state plan-tools ${tone}`;
@@ -929,16 +730,9 @@ function updateRemoteState(): void {
   });
 }
 
-const canCreate = (token: TokenInfo | null) =>
-  !!token && (token.kind === "root" || (token.kind === "user" && token.write && token.createPlans));
-const canShare = (token: TokenInfo | null) =>
-  !!token && (token.kind === "root" || (token.kind === "user" && token.write));
-const canManageUsers = (token: TokenInfo | null) =>
-  !!token && (token.kind === "root" || (token.kind === "user" && token.write && token.makeUsers));
-
 // ----- Dialogs -----
 
-/** A list of the ends of a token: none, a few durations, or a date. */
+/** A list of the ends of a share link: none, a few durations, or a date. */
 function expiryField(parent: HTMLElement): () => number | null {
   const days = (n: number) => Date.now() + n * 86_400_000;
   const select = selectInput([
@@ -956,90 +750,236 @@ function expiryField(parent: HTMLElement): () => number | null {
   return () => {
     if (select.value === "") return null;
     if (select.value === "date") {
-      // The token ends at the end of the chosen day.
+      // The link ends at the end of the chosen day.
       return date.value ? new Date(`${date.value}T23:59:59`).getTime() : null;
     }
     return days(Number(select.value));
   };
 }
 
-/** Shows a new link one time, with buttons to copy it. */
-function showNewLink(parent: HTMLElement, client: ServerClient, token: string): void {
+/** Shows a new link one time, with a button to copy it. */
+function showNewLink(parent: HTMLElement, address: string, text: string): void {
+  parent.querySelector(".new-link")?.remove();
   const box = document.createElement("div");
   box.className = "new-link";
-  note(
-    box,
-    t("The link, shown only now. Copy it and send it on a safe way:"),
-    "dialog-note strong",
-  );
-  const links: [string, string][] = [[t("Link"), `${client.tokenAddress(token)}/`]];
-  // An app on another site than the server opens the link with its own address too.
-  const server = new URL(client.base).origin;
-  const ownAddress = normalizeAddress(new URL(".", location.href).href);
-  // Only the public app paths may be shared. A token path stays private even if browser
-  // storage is unavailable, or a #connect link bypassed the connection to this app's server.
-  const publicPath = location.pathname === "/" || location.pathname.endsWith("/app/");
-  if (
-    server !== location.origin &&
-    publicPath &&
-    !connections().some((c) => c.address === ownAddress)
-  ) {
-    const here = `${location.origin}${location.pathname}#connect=${encodeURIComponent(client.tokenAddress(token))}`;
-    links.push([t("Link for this app"), here]);
-  }
-  for (const [label, value] of links) {
-    const field = textInput(value);
-    field.readOnly = true;
-    field.addEventListener("focus", () => field.select());
-    const copy = actionButton(t("Copy"), () => {
-      void navigator.clipboard?.writeText(value).then(
-        () => (copy.textContent = t("Copied")),
-        () => field.select(),
-      );
-    });
-    row(box, label, pair(field, copy));
-  }
+  note(box, text, "dialog-note strong");
+  const field = textInput(address);
+  field.readOnly = true;
+  field.addEventListener("focus", () => field.select());
+  const copy = actionButton(t("Copy"), () => {
+    void navigator.clipboard?.writeText(address).then(
+      () => (copy.textContent = t("Copied")),
+      () => field.select(),
+    );
+  });
+  row(box, t("Link"), pair(field, copy));
   parent.prepend(box);
 }
 
-/** The dialog to connect a server: the address of a token. */
-function connectDialog(): void {
-  const { element, body } = dialog(t("Connect a server"));
-  note(
-    body,
-    t(
-      "Paste the link that you got from the owner of a Grundriss server, for example https://example.org/abc…. The link is your access, so keep it like a password.",
-    ),
-  );
-  const input = textInput("", { type: "url", placeholder: "https://…" });
-  row(body, t("Link"), input);
+/** A row of a list: a name, a detail, and buttons. */
+function listRow(name: string, detail: string, ...buttons: HTMLElement[]): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "token-row";
+  const text = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = name;
+  const small = document.createElement("small");
+  small.textContent = detail;
+  text.append(strong, small);
+  line.append(text, ...buttons);
+  return line;
+}
+
+/** Fills a list from the server, or shows the error in it. */
+async function fill<T>(
+  list: HTMLElement,
+  load: () => Promise<T[]>,
+  item: (value: T) => HTMLElement,
+): Promise<void> {
+  try {
+    const values = await load();
+    list.replaceChildren(...values.map(item));
+    if (values.length === 0) note(list, t("None yet."));
+  } catch (error) {
+    list.replaceChildren();
+    note(list, errorText(error), "dialog-note warning");
+  }
+}
+
+/** The fields for a name and a password, with the hints for the password manager. */
+function passwordFields(body: HTMLElement, options: { name?: string; repeat: boolean }) {
+  const name = textInput(options.name ?? "", { autocomplete: "username" });
+  if (options.name !== undefined && options.name !== "") name.readOnly = true;
+  row(body, t("Name"), name);
+  const password = textInput("", {
+    type: "password",
+    autocomplete: options.repeat ? "new-password" : "current-password",
+  });
+  row(body, t("Password"), password);
+  let again: HTMLInputElement | null = null;
+  if (options.repeat) {
+    again = textInput("", { type: "password", autocomplete: "new-password" });
+    row(body, t("Password again"), again);
+  }
+  return {
+    name,
+    password,
+    /** The error of the fields, or "". */
+    check: () =>
+      !name.value.trim()
+        ? t("An account needs a name.")
+        : password.value.length < 8 && options.repeat
+          ? t("The password needs at least 8 characters.")
+          : again && again.value !== password.value
+            ? t("The two passwords are not the same.")
+            : "",
+  };
+}
+
+/** The login with a name and a password. */
+function loginDialog(): void {
+  const state = server;
+  if (!state) return;
+  const { element, body } = dialog(t("Log in to {server}", { server: state.name }));
+  const { name, password, check } = passwordFields(body, { repeat: false });
+  note(body, t("No account? Ask the admin of the server for an invite link."));
   const message = note(body, "", "dialog-note warning");
-  const connect = actionButton(
-    t("Connect"),
+  const login = actionButton(
+    t("Log in"),
     async () => {
-      message.textContent = "";
-      connect.disabled = true;
+      message.textContent = check();
+      if (message.textContent) return;
+      login.disabled = true;
       try {
-        const address = parseAddress(input.value);
-        const { connection, me } = await addConnection(address);
+        const info = await state.client.login(name.value.trim(), password.value);
         element.close();
-        showStatus(t("Connected to {server}.", { server: connection.name }));
-        if (me.token.kind === "plan" && me.token.planId) await openRemote(address, me.token.planId);
-        else renderHome();
+        setSession(info);
+        showStatus(t("Logged in as {name}.", { name: info.account?.name ?? "" }));
       } catch (error) {
         message.textContent = errorText(error);
       } finally {
-        connect.disabled = false;
+        login.disabled = false;
       }
     },
     true,
   );
-  input.addEventListener("keydown", (e) => e.key === "Enter" && connect.click());
-  footer(element, connect);
-  input.focus();
+  for (const input of [name, password])
+    input.addEventListener("keydown", (e) => e.key === "Enter" && login.click());
+  footer(element, login);
+  name.focus();
 }
 
-/** The dialog of the open plan of a server: its state and its actions. */
+/** A link for one use: the setup of the admin, an invite, or a new password. */
+async function linkDialog(kind: string, code: string): Promise<void> {
+  const state = server;
+  if (!state) return;
+  let link: { kind: string; name: string; server: string };
+  try {
+    link = await state.client.link(code);
+  } catch (error) {
+    showStatus(errorText(error), true);
+    return;
+  }
+  const title =
+    link.kind === "setup"
+      ? t("Set up {server}", { server: link.server })
+      : link.kind === "reset"
+        ? t("A new password")
+        : t("Your account on {server}", { server: link.server });
+  const { element, body } = dialog(title);
+  note(
+    body,
+    link.kind === "setup"
+      ? t("This is the first account of the server: the admin. The admin invites the others.")
+      : link.kind === "reset"
+        ? t("Choose a new password for {name}. The other logins of the account end.", {
+            name: link.name,
+          })
+        : t("Choose a name and a password. The link works only once."),
+  );
+  const fields = passwordFields(body, {
+    name: link.kind === "reset" ? link.name : undefined,
+    repeat: true,
+  });
+  const message = note(body, "", "dialog-note warning");
+  const done = actionButton(
+    link.kind === "reset" ? t("Save the password") : t("Make the account"),
+    async () => {
+      message.textContent = fields.check();
+      if (message.textContent) return;
+      done.disabled = true;
+      try {
+        const info = await state.client.acceptLink(
+          code,
+          fields.name.value.trim(),
+          fields.password.value,
+        );
+        element.close();
+        setSession(info);
+        showStatus(t("Logged in as {name}.", { name: info.account?.name ?? "" }));
+      } catch (error) {
+        message.textContent = errorText(error);
+      } finally {
+        done.disabled = false;
+      }
+    },
+    true,
+  );
+  footer(element, done);
+  void kind;
+  (link.kind === "reset" ? fields.password : fields.name).focus();
+}
+
+/** The own account: the space, the password, and the logout. */
+function accountDialog(): void {
+  const state = server;
+  const me = account();
+  if (!state || !me) return;
+  const { element, body } = dialog(me.name);
+  note(body, t("On {server}: {usage}.", { server: state.name, usage: usageText(me) }));
+  const heading = document.createElement("h3");
+  heading.textContent = t("Change the password");
+  body.append(heading);
+  const old = textInput("", { type: "password", autocomplete: "current-password" });
+  row(body, t("Old password"), old);
+  const next = textInput("", { type: "password", autocomplete: "new-password" });
+  row(body, t("New password"), next);
+  const message = note(body, "", "dialog-note warning");
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  actions.append(
+    actionButton(t("Change the password"), async () => {
+      message.textContent = "";
+      if (next.value.length < 8) {
+        message.textContent = t("The password needs at least 8 characters.");
+        return;
+      }
+      try {
+        await state.client.changePassword(old.value, next.value);
+        old.value = next.value = "";
+        showStatus(t("The password is changed. The other logins of the account ended."));
+        element.close();
+      } catch (error) {
+        message.textContent = errorText(error);
+      }
+    }),
+    actionButton(t("Log out"), async () => {
+      try {
+        endSession();
+        setSession(await state.client.logout());
+        // On a computer of others, the plans of the account do not stay in the browser.
+        await removeRemoteCopies(state.client.base).catch(() => undefined);
+        element.close();
+        showStatus(t("Logged out."));
+      } catch (error) {
+        message.textContent = errorText(error);
+      }
+    }),
+  );
+  body.append(actions);
+}
+
+/** The dialog of the open plan of the server: its state and its actions. */
 function planDialog(): void {
   const current = session;
   if (!current) return;
@@ -1058,7 +998,7 @@ function planDialog(): void {
         t("Connect again"),
         () => {
           element.close();
-          void openRemote(current.address, current.planId);
+          void openRemote(current.planId);
         },
         true,
       ),
@@ -1074,19 +1014,11 @@ function planDialog(): void {
   );
   note(
     body,
-    current.live && current.editing
+    current.editing
       ? t("You edit this plan with the others who have it open. Each change saves to the server.")
-      : current.live && current.viewOnly
+      : current.viewOnly
         ? t("You only view this plan. Click Edit to change it.")
-        : current.editing
-          ? t("You edit this plan. Each change saves to the server.")
-          : current.holder
-            ? t("{holder} edits this plan. You see it, and it updates itself.", {
-                holder: current.holder,
-              })
-            : current.write
-              ? t("Nobody edits this plan.")
-              : t("Your link can only view this plan."),
+        : t("You can only view this plan."),
   );
   // The other actions are in the body. The one main action, Edit, is in the footer.
   const actions = document.createElement("div");
@@ -1099,30 +1031,26 @@ function planDialog(): void {
     actionButton(t("Load again"), () => {
       if (unsaved(current) && !confirm(t("The plan has unsaved changes. Discard them?"))) return;
       element.close();
-      void reload(current, true);
+      void reload(current);
     }),
     actionButton(t("Save a copy in this browser"), () => {
       element.close();
       void keepCopy();
     }),
+    actionButton(t("Your name…"), () => {
+      element.close();
+      nameDialog();
+    }),
   );
-  if (current.live) {
+  if (current.editing) {
     actions.append(
-      actionButton(t("Your name…"), () => {
+      actionButton(t("View only"), () => {
         element.close();
-        nameDialog();
+        void setViewOnly(current, true).then(() => personSeenSelf());
       }),
     );
-    if (current.editing) {
-      actions.append(
-        actionButton(t("View only"), () => {
-          element.close();
-          void setViewOnly(current, true).then(() => personSeenSelf());
-        }),
-      );
-    }
   }
-  if (canShare(current.me.token) && current.write) {
+  if (current.share) {
     actions.append(
       actionButton(t("Share…"), () => {
         element.close();
@@ -1131,16 +1059,14 @@ function planDialog(): void {
     );
   }
   body.append(actions);
-  const canEdit = current.write && !current.editing && !current.holder;
   footer(
     element,
-    canEdit
+    current.write && current.viewOnly
       ? actionButton(
           t("Edit"),
           () => {
             element.close();
-            if (current.live) void setViewOnly(current, false).then(() => personSeenSelf());
-            else void startEditing();
+            void setViewOnly(current, false).then(() => personSeenSelf());
           },
           true,
         )
@@ -1151,7 +1077,6 @@ function planDialog(): void {
 /** The share links of a plan: the list, and a form for a new link. */
 async function shareDialog(client: ServerClient, planId: string, name: string): Promise<void> {
   const { body } = dialog(t('Share "{name}"', { name }));
-  const me = await client.me().catch(() => null);
   note(
     body,
     t(
@@ -1164,28 +1089,36 @@ async function shareDialog(client: ServerClient, planId: string, name: string): 
   row(form, t("For"), label);
   const access = selectInput([
     ["read", t("Can view")],
-    ...(me?.token.write ? [["write", t("Can edit")] as const] : []),
+    ["write", t("Can edit")],
   ]);
   row(form, t("Access"), access);
   const expires = expiryField(form);
   const message = note(form, "", "dialog-note warning");
   const list = document.createElement("div");
   list.className = "token-list";
+  const refresh = () =>
+    fill(
+      list,
+      () => client.shares(planId),
+      (share) => shareRow(share, refresh),
+    );
   const create = actionButton(
     t("Make a link"),
     async () => {
       message.textContent = "";
       try {
-        const made = await client.createToken({
-          kind: "plan",
-          planId,
+        const made = await client.createShare(planId, {
           label: label.value.trim() || t("Link"),
           write: access.value === "write",
           expires: expires(),
         });
         label.value = "";
-        showNewLink(body, client, made.token);
-        await fillTokens(list, client, planId);
+        showNewLink(
+          body,
+          client.address(made.path),
+          t("The link, shown only now. Copy it and send it on a safe way:"),
+        );
+        await refresh();
       } catch (error) {
         message.textContent = errorText(error);
       }
@@ -1196,60 +1129,82 @@ async function shareDialog(client: ServerClient, planId: string, name: string): 
   const heading = document.createElement("h3");
   heading.textContent = t("Links of this plan");
   body.append(form, heading, list);
-  await fillTokens(list, client, planId);
+  await refresh();
 }
 
-/** The list of tokens with their rights and a button to remove each. */
-async function fillTokens(
-  list: HTMLElement,
-  client: ServerClient,
-  planId?: string,
-  kind?: TokenInfo["kind"],
-): Promise<void> {
-  list.replaceChildren();
-  try {
-    const tokens = (await client.tokens(planId)).filter((x) => !kind || x.kind === kind);
-    if (tokens.length === 0) note(list, t("None yet."));
-    for (const token of tokens) {
-      const line = document.createElement("div");
-      line.className = "token-row";
-      const text = document.createElement("span");
-      const strong = document.createElement("strong");
-      strong.textContent = token.label;
-      const small = document.createElement("small");
-      small.textContent = rightsText(token);
-      text.append(strong, small);
-      line.append(text);
-      if (token.kind !== "root") {
-        line.append(
-          iconButton(
-            "trash",
-            t("Remove the access of {label}", { label: token.label }),
-            async () => {
-              try {
-                await client.deleteToken(token.id);
-                await fillTokens(list, client, planId, kind);
-              } catch (error) {
-                showStatus(errorText(error), true);
-              }
-            },
-            { danger: true },
-          ),
-        );
-      }
-      list.append(line);
-    }
-  } catch (error) {
-    note(list, errorText(error), "dialog-note warning");
+/** A row of a share link, with a button to remove it. */
+function shareRow(share: Share, refresh: () => Promise<void>, withPlan = false): HTMLElement {
+  const parts = [share.write ? t("can edit") : t("can view")];
+  if (withPlan) parts.unshift(t("plan {name}", { name: share.planName }));
+  parts.push(share.expires ? t("until {date}", { date: dateText(share.expires) }) : t("no end"));
+  return listRow(
+    share.label,
+    parts.join(" · "),
+    iconButton(
+      "trash",
+      t("Remove the access of {label}", { label: share.label }),
+      async () => {
+        try {
+          await server!.client.deleteShare(share.id);
+          await refresh();
+        } catch (error) {
+          showStatus(errorText(error), true);
+        }
+      },
+      { danger: true },
+    ),
+  );
+}
+
+/** The checkboxes of the rights of an account. */
+function rightsFields(parent: HTMLElement, value: Partial<Account>, admin: boolean) {
+  const check = (text: string, checked: boolean) => {
+    const { element, input } = checkbox(text, checked);
+    parent.append(element);
+    return input;
+  };
+  const me = account();
+  const fields = {
+    createPlans: check(t("Can make plans"), value.createPlans ?? true),
+    seeAll: check(t("Sees and edits all plans"), value.seeAll ?? false),
+    makeAccounts: check(t("Can invite others"), value.makeAccounts ?? false),
+  };
+  // An account gives at most its own rights.
+  for (const key of ["createPlans", "seeAll", "makeAccounts"] as const) {
+    if (!admin && !me?.[key]) fields[key].disabled = true;
   }
+  return () => ({
+    createPlans: fields.createPlans.checked,
+    seeAll: fields.seeAll.checked,
+    makeAccounts: fields.makeAccounts.checked,
+  });
 }
 
-/** The settings of a server for root, and its users for root and users that add users. */
-async function settingsDialog(connection: Connection): Promise<void> {
-  const client = new ServerClient(connection.address);
-  const root = connection.token?.kind === "root";
-  const { body } = dialog(root ? t("Server settings") : t("Users"));
-  if (root) {
+/** A field in MB for the space of an account. Empty is the default of the server. */
+function quotaField(parent: HTMLElement, value: number | null, fallback: string) {
+  const input = numberInput(value === null ? null : Math.round(value / 1_048_576), {
+    min: 0,
+    step: 1,
+  });
+  input.placeholder = fallback;
+  row(parent, t("Space in MB"), input);
+  return () => (input.value === "" ? null : Math.max(0, Number(input.value)) * 1_048_576);
+}
+
+/**
+ * The accounts of the server: for the admin the settings, the accounts, the invites, and all
+ * share links; for an account that invites, its invites.
+ */
+async function accountsDialog(): Promise<void> {
+  const state = server;
+  const me = account();
+  if (!state || !me) return;
+  const admin = me.admin;
+  const client = state.client;
+  const { body } = dialog(admin ? t("Server and accounts") : t("Invite others"));
+
+  let defaults = "";
+  if (admin) {
     try {
       const settings = await client.settings();
       const name = textInput(settings.name);
@@ -1257,73 +1212,113 @@ async function settingsDialog(connection: Connection): Promise<void> {
       name.addEventListener("change", async () => {
         try {
           await client.saveSettings({ name: name.value });
-          refreshConnection(connection.address, await client.me());
-          renderHome();
+          setSession(await client.session());
         } catch (error) {
           showStatus(errorText(error), true);
         }
       });
+      defaults =
+        settings.quota > 0 ? String(Math.round(settings.quota / 1_048_576)) : t("no limit");
       note(
         body,
-        t("Version {version}, mode {mode}, {plans} plans, {tokens} tokens.", {
-          version: settings.version,
-          mode: settings.mode,
-          plans: settings.plans,
-          tokens: settings.tokens,
-        }),
+        t(
+          "Version {version}, {plans} plans, {accounts} accounts, {shares} share links. A new account gets {quota} for at most {count} plans; a link for one use works {hours} hours.",
+          {
+            version: settings.version,
+            plans: settings.plans,
+            accounts: settings.accounts,
+            shares: settings.shares,
+            quota: settings.quota > 0 ? megabytes(settings.quota) : t("no limit"),
+            count: settings.maxPlans > 0 ? settings.maxPlans : "∞",
+            hours: settings.linkHours,
+          },
+        ),
       );
     } catch (error) {
       note(body, errorText(error), "dialog-note warning");
     }
+    const heading = document.createElement("h3");
+    heading.textContent = t("Accounts");
+    const accounts = document.createElement("div");
+    accounts.className = "token-list";
+    body.append(heading, accounts);
+    const refreshAccounts = () =>
+      fill(accounts, client.accounts, (a) =>
+        listRow(
+          a.admin ? `${a.name} · ${t("admin")}` : a.name,
+          `${rightsText(a)} · ${usageText(a)}`,
+          iconButton("settings", t("Change {name}", { name: a.name }), () =>
+            editAccountDialog(a, defaults, refreshAccounts),
+          ),
+          iconButton("rename", t("A new password for {name}", { name: a.name }), async () => {
+            try {
+              const { path } = await client.resetLink(a.id);
+              showNewLink(
+                body,
+                client.address(path),
+                t("The link for a new password of {name}, shown only now:", { name: a.name }),
+              );
+              await refreshLinks();
+            } catch (error) {
+              showStatus(errorText(error), true);
+            }
+          }),
+          ...(a.id === me.id
+            ? []
+            : [
+                iconButton(
+                  "trash",
+                  t("Remove {name}", { name: a.name }),
+                  async () => {
+                    if (
+                      !confirm(
+                        t("Remove the account {name}? Its plans become yours.", { name: a.name }),
+                      )
+                    )
+                      return;
+                    try {
+                      await client.deleteAccount(a.id);
+                      await refreshAccounts();
+                    } catch (error) {
+                      showStatus(errorText(error), true);
+                    }
+                  },
+                  { danger: true },
+                ),
+              ]),
+        ),
+      );
+    await refreshAccounts();
   }
-  const heading = document.createElement("h3");
-  heading.textContent = t("Users");
-  body.append(heading);
+
+  // The invites.
+  const inviteHeading = document.createElement("h3");
+  inviteHeading.textContent = t("Invite");
+  body.append(inviteHeading);
   note(
     body,
     t(
-      "Each user gets an own link. A user sees the own plans, and the plans of others only with the right to see all plans. Removing a user also removes the links that the user made.",
+      "An invite link is for one person. It works once, and ends after some days. The person chooses a name and a password.",
     ),
   );
   const form = document.createElement("div");
   form.className = "dialog-form";
-  const label = textInput("", { placeholder: t("For example: Anna") });
-  row(form, t("Name"), label);
-  const check = (text: string, value: boolean) => {
-    const { element, input } = checkbox(text, value);
-    form.append(element);
-    return input;
-  };
-  const write = check(t("Can edit"), true);
-  const create = check(t("Can make plans"), true);
-  const seeAll = check(t("Sees all plans"), false);
-  const makeUsers = check(t("Can add users"), false);
-  const expires = expiryField(form);
+  const rights = rightsFields(form, {}, admin);
+  const quota = admin ? quotaField(form, null, defaults) : () => null;
   const message = note(form, "", "dialog-note warning");
-  const list = document.createElement("div");
-  list.className = "token-list";
   form.append(
     actionButton(
-      t("Add the user"),
+      t("Make an invite link"),
       async () => {
         message.textContent = "";
-        if (!label.value.trim()) {
-          message.textContent = t("A user needs a name.");
-          return;
-        }
         try {
-          const made = await client.createToken({
-            kind: "user",
-            label: label.value.trim(),
-            write: write.checked,
-            createPlans: create.checked,
-            seeAll: seeAll.checked,
-            makeUsers: makeUsers.checked,
-            expires: expires(),
-          });
-          label.value = "";
-          showNewLink(body, client, made.token);
-          await fillTokens(list, client, undefined, "user");
+          const { path } = await client.createInvite({ ...rights(), quota: quota() });
+          showNewLink(
+            body,
+            client.address(path),
+            t("The invite link, shown only now. Copy it and send it on a safe way:"),
+          );
+          await refreshLinks();
         } catch (error) {
           message.textContent = errorText(error);
         }
@@ -1331,15 +1326,95 @@ async function settingsDialog(connection: Connection): Promise<void> {
       true,
     ),
   );
-  body.append(form, list);
-  await fillTokens(list, client, undefined, "user");
-  // All share links that this token can see: root sees all of them.
+  body.append(form);
   const linksHeading = document.createElement("h3");
-  linksHeading.textContent = t("Share links");
+  linksHeading.textContent = t("Open links");
   const links = document.createElement("div");
   links.className = "token-list";
   body.append(linksHeading, links);
-  await fillTokens(links, client, undefined, "plan");
+  const refreshLinks = () =>
+    fill(links, client.invites, (invite: Invite) =>
+      listRow(
+        invite.kind === "reset"
+          ? t("New password for {name}", { name: invite.account })
+          : t("Invite"),
+        [
+          ...(invite.rights ? [rightsText(invite.rights)] : []),
+          t("until {date}", { date: dateText(invite.expires) }),
+        ].join(" · "),
+        iconButton(
+          "trash",
+          t("Remove the link"),
+          async () => {
+            try {
+              await client.deleteInvite(invite.id);
+              await refreshLinks();
+            } catch (error) {
+              showStatus(errorText(error), true);
+            }
+          },
+          { danger: true },
+        ),
+      ),
+    );
+  await refreshLinks();
+
+  if (admin) {
+    const sharesHeading = document.createElement("h3");
+    sharesHeading.textContent = t("Share links");
+    const shares = document.createElement("div");
+    shares.className = "token-list";
+    body.append(sharesHeading, shares);
+    const refreshShares = (): Promise<void> =>
+      fill(
+        shares,
+        () => client.shares(),
+        (share) => shareRow(share, refreshShares, true),
+      );
+    await refreshShares();
+  }
+}
+
+/** The rights and the limits of an account, for the admin. */
+function editAccountDialog(a: Account, defaults: string, done: () => Promise<void>): void {
+  const state = server;
+  if (!state) return;
+  const { element, body } = dialog(a.name);
+  note(body, usageText(a));
+  const form = document.createElement("div");
+  form.className = "dialog-form";
+  const rights = rightsFields(form, a, true);
+  const { element: adminBox, input: adminInput } = checkbox(t("Admin"), a.admin);
+  adminInput.disabled = a.id === account()?.id;
+  form.append(adminBox);
+  const quota = quotaField(form, a.quota, defaults);
+  const plans = numberInput(a.maxPlans, { min: 0, step: 1 });
+  plans.placeholder = t("default");
+  row(form, t("Most plans"), plans);
+  note(form, t("Empty is the default of the server, 0 is no limit."));
+  const message = note(form, "", "dialog-note warning");
+  body.append(form);
+  footer(
+    element,
+    actionButton(
+      t("Save"),
+      async () => {
+        try {
+          await state.client.updateAccount(a.id, {
+            ...rights(),
+            admin: adminInput.checked,
+            quota: quota(),
+            maxPlans: plans.value === "" ? null : Math.max(0, Math.round(Number(plans.value))),
+          });
+          element.close();
+          await done();
+        } catch (error) {
+          message.textContent = errorText(error);
+        }
+      },
+      true,
+    ),
+  );
 }
 
 /**
@@ -1362,21 +1437,18 @@ function copyOrMove(parent: HTMLElement, moveText: string, canMove = true): () =
 }
 
 /**
- * Copies or moves a plan of this browser to a server: the open plan (null), or a project of the
+ * Copies or moves a plan of this browser to the server: the open plan (null), or a project of the
  * Projects page. A move puts the project of the browser into the trash, so it can come back.
  */
 function uploadDialog(project: { id: string; name: string } | null): void {
-  const targets = connections().filter((c) => canCreate(c.token));
+  const state = server;
+  if (!state) return;
   const name = project?.name ?? projectName();
-  const { element, body } = dialog(t('"{name}" to a server', { name }));
+  const { element, body } = dialog(t('"{name}" to {server}', { name, server: state.name }));
   note(
     body,
-    t("On a server, each change saves to the server, and you can share the plan with links."),
+    t("On the server, each change saves to the server, and you can share the plan with links."),
   );
-  const select = selectInput(
-    targets.map((c) => [c.address, `${c.name} · ${kindText(c.token)}`] as const),
-  );
-  row(body, t("Server"), select);
   const localId = project?.id ?? projectId;
   const isMove = copyOrMove(
     body,
@@ -1389,22 +1461,18 @@ function uploadDialog(project: { id: string; name: string } | null): void {
     async () => {
       put.disabled = true;
       const current = doc.captureTarget();
-      const address = select.value;
       const move = isMove();
       try {
         const building = project ? await projectBuilding(project.id) : doc.building;
-        const client = new ServerClient(address);
-        const plan = await client.createPlan(name, serializeBuilding(building));
+        const plan = await state.client.createPlan(name, serializeBuilding(building));
         if (!project && (!current() || doc.building !== building)) return;
         if (move && localId) await trashProjectById(localId);
         element.close();
         if (project) {
-          showStatus(
-            t('"{name}" is on {server} now.', { name, server: select.selectedOptions[0].text }),
-          );
+          showStatus(t('"{name}" is on {server} now.', { name, server: state.name }));
           renderHome();
         } else {
-          await openRemote(address, plan.id);
+          await openRemote(plan.id);
         }
       } catch (error) {
         message.textContent = errorText(error);
@@ -1417,8 +1485,8 @@ function uploadDialog(project: { id: string; name: string } | null): void {
   footer(element, put);
 }
 
-/** Copies or moves a plan of a server to this browser. A move deletes it on the server. */
-function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boolean): void {
+/** Copies or moves a plan of the server to this browser. A move deletes it on the server. */
+function downloadDialog(client: ServerClient, plan: RemotePlan): void {
   const { element, body } = dialog(t('"{name}" to this browser', { name: plan.name }));
   note(
     body,
@@ -1429,7 +1497,7 @@ function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boole
   const isMove = copyOrMove(
     body,
     t("Move: the plan goes away from the server, for everybody"),
-    canDelete,
+    plan.delete,
   );
   const message = note(body, "", "dialog-note warning");
   const take = actionButton(
@@ -1441,7 +1509,7 @@ function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boole
         await addProject(parseBuilding(remote.data), plan.name);
         if (isMove()) {
           await client.deletePlan(plan.id, remote.revision);
-          if (session?.planId === plan.id && session.address === client.base) endSession();
+          if (session?.planId === plan.id) endSession();
         }
         element.close();
         showStatus(t('"{name}" is in this browser now.', { name: plan.name }));
@@ -1459,95 +1527,105 @@ function downloadDialog(client: ServerClient, plan: RemotePlan, canDelete: boole
 
 // ----- The home page -----
 
-/** The sections of the servers on the home page, with their plans. */
+/** The section of the server on the home page: the account, and the plans. */
 function renderServers(list: HTMLElement): void {
-  for (const connection of connections()) {
-    const section = document.createElement("section");
-    section.className = "project-section server-section";
-    const head = document.createElement("div");
-    head.className = "server-head";
-    const heading = document.createElement("h3");
-    heading.innerHTML = icon("cloud");
-    heading.append(connection.name);
-    const who = document.createElement("small");
-    who.textContent = kindText(connection.token);
-    heading.append(who);
-    const tools = document.createElement("div");
-    tools.className = "project-tools";
-    const client = new ServerClient(connection.address);
-    if (canCreate(connection.token)) {
-      tools.append(
-        iconButton("plus", t("New plan on this server"), async () => {
-          try {
-            const plan = await client.createPlan(
-              t("New plan"),
-              serializeBuilding(localize(emptyBuilding())),
-            );
-            await openRemote(connection.address, plan.id);
-          } catch (error) {
-            showStatus(errorText(error), true);
-          }
-        }),
-      );
-    }
-    if (connection.token?.kind === "root" || canManageUsers(connection.token)) {
-      tools.append(
-        iconButton(
-          connection.token?.kind === "root" ? "settings" : "users",
-          connection.token?.kind === "root" ? t("Server settings") : t("Users"),
-          () => void settingsDialog(connection),
-        ),
-      );
-    }
+  const state = server;
+  if (!state) return;
+  // The home page has no open plan, so the address names none.
+  if (!app.planOpen && location.search) history.replaceState(null, "", location.pathname);
+  const me = account();
+  const section = document.createElement("section");
+  section.className = "project-section server-section";
+  const head = document.createElement("div");
+  head.className = "server-head";
+  const heading = document.createElement("h3");
+  heading.innerHTML = icon("cloud");
+  heading.append(state.name);
+  const who = document.createElement("small");
+  who.textContent = me ? me.name : state.info ? t("Not logged in") : t("No connection");
+  heading.append(who);
+  const tools = document.createElement("div");
+  tools.className = "project-tools";
+  const client = state.client;
+  if (canCreate()) {
     tools.append(
-      iconButton("close", t("Remove the connection"), () => {
-        if (
-          !confirm(
-            t("Remove the connection to {server}? Keep its link to connect again.", {
-              server: connection.name,
-            }),
-          )
-        ) {
-          return;
+      iconButton("plus", t("New plan on this server"), async () => {
+        try {
+          const plan = await client.createPlan(
+            t("New plan"),
+            serializeBuilding(localize(emptyBuilding())),
+          );
+          await openRemote(plan.id);
+        } catch (error) {
+          showStatus(errorText(error), true);
         }
-        removeConnection(connection.address);
-        renderHome();
       }),
     );
-    head.append(heading, tools);
-    section.append(head);
-    const grid = document.createElement("div");
-    grid.className = "project-grid";
-    section.append(grid);
-    list.append(section);
-    void client.plans().then(
-      (plans) => {
-        if (plans.length === 0) {
-          const empty = document.createElement("p");
-          empty.className = "project-empty";
-          empty.textContent = t("No plans on this server yet.");
-          grid.replaceWith(empty);
-        }
-        grid.append(...plans.map((plan) => remoteCard(connection, client, plan)));
-      },
-      async (error) => {
-        const warning = document.createElement("p");
-        warning.className = "project-warning";
-        warning.textContent = errorText(error);
-        grid.before(warning);
-        // Without the network, the copies of this browser open to view.
-        if (!(error instanceof ServerError && error.status === 0)) return grid.remove();
-        const copies = await listRemoteCopies(connection.address).catch(() => []);
-        if (copies.length === 0) return grid.remove();
-        grid.append(...copies.map((copy) => offlineCard(connection, copy)));
-      },
+  }
+  if (me && (me.admin || me.makeAccounts)) {
+    tools.append(
+      iconButton(
+        me.admin ? "settings" : "users",
+        me.admin ? t("Server and accounts") : t("Invite others"),
+        () => void accountsDialog(),
+      ),
     );
   }
+  if (me) {
+    tools.append(iconButton("users", t("Your account"), accountDialog));
+  } else if (state.info) {
+    const login = document.createElement("button");
+    login.className = "primary";
+    login.textContent = t("Log in");
+    login.addEventListener("click", loginDialog);
+    tools.append(login);
+  }
+  head.append(heading, tools);
+  section.append(head);
+  const grid = document.createElement("div");
+  grid.className = "project-grid";
+  section.append(grid);
+  list.append(section);
+  const empty = (text: string) => {
+    const element = document.createElement("p");
+    element.className = "project-empty";
+    element.textContent = text;
+    grid.replaceWith(element);
+  };
+  const offline = async (error?: unknown) => {
+    if (error) {
+      const warning = document.createElement("p");
+      warning.className = "project-warning";
+      warning.textContent = errorText(error);
+      grid.before(warning);
+    }
+    // Without the network, the copies of this browser open to view.
+    const copies = await listRemoteCopies(client.base).catch(() => []);
+    if (copies.length === 0) return grid.remove();
+    grid.append(...copies.map(offlineCard));
+  };
+  if (!state.info) return void offline();
+  if (!me && state.info.grants.length === 0) {
+    return empty(t("Log in to see your plans on this server."));
+  }
+  void client.plans().then(
+    (plans) => {
+      if (plans.length === 0) empty(t("No plans on this server yet."));
+      grid.append(...plans.map((plan) => remoteCard(client, plan)));
+    },
+    (error) => {
+      if (error instanceof ServerError && error.status === 0) return void offline(error);
+      const warning = document.createElement("p");
+      warning.className = "project-warning";
+      warning.textContent = errorText(error);
+      grid.replaceWith(warning);
+    },
+  );
 }
 
 /**
- * The picture of a card of a server: the plan like on a card of the browser, and a small cloud in
- * its corner that tells that the plan is on a server.
+ * The picture of a card of the server: the plan like on a card of the browser, and a small cloud
+ * in its corner that tells that the plan is on the server.
  */
 function remotePicture(preview: string | undefined): HTMLElement {
   const picture = document.createElement("div");
@@ -1568,8 +1646,8 @@ function remotePicture(preview: string | undefined): HTMLElement {
   return picture;
 }
 
-/** The card of the copy of a plan of a server, without the network. */
-function offlineCard(connection: Connection, copy: RemoteCopy): HTMLElement {
+/** The card of the copy of a plan of the server, without the network. */
+function offlineCard(copy: RemoteCopy): HTMLElement {
   const card = document.createElement("article");
   card.className = "project remote";
   const open = document.createElement("button");
@@ -1590,13 +1668,13 @@ function offlineCard(connection: Connection, copy: RemoteCopy): HTMLElement {
   marks.append(mark);
   text.append(name, time, marks);
   open.append(picture, text);
-  open.addEventListener("click", () => void openRemote(connection.address, copy.planId));
+  open.addEventListener("click", () => void openRemote(copy.planId));
   card.append(open);
   return card;
 }
 
-/** The card of a plan of a server, with its state and its tools. */
-function remoteCard(connection: Connection, client: ServerClient, plan: RemotePlan): HTMLElement {
+/** The card of a plan of the server, with its state and its tools. */
+function remoteCard(client: ServerClient, plan: RemotePlan): HTMLElement {
   const card = document.createElement("article");
   card.className = "project remote";
   const open = document.createElement("button");
@@ -1619,32 +1697,27 @@ function remoteCard(connection: Connection, client: ServerClient, plan: RemotePl
     marks.append(element);
   };
   if (!plan.write) mark(t("View only"), "busy");
-  if (plan.lease) mark(t("{holder} edits", { holder: plan.lease.holder }), "busy");
+  // A plan of another account: its owner.
+  const me = account();
+  if (plan.owner && plan.owner !== me?.name) mark(plan.owner);
   text.append(marks);
   open.append(picture, text);
-  open.addEventListener("click", () => void openRemote(connection.address, plan.id));
+  open.addEventListener("click", () => void openRemote(plan.id));
   const tools = document.createElement("div");
   tools.className = "project-tools";
-  if (plan.write && canShare(connection.token)) {
+  if (plan.share) {
     tools.append(
       iconButton("share", t("Share"), () => void shareDialog(client, plan.id, plan.name), {
         label: `${t("Share")}: ${plan.name}`,
       }),
     );
   }
-  const token = connection.token;
-  const canDelete =
-    !!token &&
-    (token.kind === "root" || (token.kind === "user" && token.write && plan.owner === token.label));
   tools.append(
-    iconButton(
-      "save",
-      t("Copy or move to this browser"),
-      () => downloadDialog(client, plan, canDelete),
-      { label: `${t("Copy or move to this browser")}: ${plan.name}` },
-    ),
+    iconButton("save", t("Copy or move to this browser"), () => downloadDialog(client, plan), {
+      label: `${t("Copy or move to this browser")}: ${plan.name}`,
+    }),
   );
-  if (canDelete) {
+  if (plan.delete) {
     tools.append(
       iconButton(
         "trash",
@@ -1670,16 +1743,15 @@ function remoteCard(connection: Connection, client: ServerClient, plan: RemotePl
 // ----- The start -----
 
 /**
- * Sets the hooks of the projects, the buttons of the top bar, and the connections of the start:
- * a link with `#connect=`, and the server that serves this app under the path of a token.
+ * Sets the hooks of the projects and the buttons of the top bar, and finds the server of the app.
+ * Then it opens a link for one use (`#invite=…`) or a plan (`?plan=…`) of the address.
  */
-export function setupRemote(): void {
+export function setupRemote(): Promise<void> {
   remoteHooks.active = () => session !== null;
   remoteHooks.save = save;
   remoteHooks.unsaved = () => !!session && unsaved(session);
   remoteHooks.end = endSession;
   remoteHooks.home = renderServers;
-  remoteHooks.connect = connectDialog;
   remoteHooks.versions = () => {
     if (session) {
       void showVersions(
@@ -1687,16 +1759,14 @@ export function setupRemote(): void {
       );
     }
   };
-  remoteHooks.canUpload = () => connections().some((c) => canCreate(c.token));
+  remoteHooks.canUpload = canCreate;
   remoteHooks.toServer = uploadDialog;
   doc.onBlocked = () => {
     if (!session) return;
     showStatus(
-      session.holder
-        ? t("{holder} edits this plan, so you can only view it.", { holder: session.holder })
-        : session.viewOnly
-          ? t("You only view this plan. Click Edit at the top to change it.")
-          : t("This plan is only to view. Click the mark of the server for more."),
+      session.viewOnly
+        ? t("You only view this plan. Click Edit at the top to change it.")
+        : t("This plan is only to view. Click the mark of the server for more."),
       true,
     );
   };
@@ -1708,43 +1778,24 @@ export function setupRemote(): void {
   doc.subscribe(() => {
     updateRemoteState();
     // The changes of the others that came during a drag.
-    if (session?.live && !doc.inTransaction && session.waiting.size) advance(session);
+    if (session && !doc.inTransaction && session.waiting.size) advance(session);
   });
   window.addEventListener("pagehide", () => {
-    if (session?.live) session.client.leaveOnUnload(session.planId);
-    else if (session?.editing) session.client.releaseOnUnload(session.planId);
+    if (session && !session.offline) session.client.leaveOnUnload(session.planId);
   });
-  void connectAtStart();
+  return start();
 }
 
-async function connectAtStart(): Promise<void> {
-  // A link of the form …/app/#connect=<address>.
-  const fragment = /#connect=([^&]+)/.exec(location.hash);
-  if (fragment) {
-    history.replaceState(null, "", `${location.pathname}${location.search}`);
-    try {
-      const address = parseAddress(decodeURIComponent(fragment[1]));
-      const { connection, me } = await addConnection(address);
-      showStatus(t("Connected to {server}.", { server: connection.name }));
-      if (me.token.kind === "plan" && me.token.planId) return openRemote(address, me.token.planId);
-      renderHome();
-    } catch (error) {
-      showStatus(errorText(error), true);
-    }
-    return;
-  }
-  // The app under the path of a token on a server: the API is next to it.
-  if (!/^https?:$/.test(location.protocol)) return;
-  try {
-    const response = await fetch(new URL("api/me", location.href), { cache: "no-store" });
-    if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return;
-    const address = normalizeAddress(new URL(".", location.href).href);
-    const { me } = await addConnection(address);
-    if (me.token.kind === "plan" && me.token.planId && !app.planOpen) {
-      return openRemote(address, me.token.planId);
-    }
-    if (!app.planOpen) renderHome();
-  } catch {
-    // No server next to the app: the app works as before.
-  }
+async function start(): Promise<void> {
+  server = await findServer();
+  if (!server) return;
+  updateRemoteState();
+  const link = /#(setup|invite|reset)=([^&]+)/.exec(location.hash);
+  if (link) history.replaceState(null, "", `${location.pathname}${location.search}`);
+  const plan = new URLSearchParams(location.search).get("plan");
+  if (plan && !app.planOpen) await openRemote(plan);
+  else if (!app.planOpen) renderHome();
+  if (link) return linkDialog(link[1], decodeURIComponent(link[2]));
+  // A browser without a login and without a shared plan: the login is the way in.
+  if (server.info && !server.info.account && server.info.grants.length === 0) loginDialog();
 }

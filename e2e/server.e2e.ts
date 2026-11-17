@@ -1,70 +1,82 @@
-import { test, expect } from "@playwright/test";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createHandler } from "../server/src/app";
-import { Store } from "../server/src/store";
+// The accounts of a Grundriss server in the browser: the setup of the admin, an invite, the
+// login, and two browsers that edit one plan through share links.
+
+import { expect, test } from "@playwright/test";
 import { emptyBuilding } from "../src/model/building";
 import { serializeBuilding } from "../src/model/file";
+import { openServerApp, PASSWORD, startServer, stopServers } from "./server-helpers";
 
-const running: { server: Server; dir: string }[] = [];
-async function start() {
-  const dir = mkdtempSync(join(tmpdir(), "grundriss-browser-"));
-  const store = new Store(dir);
-  const root = store.ensureRoot()!;
-  const handler = createHandler(store, {
-    mode: "full",
-    appDir: resolve(".e2e-build"),
-    siteDir: "",
-    homeUrl: "",
-    appUrl: "",
-    origins: [],
-    maxBody: 10 * 1024 * 1024,
-    version: "test",
-  });
-  const server = createServer((req, res) => void handler(req, res));
-  running.push({ server, dir });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const owner = store.token(root)!;
-  const plan = store.createPlan(owner, "Shared house", serializeBuilding(emptyBuilding()));
-  return { store, root, owner, plan, base };
-}
+test.afterEach(stopServers);
 
-test.afterEach(() => {
-  for (const { server, dir } of running.splice(0)) {
-    server.closeAllConnections();
-    server.close();
-    rmSync(dir, { recursive: true, force: true });
+test("sets up the admin, invites an account, and logs in", async ({ browser }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Uses two desktop browser contexts.");
+  const { store, base } = await startServer();
+  const a = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
+  const b = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
+  try {
+    const admin = await a.newPage();
+    // Log in as the admin with the dialog that a browser without a session gets.
+    await openServerApp(admin, base);
+    const login = admin.locator(".app-dialog");
+    await expect(login).toContainText("Log in to Grundriss");
+    await login.getByLabel("Name").fill("Admin");
+    await login.getByLabel("Password").fill(PASSWORD);
+    await login.locator("button.primary").click();
+    await expect(admin.locator(".server-head")).toContainText("Admin");
+
+    // An invite link for a new account.
+    await admin.getByRole("button", { name: "Server and accounts" }).click();
+    await admin.getByRole("button", { name: "Make an invite link" }).click();
+    const invite = await admin.locator(".new-link input").inputValue();
+    expect(invite).toMatch(new RegExp(`^${base}/invite/`));
+    await admin.keyboard.press("Escape");
+
+    // The invited person chooses a name and a password, and is logged in.
+    const anna = await b.newPage();
+    await anna.addInitScript(() => localStorage.setItem("grundriss-language", "en"));
+    await anna.goto(invite);
+    const made = anna.locator(".app-dialog");
+    await expect(made).toContainText("Your account on Grundriss");
+    await made.getByLabel("Name").fill("Anna");
+    await made.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await made.getByLabel("Password again").fill(PASSWORD);
+    await made.locator("button.primary").click();
+    await expect(anna.locator(".server-head")).toContainText("Anna");
+    await expect(anna.locator(".server-section")).toContainText("No plans on this server yet.");
+    // The address has no code any more.
+    expect(anna.url()).not.toContain("invite");
+    expect(store.counts().accounts).toBe(2);
+
+    // The invite works only once.
+    const other = await (await browser.newContext()).newPage();
+    await other.goto(invite);
+    await expect(other.locator("#status")).toContainText("not valid");
+  } finally {
+    await a.close();
+    await b.close();
   }
 });
 
-test("shares live changes between two browsers that both edit", async ({ browser }, testInfo) => {
+test("shows two people who edit through share links, and their changes", async ({
+  browser,
+}, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Uses two desktop browser contexts.");
-  const { store, owner, plan, base } = await start();
-  const first = store.makeToken(owner, {
-    kind: "plan",
-    label: "First",
-    planId: plan.id,
-    write: true,
-  });
-  const second = store.makeToken(owner, {
-    kind: "plan",
-    label: "Second",
-    planId: plan.id,
-    write: true,
-  });
+  const { store, admin, base, plans } = await startServer();
+  const access = store.access(store.createSession(admin))!;
+  const plan = store.createPlan(access, "Shared house", serializeBuilding(emptyBuilding()));
+  const first = store.makeShare(access, plan, { label: "First", write: true });
+  const second = store.makeShare(access, plan, { label: "Second", write: true });
   const a = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
   const b = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-US" });
   try {
     const one = await a.newPage();
     const two = await b.newPage();
-    await one.goto(`${base}/${first.token}/`);
+    await openServerApp(one, base, `/s/${first.token}`);
     await expect(one.locator("#remote-state")).toHaveText("Grundriss");
-    await two.goto(`${base}/${second.token}/`);
-    // Both edit at once; each sees the other.
+    // The token is not in the address of the app.
+    expect(one.url()).not.toContain(first.token);
+    await openServerApp(two, base, `/s/${second.token}`);
+    // Both edit at once; each sees the other, by the label of the link.
     await expect(two.locator("#remote-state")).toHaveText("Grundriss");
     await expect(one.locator("#people .person")).toHaveText("S");
     await expect(two.locator("#people .person")).toHaveText("F");
@@ -77,7 +89,10 @@ test("shares live changes between two browsers that both edit", async ({ browser
     await next.press("Tab");
     await expect(one.getByRole("spinbutton", { name: "North" })).toHaveValue("40");
     await expect
-      .poll(() => JSON.parse(store.revisionData(plan, plan.revisions.at(-1)!.id)).north)
+      .poll(() => {
+        const current = plans()[0];
+        return JSON.parse(store.revisionData(current, current.revisions.at(-1)!.id)).north;
+      })
       .toBe(40);
     // A closed tab leaves the list of the others.
     await one.close();
@@ -86,47 +101,4 @@ test("shares live changes between two browsers that both edit", async ({ browser
     await a.close();
     await b.close();
   }
-});
-
-test("does not put the current private app address in a share link for another server", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "Uses the desktop share dialog.");
-  const own = await start();
-  const other = await start();
-  await page.addInitScript(
-    ({ address }) => {
-      localStorage.setItem(
-        "grundriss-servers",
-        JSON.stringify([
-          {
-            address,
-            name: "Other server",
-            token: { kind: "root", write: true, createPlans: true },
-          },
-        ]),
-      );
-    },
-    { address: `${other.base}/${other.root}` },
-  );
-  // The two test servers are on different origins. Allow the app's API requests in this test.
-  await page.route(`${other.base}/**`, async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      headers: {
-        ...response.headers(),
-        "Access-Control-Allow-Origin": own.base,
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      },
-    });
-  });
-  await page.goto(
-    `${own.base}/${own.root}/#connect=${encodeURIComponent(`${other.base}/${other.root}`)}`,
-  );
-  await page.getByRole("button", { name: "Share: Shared house", exact: true }).first().click();
-  await page.getByRole("button", { name: "Make a link", exact: true }).click();
-  await expect(page.locator(".new-link input")).toHaveCount(1);
-  await expect(page.locator(".new-link input")).not.toHaveValue(new RegExp(own.root));
 });

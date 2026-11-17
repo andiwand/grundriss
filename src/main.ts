@@ -1102,7 +1102,7 @@ doc.subscribe(scheduleAutosave);
 void startProjects();
 // A click on the name of the plan shows its versions.
 $("#file-name").addEventListener("click", openVersions);
-setupRemote();
+void setupRemote();
 setupPresence();
 
 // ----- Installed app -----

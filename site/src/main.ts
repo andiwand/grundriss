@@ -422,3 +422,24 @@ addEventListener("scroll", update, { passive: true });
 addEventListener("resize", update);
 update();
 document.body.classList.add("ready");
+
+// A website that a Grundriss server serves has the API next to it: then the top bar shows "Log in",
+// or the name of the account. The website on GitHub Pages gets no JSON there, and the link stays
+// hidden.
+async function showLogin(): Promise<void> {
+  const link = document.querySelector<HTMLAnchorElement>("#login");
+  if (!link || !/^https?:$/.test(location.protocol)) return;
+  try {
+    const response = await fetch(new URL("api/session", link.href.replace(/app\/$/, "")), {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return;
+    const session = (await response.json()) as { account?: { name: string } | null };
+    if (session.account) link.textContent = session.account.name;
+    link.hidden = false;
+  } catch {
+    // No server next to the website.
+  }
+}
+void showLogin();

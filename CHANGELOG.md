@@ -4,9 +4,26 @@ The changes that a user notices.
 
 ## Unreleased
 
-- Server: the data of the server (the tokens and the plans) is now in `data.yaml`, which a person
-  can read. At its next start, the server moves an existing `data.json` to `data.yaml` and keeps
-  the old file as `data.json.old`.
+- Server: accounts with a name and a password replace the links of the users and the root link.
+  At the first start, the log shows a setup link for the admin, which works once. The admin
+  invites people with invite links, which work once and end after 72 hours, and chooses their
+  rights: make plans, see and edit all plans, and invite others. The admin makes a link for a
+  new password; the server sends no emails. The login is a cookie that scripts cannot read.
+- Server: each account has a space for its plans (500 MB) and a number of plans (100). A save
+  over the space fails with a message. The admin changes both for each account, and the server
+  sets the defaults (`GRUNDRISS_QUOTA_MB`, `GRUNDRISS_MAX_PLANS`).
+- Server: a share link is now `/s/<token>`. It needs no account: the browser keeps the plan, and
+  the Projects page shows it, also after a login. The app of the server is at `/app/`, and
+  `/app/?plan=<id>` opens a plan.
+- Server: the website of the server shows "Log in", or the name of the account.
+- Server: the app of a server talks only to its own server. The app on GitHub Pages has no
+  server any more: "Connect a server", the mode `api`, `GRUNDRISS_ORIGINS`, `GRUNDRISS_APP_URL`,
+  `GRUNDRISS_HOME_URL`, and `GRUNDRISS_ROOT_TOKEN` are gone. Move a plan as a file.
+- Server: the old links of the users, the root link, and the old share links stop working. The
+  plans stay, and go to the admin at the setup. The data of the server is now in `data.yaml`,
+  which a person can read: at its next start, the server moves `data.json` to `data.yaml` and
+  keeps the old file as `data.json.old`.
+- Server: a logout removes the copies of the plans of the server from the browser.
 - Phone: the mark of the server in the top bar shows only the cloud again, as before 0.5.2.
 
 ## 0.5.2 – 2026-11-17

@@ -363,7 +363,7 @@ export async function addRevision(
 
 /** The list entry of the copy of a plan of a server, for use without the network. */
 export interface RemoteCopy {
-  /** The address of the token and the id of the plan. */
+  /** The address of the server and the id of the plan. */
   key: string;
   address: string;
   planId: string;
@@ -430,7 +430,7 @@ export async function loadRemoteCopy(
   return copy && record ? { ...copy, data: await withBlobs(record.data) } : undefined;
 }
 
-/** Removes the copies of the plans of a server, for example when its connection goes. */
+/** Removes the copies of the plans of a server, for example at a logout. */
 export async function removeRemoteCopies(address: string): Promise<void> {
   const keys = (await listRemoteCopies(address)).map((c) => c.key);
   await run([REMOTE_COPIES, REMOTE_COPY_DATA], "readwrite", (t) => {

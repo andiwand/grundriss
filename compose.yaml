@@ -3,8 +3,9 @@
 # 1. Point the DNS name (here grundriss.example.org) to this machine, and open the ports 80 and
 #    443. Caddy gets the certificate from Let's Encrypt by itself.
 # 2. Change the name below, and start: docker compose up -d
-# 3. Read the root link once: docker compose logs grundriss
-#    Open it as https://grundriss.example.org/<token>/
+# 3. Read the setup link once: docker compose logs grundriss
+#    Open it as https://grundriss.example.org/setup/<code>, and choose the name and the password
+#    of the admin. The app is at https://grundriss.example.org/app/.
 #
 # The data of Grundriss is in ./data, the certificates of Caddy in ./caddy. See "Plans on your
 # own server" in the README for all settings.
@@ -14,13 +15,11 @@ services:
     image: ghcr.io/andiwand/grundriss:latest
     restart: unless-stopped
     environment:
-      # The website at / and the app at /app/, from this server. Leave it out, and each address
-      # outside a link answers 404.
+      # The website at /, with "Log in". Leave it out, and / goes to the app at /app/.
       GRUNDRISS_PUBLIC_SITE: "true"
-      # Or send / and /app to the public website and app on GitHub Pages, with only the API here:
-      # GRUNDRISS_MODE: api
-      # GRUNDRISS_HOME_URL: https://andiwand.github.io/grundriss/
-      # GRUNDRISS_APP_URL: https://andiwand.github.io/grundriss/app/
+      # The space and the number of plans of each account. 0 is no limit.
+      # GRUNDRISS_QUOTA_MB: "500"
+      # GRUNDRISS_MAX_PLANS: "100"
     volumes:
       # The folder must belong to the user of the container (1000), or set `user:` to its owner.
       - ./data:/data

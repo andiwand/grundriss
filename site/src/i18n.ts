@@ -44,6 +44,7 @@ const en = {
   nav: {
     home: "Grundriss home",
     open: "Open the app",
+    login: "Log in",
     language: "Language",
     chapters: "Chapters",
   },
@@ -277,6 +278,7 @@ const de: Texts = {
   nav: {
     home: "Grundriss Startseite",
     open: "App öffnen",
+    login: "Anmelden",
     language: "Sprache",
     chapters: "Kapitel",
   },

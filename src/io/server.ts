@@ -1,36 +1,43 @@
-// The client of the API of a Grundriss server (server/src/app.ts). A connection is the address of
-// a token on a server, for example `https://example.org/<token>`: the app and its API are below
-// it. The token is the access, so the address is a secret.
+// The client of the API of the Grundriss server that serves this app (server/src/app.ts). The
+// app is at `/app/` of the server, and the API at `/api/`. The session is a cookie that the
+// browser sends by itself, so the app never sees it.
 
 import type { Patch } from "../model/patch";
 
 /** The version of the API that the app knows. */
-export const API_VERSION = 1;
+export const API_VERSION = 2;
 
-export interface TokenInfo {
-  id: string;
-  kind: "root" | "user" | "plan";
-  label: string;
-  planId: string | null;
-  write: boolean;
+export interface Rights {
   createPlans: boolean;
   seeAll: boolean;
-  makeUsers: boolean;
-  expires: number | null;
-  created: number;
-  /** The name of the plan of a share link, in the list of the tokens. */
-  planName?: string | null;
+  makeAccounts: boolean;
 }
 
-export interface Me {
+export interface Account extends Rights {
+  id: string;
+  name: string;
+  admin: boolean;
+  /** The own space in bytes, or null for the default of the server. 0 is no limit. */
+  quota: number | null;
+  /** The own number of plans, or null for the default of the server. 0 is no limit. */
+  maxPlans: number | null;
+  /** The space and the number of plans that count: the own ones or the defaults. */
+  limit: number;
+  planLimit: number;
+  /** The space that the plans use, in bytes, and their number. */
+  used: number;
+  plans: number;
+  created: number;
+}
+
+/** The session of this browser: the server, the account, and the plans of share links. */
+export interface SessionInfo {
   api: number;
   version: string;
   /** The name of the server. */
   server: string;
-  mode: "full" | "api";
-  token: TokenInfo;
-  /** True if the server merges the changes of many people (`changes`); else one edits. */
-  live?: boolean;
+  account: Account | null;
+  grants: { planId: string; write: boolean }[];
 }
 
 /** A person who has a plan open, with the state that the app of that person sends. */
@@ -49,7 +56,10 @@ export interface RemotePlan {
   updated: number;
   by: string;
   write: boolean;
-  lease: { holder: string; until: number } | null;
+  /** True if this account can make share links of the plan. */
+  share: boolean;
+  /** True if this account can delete the plan. */
+  delete: boolean;
   /** The SVG of the ground floor, or "". Only in the list of the plans. */
   preview?: string;
 }
@@ -62,25 +72,39 @@ export interface Revision {
   size: number;
 }
 
+export interface Share {
+  id: string;
+  planId: string;
+  planName: string;
+  label: string;
+  write: boolean;
+  expires: number | null;
+  created: number;
+}
+
+/** An open link for one use that an account made: an invite or a reset. */
+export interface Invite {
+  id: string;
+  kind: "invite" | "reset";
+  /** The name of the account of a reset. */
+  account: string;
+  rights: Rights | null;
+  quota: number | null;
+  expires: number;
+  created: number;
+}
+
 export interface ServerSettings {
   name: string;
   plans: number;
-  tokens: number;
-  mode: "full" | "api";
+  accounts: number;
+  shares: number;
   version: string;
-  origins: string[];
-  appUrl: string;
-}
-
-export interface NewToken {
-  kind: "user" | "plan";
-  label: string;
-  planId?: string;
-  write?: boolean;
-  createPlans?: boolean;
-  seeAll?: boolean;
-  makeUsers?: boolean;
-  expires?: number | null;
+  publicSite: boolean;
+  /** The defaults of an account. */
+  quota: number;
+  maxPlans: number;
+  linkHours: number;
 }
 
 /** An error of the server, with its HTTP status. */
@@ -94,18 +118,16 @@ export class ServerError extends Error {
   }
 }
 
-/** The address without a slash at its end, so that the paths can follow it. */
-export const normalizeAddress = (address: string) => address.trim().replace(/\/+$/, "");
-
 export class ServerClient {
+  /** The address of the server, without a slash at its end. */
   readonly base: string;
 
-  /** `client` names this tab for the edit lease. */
+  /** `client` names this tab, for the presence and the own changes. */
   constructor(
     base: string,
     readonly client = "",
   ) {
-    this.base = normalizeAddress(base);
+    this.base = base.replace(/\/+$/, "");
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -122,11 +144,12 @@ export class ServerClient {
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         cache: "no-store",
+        credentials: "same-origin",
         signal: controller.signal,
       });
       text = await response.text();
     } catch {
-      throw new ServerError(0, "The server does not answer. Check the network and the address.");
+      throw new ServerError(0, "The server does not answer. Check the network.");
     } finally {
       clearTimeout(timeout);
     }
@@ -138,10 +161,7 @@ export class ServerClient {
     }
     if (!response.ok) {
       const message =
-        response.status === 404 && !value
-          ? "The server does not know this address. The link can be wrong or removed."
-          : ((value as { error?: string } | null)?.error ??
-            `The server answered ${response.status}.`);
+        (value as { error?: string } | null)?.error ?? `The server answered ${response.status}.`;
       throw new ServerError(response.status, message, value);
     }
     if (value === null && text)
@@ -149,13 +169,28 @@ export class ServerClient {
     return value as T;
   }
 
-  me = () => this.request<Me>("GET", "me");
+  /** The address of a path of the server, for a link to send, for example `/s/<token>`. */
+  address = (path: string) => `${this.base}${path}`;
+
+  session = () => this.request<SessionInfo>("GET", "session");
+  login = (name: string, password: string) =>
+    this.request<SessionInfo>("POST", "login", { name, password });
+  logout = () => this.request<SessionInfo>("POST", "logout");
+  changePassword = (old: string, password: string) =>
+    this.request<unknown>("POST", "password", { old, password });
+  /** What a link for one use is: a setup, an invite, or a reset (with the name of its account). */
+  link = (code: string) =>
+    this.request<{ kind: "setup" | "invite" | "reset"; name: string; server: string }>(
+      "GET",
+      `links/${encodeURIComponent(code)}`,
+    );
+  acceptLink = (code: string, name: string, password: string) =>
+    this.request<SessionInfo>("POST", `links/${encodeURIComponent(code)}`, { name, password });
+
   plans = () => this.request<RemotePlan[]>("GET", "plans");
   plan = (id: string) => this.request<RemotePlan & { data: string }>("GET", `plans/${id}`);
   createPlan = (name: string, data: string) =>
     this.request<RemotePlan>("POST", "plans", { name, data });
-  savePlan = (id: string, parent: string, data: string, name?: string) =>
-    this.request<RemotePlan>("PUT", `plans/${id}`, { parent, data, name });
   deletePlan = (id: string, parent?: string) =>
     this.request<unknown>(
       "DELETE",
@@ -170,44 +205,39 @@ export class ServerClient {
   /** Tells the others of a plan the name and the state of this tab. */
   sendPresence = (id: string, name: string, state: unknown) =>
     this.request<unknown>("POST", `plans/${id}/presence`, { name, state });
-  takeLease = (id: string) =>
-    this.request<{ holder: string; until: number }>("POST", `plans/${id}/lease`);
-  releaseLease = (id: string) => this.request<unknown>("DELETE", `plans/${id}/lease`);
-  tokens = (planId?: string) =>
-    this.request<TokenInfo[]>(
-      "GET",
-      planId ? `tokens?plan=${encodeURIComponent(planId)}` : "tokens",
-    );
-  createToken = (token: NewToken) =>
-    this.request<TokenInfo & { token: string }>("POST", "tokens", token);
-  deleteToken = (id: string) => this.request<unknown>("DELETE", `tokens/${id}`);
+
+  shares = (planId?: string) =>
+    this.request<Share[]>("GET", planId ? `shares?plan=${encodeURIComponent(planId)}` : "shares");
+  createShare = (
+    planId: string,
+    share: { label: string; write: boolean; expires: number | null },
+  ) => this.request<Share & { path: string }>("POST", `plans/${planId}/shares`, share);
+  deleteShare = (id: string) => this.request<unknown>("DELETE", `shares/${id}`);
+
+  accounts = () => this.request<Account[]>("GET", "accounts");
+  updateAccount = (
+    id: string,
+    change: Partial<Rights & { admin: boolean; quota: number | null; maxPlans: number | null }>,
+  ) => this.request<Account>("PUT", `accounts/${id}`, change);
+  deleteAccount = (id: string) => this.request<unknown>("DELETE", `accounts/${id}`);
+  resetLink = (id: string) => this.request<{ path: string }>("POST", `accounts/${id}/reset`);
+  invites = () => this.request<Invite[]>("GET", "invites");
+  createInvite = (invite: Partial<Rights> & { quota?: number | null }) =>
+    this.request<{ path: string }>("POST", "invites", invite);
+  deleteInvite = (id: string) => this.request<unknown>("DELETE", `invites/${id}`);
   settings = () => this.request<ServerSettings>("GET", "settings");
   saveSettings = (settings: { name: string }) =>
     this.request<ServerSettings>("PUT", "settings", settings);
 
-  /** The stream of the events of a plan: new revisions, the people, the lease, the removal. */
+  /** The stream of the events of a plan: new revisions, the people, the removal. */
   events(id: string): EventSource {
     const client = this.client ? `?client=${encodeURIComponent(this.client)}` : "";
     return new EventSource(`${this.base}/api/plans/${id}/events${client}`);
   }
 
-  /** The address of a new token on this server: the server address with the token. */
-  tokenAddress(token: string): string {
-    return `${this.base.slice(0, this.base.lastIndexOf("/"))}/${token}`;
-  }
-
   /** Leaves the list of the people of a plan when the page closes. */
   leaveOnUnload(id: string): void {
     void fetch(`${this.base}/api/plans/${id}/presence`, {
-      method: "DELETE",
-      headers: { "X-Client": this.client },
-      keepalive: true,
-    }).catch(() => undefined);
-  }
-
-  /** Gives the lease back when the page closes. `keepalive` lets the request outlive the page. */
-  releaseOnUnload(id: string): void {
-    void fetch(`${this.base}/api/plans/${id}/lease`, {
       method: "DELETE",
       headers: { "X-Client": this.client },
       keepalive: true,

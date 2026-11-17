@@ -17,7 +17,7 @@ it("times out a request that never receives a response", async () => {
         }),
     ),
   );
-  const result = new ServerClient("https://server/token").me();
+  const result = new ServerClient("https://server").session();
   const checked = expect(result).rejects.toMatchObject({ status: 0 });
   await vi.advanceTimersByTimeAsync(30_000);
   await checked;
@@ -33,5 +33,16 @@ it("reports a network error if the response body fails", async () => {
       },
     })),
   );
-  await expect(new ServerClient("https://server/token").me()).rejects.toBeInstanceOf(ServerError);
+  await expect(new ServerClient("https://server").session()).rejects.toBeInstanceOf(ServerError);
+});
+
+it("calls the API next to the app, with the cookie of the session", async () => {
+  const fetch = vi.fn(async () => new Response("{}"));
+  vi.stubGlobal("fetch", fetch);
+  await new ServerClient("https://server/").plans();
+  expect(fetch).toHaveBeenCalledWith(
+    "https://server/api/plans",
+    expect.objectContaining({ credentials: "same-origin" }),
+  );
+  expect(new ServerClient("https://server").address("/s/abc")).toBe("https://server/s/abc");
 });

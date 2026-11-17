@@ -116,8 +116,8 @@ a JPEG. The undo keeps the last 200 steps.
 ### Plans on your own server
 
 A small server keeps plans in one place, so that several people and devices work on the same
-plan and nothing goes out of sync. It has no accounts: each person and each shared plan has a
-link, and the link is the access.
+plan and nothing goes out of sync. People log in with an account, and a share link gives one plan
+to a person without an account.
 
 Start it with Docker:
 
@@ -126,17 +126,31 @@ docker run -d --name grundriss -v grundriss:/data -p 8080:8080 ghcr.io/andiwand/
 docker logs grundriss
 ```
 
-The log shows the **root link** once, for example `http://localhost:8080/Ab3…/`. Keep it like a
-password. It opens the app with the server: all plans, the **server settings**, and the
-**users**. Put the server behind a reverse proxy with https (for example Caddy or Traefik).
+The log shows a **setup link** once, for example `http://localhost:8080/setup/Ab3…`. Open it on
+the address of your server, and choose the name and the password of the admin. The link works
+once, and only for 72 hours; while there is no admin, each start shows a new one. So only a person
+who can read the log can claim the server. Put the server behind a reverse proxy with https (for
+example Caddy or Traefik).
 
-- **Users.** In the server settings, root adds a user with a name and rights: can edit, can make
-  plans, sees all plans, can add users, and an end date. The user gets an own link. A user sees
-  the own plans, and other plans only with "sees all plans". Removing a user also removes the
-  links that the user made.
-- **Share links.** A user who can edit shares a plan with **Share** in the top bar: a link for
-  this one plan, to view or to edit, with an end date. A link that only views makes no other
-  links.
+The app of the server is at `/app/`. Without a login, it asks for the name and the password.
+
+- **Accounts.** The admin invites a person with an **invite link** (the settings icon on the
+  Projects page, **Server and accounts**): it works once, for a set time, and the person chooses
+  a name and a password. The admin chooses the rights of the new account: make plans, see and
+  edit all plans, and invite others. An account that can invite gives at most its own rights.
+  The server keeps only a salted scrypt hash of each password, and stops the logins of a name
+  after 10 wrong passwords for 15 minutes.
+- **Space.** Each account has a space for its plans (500 MB) and a number of plans (100). The
+  revisions count, and each image once. A save over the space fails with a message, also if
+  another person edits the plan. The admin changes both for each account.
+- **Forgotten passwords.** The server sends no emails. The admin makes a link for a new password
+  and sends it on a safe way. A new password ends all other logins of the account, and **Your
+  account** changes the own password. If the admin forgets the own password, start the server once
+  with `GRUNDRISS_ADMIN_RESET=true`: the log shows a link for a new password.
+- **Share links.** The owner of a plan (and the admin, and an account that sees all plans) shares
+  it with **Share** in the top bar: a link for this one plan, to view or to edit, with an end
+  date. A share link needs no account. It opens the plan, and the browser keeps it: the plan shows
+  on the Projects page, also after a login. Removing the link ends the access at once.
 - **Edit together.** All people who can edit a plan edit it at the same time, and each one sees
   the changes of the others at once. If two people change the same thing, the later change wins;
   changes of different things all stay. Undo takes back only your own changes.
@@ -149,31 +163,43 @@ password. It opens the app with the server: all plans, the **server settings**, 
   the plan on the phone. A pan, a zoom, a click in a view, Esc, or **Stop following** ends it.
 - **View only.** A person who can edit can switch to **View only** in the top bar (on a phone, in
   the dialog of the server), so that a click cannot change the plan, and back to **Edit**.
-- **Server and browser.** On the Projects page, the plans of each server show under its name.
-  **Connect a server** adds a link. A plan of the browser goes to a server, and a plan of a
-  server to the browser, as a copy or as a move.
-- **Without the network**, the app opens the copy of a plan of a server that it keeps in the
-  browser, only to view. The Projects page shows these copies under the server.
+- **Server and browser.** On the Projects page, the plans of the server show under its name. A
+  plan of the browser goes to the server, and a plan of the server to the browser, as a copy or
+  as a move. The app on GitHub Pages has no server: save a plan there as a file, and open it in
+  the app of the server.
+- **Without the network**, the app opens the copy of a plan of the server that it keeps in the
+  browser, only to view. The Projects page shows these copies under the server. A logout removes
+  them.
 - **Links that end** go away by themselves: the server removes them at the start and every hour.
-  Root sees all users and all share links, with the plan of each link, in the server settings.
-- The installed app of GitHub Pages connects to a server too, if the server has https and
-  allows the app with `GRUNDRISS_ORIGINS` or `GRUNDRISS_APP_URL`.
 
 The settings are environment variables:
 
-| Variable                | Default | What                                                                    |
-| ----------------------- | ------- | ----------------------------------------------------------------------- |
-| `GRUNDRISS_MODE`        | `full`  | `full`: the app and the API under each link. `api`: only the API.       |
-| `GRUNDRISS_DATA`        | `/data` | The folder of the plans and their revisions.                            |
-| `PORT`                  | `8080`  | The port.                                                               |
-| `GRUNDRISS_ROOT_TOKEN`  | –       | An own root token. Without it, the server makes one at the first start. |
-| `GRUNDRISS_PUBLIC_SITE` | –       | `true`: the website at `/` and the app at `/app/`, for everybody.       |
-| `GRUNDRISS_HOME_URL`    | –       | `/` sends the browser to this website.                                  |
-| `GRUNDRISS_APP_URL`     | –       | `/app` sends the browser to this app; in mode `api` also each link.     |
-| `GRUNDRISS_ORIGINS`     | –       | Other sites that may use the API, separated by commas.                  |
-| `GRUNDRISS_MAX_BODY`    | `100`   | The largest plan in MB.                                                 |
+| Variable                 | Default | What                                                                   |
+| ------------------------ | ------- | ---------------------------------------------------------------------- |
+| `GRUNDRISS_DATA`         | `/data` | The folder of the plans, their revisions, and `data.yaml`.             |
+| `PORT`                   | `8080`  | The port.                                                              |
+| `GRUNDRISS_PUBLIC_SITE`  | –       | `true`: the website at `/`, with **Log in**. Else `/` goes to the app. |
+| `GRUNDRISS_LINK_HOURS`   | `72`    | The time of a setup, invite, or password link, in hours.               |
+| `GRUNDRISS_SESSION_DAYS` | `30`    | The time of a login, in days.                                          |
+| `GRUNDRISS_QUOTA_MB`     | `500`   | The space of the plans of an account in MB. `0` is no limit.           |
+| `GRUNDRISS_MAX_PLANS`    | `100`   | The number of plans of an account. `0` is no limit.                    |
+| `GRUNDRISS_ADMIN_RESET`  | –       | `true`: the log shows a link for a new password of the admin.          |
+| `GRUNDRISS_MAX_BODY`     | `100`   | The largest plan in MB.                                                |
 
-Without these settings, the server answers 404 to each address outside a valid link, also `/`.
+The addresses of the server:
+
+| Path                                               | What                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------- |
+| `/app/`                                            | The app. `/app/?plan=<id>` opens a plan.                    |
+| `/api/…`                                           | The API. The session is an httpOnly cookie.                 |
+| `/s/<token>`                                       | A share link: the browser gets the plan, then opens it.     |
+| `/setup/<code>`, `/invite/<code>`, `/reset/<code>` | A link for one use: the app asks for a name and a password. |
+
+`data.yaml` holds the accounts, the sessions, the links, and the plans, and a person can read it.
+The server keeps only hashes of the passwords and the links. A server before 0.6 had tokens in
+place of accounts: at its first start, the server moves `data.json` to `data.yaml`, the old tokens
+and links stop working, and the plans go to the admin at the setup.
+
 The image `ghcr.io/andiwand/grundriss:latest` is the last release; `:main` is the newest state.
 [`compose.yaml`](compose.yaml) starts the server with Caddy for https, and shows the settings for
 nginx-proxy. Each large image of a plan is stored once on the server and in the history of the

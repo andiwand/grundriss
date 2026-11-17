@@ -122,6 +122,7 @@ export function renderPage(lang: Lang): string {
       <div class="topbar-links">
         <nav class="langs" aria-label="${t.nav.language}">${switcher}</nav>
         <a class="github" href="${GITHUB}">GitHub</a>
+        <a class="button small" id="login" href="${root}app/" hidden>${t.nav.login}</a>
         <a class="button small primary" href="${root}app/">${t.nav.open}</a>
       </div>
     </header>

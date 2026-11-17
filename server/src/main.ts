@@ -1,67 +1,82 @@
 // Starts the server of Grundriss. The configuration comes from the environment (see the README):
 //
-//   GRUNDRISS_MODE         "full" (the app and the API) or "api" (only the API). Default "full".
-//   GRUNDRISS_DATA         The folder of the data. Default "./data".
-//   GRUNDRISS_APP          The folder of the build of the app. Default "./app" next to this file.
-//   GRUNDRISS_ORIGINS      The origins that may call the API, separated by commas.
-//   GRUNDRISS_APP_URL      The app that `/app` sends the browser to; in mode "api" also `/<token>/`.
-//   GRUNDRISS_HOME_URL     The website that `/` sends the browser to.
-//   GRUNDRISS_PUBLIC_SITE  "true": serve the website at `/` and the app at `/app/` for everybody.
-//   GRUNDRISS_SITE         The folder of the build of the website. Default "./site" next to this.
-//   GRUNDRISS_ROOT_TOKEN   An own root token. Without it, the server makes one at the first start.
-//   GRUNDRISS_MAX_BODY     The largest plan in MB. Default 100.
-//   PORT                   The port. Default 8080.
+//   GRUNDRISS_DATA          The folder of the data. Default "./data".
+//   GRUNDRISS_APP           The folder of the build of the app. Default "./app" next to this file.
+//   GRUNDRISS_PUBLIC_SITE   "true": serve the website at `/`. Else `/` goes to the app.
+//   GRUNDRISS_SITE          The folder of the build of the website. Default "./site" next to this.
+//   GRUNDRISS_LINK_HOURS    The time of a setup, invite, or reset link, in hours. Default 72.
+//   GRUNDRISS_SESSION_DAYS  The time of a login, in days. Default 30.
+//   GRUNDRISS_QUOTA_MB      The space of the plans of an account, in MB. 0 is no limit. Default 500.
+//   GRUNDRISS_MAX_PLANS     The number of plans of an account. 0 is no limit. Default 100.
+//   GRUNDRISS_ADMIN_RESET   "true": show a link to set a new password of the admin in the log.
+//   GRUNDRISS_MAX_BODY      The largest plan in MB. Default 100.
+//   PORT                    The port. Default 8080.
 
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHandler, type Config } from "./app";
-import { Store } from "./store";
+import { DEFAULT_OPTIONS, Store } from "./store";
 
 declare const __VERSION__: string;
 const version = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 
 const env = process.env;
 const here = dirname(fileURLToPath(import.meta.url));
-const mode = env.GRUNDRISS_MODE === "api" ? "api" : "full";
+
+/** A number of the environment, or the default if it is missing or not a number. */
+const number = (value: string | undefined, fallback: number) => {
+  const n = Number(value);
+  return value !== undefined && value !== "" && Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+
 const config: Config = {
-  mode,
   appDir: resolve(env.GRUNDRISS_APP ?? join(here, "app")),
-  origins: (env.GRUNDRISS_ORIGINS ?? "")
-    .split(",")
-    .map((o) => o.trim())
-    .filter(Boolean),
-  appUrl: env.GRUNDRISS_APP_URL ?? "",
-  homeUrl: env.GRUNDRISS_HOME_URL ?? "",
   siteDir:
     env.GRUNDRISS_PUBLIC_SITE === "true" ? resolve(env.GRUNDRISS_SITE ?? join(here, "site")) : "",
-  maxBody: Number(env.GRUNDRISS_MAX_BODY ?? 100) * 1024 * 1024,
+  maxBody: number(env.GRUNDRISS_MAX_BODY, 100) * 1024 * 1024,
   version,
 };
-const port = Number(env.PORT ?? 8080);
-const store = new Store(resolve(env.GRUNDRISS_DATA ?? "data"));
-const created = store.ensureRoot(env.GRUNDRISS_ROOT_TOKEN || undefined);
+const port = number(env.PORT, 8080);
+const store = new Store(resolve(env.GRUNDRISS_DATA ?? "data"), {
+  linkHours: number(env.GRUNDRISS_LINK_HOURS, DEFAULT_OPTIONS.linkHours),
+  sessionDays: number(env.GRUNDRISS_SESSION_DAYS, DEFAULT_OPTIONS.sessionDays),
+  quota: number(env.GRUNDRISS_QUOTA_MB, DEFAULT_OPTIONS.quota / 1024 / 1024) * 1024 * 1024,
+  maxPlans: number(env.GRUNDRISS_MAX_PLANS, DEFAULT_OPTIONS.maxPlans),
+});
 
-// Tokens that ended go away at the start, and then every hour.
+// While there is no admin, each start shows a new setup link. A restart with
+// GRUNDRISS_ADMIN_RESET shows a link to set a new password of the admin.
+const setup = store.setupLink();
+const reset = !setup && env.GRUNDRISS_ADMIN_RESET === "true" ? store.adminResetLink() : null;
+
+// Sessions and links that ended go away at the start, and then every hour.
 const cleanUp = () => {
   const removed = store.removeExpired();
-  if (removed > 0) console.log(`Removed ${removed} tokens that ended.`);
+  if (removed > 0) console.log(`Removed ${removed} sessions and links that ended.`);
 };
 cleanUp();
 setInterval(cleanUp, 3_600_000).unref();
 
-// One handler for all requests, so that the leases and the streams are shared.
+// One handler for all requests, so that the streams and the people are shared.
 const handler = createHandler(store, config);
 const server = createServer((req, res) => void handler(req, res));
 server.listen(port, () => {
-  console.log(`Grundriss server ${version}, mode "${mode}", port ${port}.`);
-  if (created) {
+  console.log(`Grundriss server ${version}, port ${port}.`);
+  const show = (text: string, path: string) => {
     console.log("");
-    console.log("The root token, shown only this time. Keep it safe:");
-    console.log(`  ${created}`);
-    console.log(`  http://localhost:${port}/${created}/`);
+    console.log(text);
+    console.log(`  ${path}`);
+    console.log(`  For example: http://localhost:${port}${path}`);
+    console.log(`  It works once, for ${store.options.linkHours} hours.`);
     console.log("");
-  }
+  };
+  if (setup)
+    show(
+      "Set up the admin account with this link, on the address of this server:",
+      `/setup/${setup}`,
+    );
+  if (reset) show("Set a new password of the admin with this link:", `/reset/${reset}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -7,13 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { emptyBuilding } from "../../src/model/building";
 import { serializeBuilding } from "../../src/model/file";
 import { makeHouse } from "../../src/model/example";
-import { createHandler, type Config } from "../src/app";
-import { Store } from "../src/store";
+import { COOKIE, createHandler, type Config } from "../src/app";
+import { Store, type StoreOptions } from "../src/store";
 
 let dir: string;
 let server: Server;
 let base: string;
-let root: string;
+let store: Store;
+let admin: Browser;
+
+const PASSWORD = "correct horse";
 
 const plan = (name = "Ground floor") => {
   const building = emptyBuilding();
@@ -21,19 +24,45 @@ const plan = (name = "Ground floor") => {
   return serializeBuilding(building);
 };
 
-async function start(config: Partial<Config> = {}) {
+/** A browser with its cookie of the session. */
+class Browser {
+  cookie = "";
+
+  async fetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const response = await fetch(`${base}${path}`, {
+      ...init,
+      headers: { ...(this.cookie ? { Cookie: this.cookie } : {}), ...(init.headers ?? {}) },
+      redirect: "manual",
+    });
+    const set = response.headers.get("set-cookie");
+    if (set) {
+      const value = set.split(";")[0];
+      this.cookie = value.endsWith("=") ? "" : value;
+    }
+    return response;
+  }
+
+  /** A call of the API, as JSON. */
+  async call(path: string, init: RequestInit & { json?: unknown } = {}) {
+    const response = await this.fetch(`/api/${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
+      body: init.json === undefined ? init.body : JSON.stringify(init.json),
+    });
+    const text = await response.text();
+    const type = response.headers.get("content-type") ?? "";
+    return { status: response.status, body: type.includes("json") ? JSON.parse(text) : text };
+  }
+}
+
+async function start(config: Partial<Config> = {}, options: Partial<StoreOptions> = {}) {
   dir = mkdtempSync(join(tmpdir(), "grundriss-"));
   const appDir = join(dir, "app");
   mkdirSync(appDir);
   writeFileSync(join(appDir, "index.html"), "<!doctype html><title>Grundriss</title>");
-  const store = new Store(join(dir, "data"));
-  root = store.ensureRoot()!;
+  store = new Store(join(dir, "data"), options);
   const handler = createHandler(store, {
-    mode: "full",
     appDir,
-    origins: [],
-    appUrl: "",
-    homeUrl: "",
     siteDir: "",
     maxBody: 10 * 1024 * 1024,
     version: "test",
@@ -42,148 +71,314 @@ async function start(config: Partial<Config> = {}) {
   server = createServer((req, res) => void handler(req, res));
   await new Promise<void>((done) => server.listen(0, done));
   base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  admin = new Browser();
+  const setup = await admin.call(`links/${store.setupLink()}`, {
+    method: "POST",
+    json: { name: "Admin", password: PASSWORD },
+  });
+  expect(setup.status).toBe(200);
 }
 
-beforeEach(() => start());
-afterEach(() => {
+function stop() {
   server.closeAllConnections();
   server.close();
   rmSync(dir, { recursive: true, force: true });
-});
+}
 
-/** A call of the API with a token, as JSON. */
-async function call(token: string, path: string, init: RequestInit & { json?: unknown } = {}) {
-  const response = await fetch(`${base}/${token}/api/${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-    body: init.json === undefined ? init.body : JSON.stringify(init.json),
-    redirect: "manual",
+beforeEach(() => start());
+afterEach(stop);
+
+/** A new account with the rights, logged in. */
+async function account(name: string, rights: Record<string, unknown> = {}): Promise<Browser> {
+  const { body } = await admin.call("invites", { method: "POST", json: rights });
+  const browser = new Browser();
+  const code = (body.path as string).split("/").pop();
+  const made = await browser.call(`links/${code}`, {
+    method: "POST",
+    json: { name, password: PASSWORD },
   });
-  const text = await response.text();
-  const type = response.headers.get("content-type") ?? "";
-  return { status: response.status, body: type.includes("json") ? JSON.parse(text) : text };
+  expect(made.status).toBe(200);
+  return browser;
+}
+
+/** A share link of a plan, and a new browser that opened it. */
+async function shared(planId: string, write = false) {
+  const { body: link } = await admin.call(`plans/${planId}/shares`, {
+    method: "POST",
+    json: { label: write ? "Writer" : "Reader", write },
+  });
+  const browser = new Browser();
+  const opened = await browser.fetch(link.path);
+  expect(opened.status).toBe(302);
+  return { link, browser };
 }
 
 describe("the paths of the server", () => {
-  it("answers 404 to each path without a valid token", async () => {
-    for (const path of ["/", "/api/me", "/nothing/", "/nothing/api/me", "/index.html"]) {
-      expect((await fetch(`${base}${path}`)).status).toBe(404);
+  it("serves the app at /app/, and sends / to it without the website", async () => {
+    const page = await admin.fetch("/app/");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Grundriss");
+    expect(page.headers.get("referrer-policy")).toBe("no-referrer");
+    expect((await admin.fetch("/app")).headers.get("location")).toBe("/app/");
+    expect((await admin.fetch("/")).headers.get("location")).toBe("/app/");
+    for (const path of ["/nothing", "/app/nothing.js", "/app/../data/data.yaml", "/s/nothing"]) {
+      expect((await admin.fetch(path)).status).toBe(404);
     }
   });
 
-  it("serves the app under a token, and the API next to it", async () => {
-    const page = await fetch(`${base}/${root}/`);
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Grundriss");
-    const moved = await fetch(`${base}/${root}`, { redirect: "manual" });
-    expect(moved.status).toBe(301);
-    expect(moved.headers.get("location")).toBe(`/${root}/`);
-    expect(page.headers.get("referrer-policy")).toBe("no-referrer");
-    const me = await call(root, "me");
-    expect(me.body).toMatchObject({ api: 1, token: { kind: "root", write: true } });
-    expect(JSON.stringify(me.body)).not.toContain(root);
-  });
-
-  it("takes the token as a Bearer header too", async () => {
-    const response = await fetch(`${base}/api/me`, {
-      headers: { Authorization: `Bearer ${root}` },
-    });
-    expect(response.status).toBe(200);
-  });
-
-  it("serves only the API in mode api, or sends the browser to the app", async () => {
-    server.closeAllConnections();
-    server.close();
-    await start({ mode: "api" });
-    expect((await fetch(`${base}/${root}/`)).status).toBe(404);
-    expect((await call(root, "me")).status).toBe(200);
-    server.closeAllConnections();
-    server.close();
-    await start({ mode: "api", appUrl: "https://example.org/app/" });
-    const moved = await fetch(`${base}/${root}/`, { redirect: "manual" });
-    expect(moved.status).toBe(302);
-    expect(moved.headers.get("location")).toBe(
-      `https://example.org/app/#connect=${encodeURIComponent(`http://${new URL(base).host}/${root}`)}`,
-    );
-    // Without the website, `/` stays 404; `/app` sends the browser to the app, without a token.
-    expect((await fetch(`${base}/`, { redirect: "manual" })).status).toBe(404);
-    const app = await fetch(`${base}/app`, { redirect: "manual" });
-    expect(app.headers.get("location")).toBe("https://example.org/app/");
-    server.closeAllConnections();
-    server.close();
-    await start({
-      mode: "api",
-      appUrl: "https://example.org/app/",
-      homeUrl: "https://example.org/",
-    });
-    const home = await fetch(`${base}/`, { redirect: "manual" });
-    expect(home.headers.get("location")).toBe("https://example.org/");
-    // The app may call the API from its origin.
-    const cors = await fetch(`${base}/${root}/api/me`, {
-      headers: { Origin: "https://example.org" },
-    });
-    expect(cors.headers.get("access-control-allow-origin")).toBe("https://example.org");
-  });
-});
-
-describe("the public website", () => {
-  it("serves the website at / and the app at /app/, next to the tokens", async () => {
-    server.closeAllConnections();
-    server.close();
+  it("serves the website at / and the app at /app/", async () => {
+    stop();
     const site = mkdtempSync(join(tmpdir(), "grundriss-site-"));
     writeFileSync(join(site, "index.html"), "<!doctype html><title>Website</title>");
     mkdirSync(join(site, "de"));
     writeFileSync(join(site, "de", "index.html"), "<!doctype html><title>Webseite</title>");
     await start({ siteDir: site });
-    expect(await (await fetch(`${base}/`)).text()).toContain("Website");
-    expect(await (await fetch(`${base}/de/`)).text()).toContain("Webseite");
-    expect(await (await fetch(`${base}/app/`)).text()).toContain("Grundriss");
-    expect((await fetch(`${base}/app`, { redirect: "manual" })).status).toBe(301);
-    expect((await fetch(`${base}/nothing`)).status).toBe(404);
-    expect((await fetch(`${base}/../data/data.yaml`)).status).toBe(404);
-    expect((await call(root, "me")).status).toBe(200);
+    expect(await (await admin.fetch("/")).text()).toContain("Website");
+    expect(await (await admin.fetch("/de/")).text()).toContain("Webseite");
+    expect(await (await admin.fetch("/app/")).text()).toContain("Grundriss");
+    expect((await admin.fetch("/nothing")).status).toBe(404);
+    expect((await admin.fetch("/../data/data.yaml")).status).toBe(404);
     rmSync(site, { recursive: true, force: true });
+  });
+
+  it("sends a link for one use on to the app, with its code in the fragment", async () => {
+    for (const kind of ["setup", "invite", "reset"]) {
+      const response = await admin.fetch(`/${kind}/abc`);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(`/app/#${kind}=abc`);
+    }
+  });
+
+  it("refuses a change that comes from another site", async () => {
+    const other = await admin.call("plans", {
+      method: "POST",
+      headers: { Origin: "https://evil.example" },
+      json: { data: plan() },
+    });
+    expect(other.status).toBe(403);
+    const own = await admin.call("plans", {
+      method: "POST",
+      headers: { Origin: base },
+      json: { data: plan() },
+    });
+    expect(own.status).toBe(201);
+  });
+});
+
+describe("accounts", () => {
+  it("sets up the admin once, with an httpOnly cookie", async () => {
+    const session = await admin.call("session");
+    expect(session.body).toMatchObject({
+      api: 2,
+      account: { name: "Admin", admin: true, createPlans: true },
+    });
+    // The admin exists, so a setup link does not work any more.
+    expect(store.setupLink()).toBeNull();
+    const fresh = await fetch(`${base}/api/links/${"x".repeat(22)}`);
+    expect(fresh.status).toBe(404);
+    const login = await new Browser().fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "admin", password: PASSWORD }),
+    });
+    const cookie = login.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain(`${COOKIE}=`);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Lax");
+  });
+
+  it("logs in with the name and the password, and out again", async () => {
+    await account("Anna");
+    const browser = new Browser();
+    expect((await browser.call("plans")).status).toBe(401);
+    const wrong = await browser.call("login", {
+      method: "POST",
+      json: { name: "Anna", password: "wrong password" },
+    });
+    expect(wrong.status).toBe(401);
+    const right = await browser.call("login", {
+      method: "POST",
+      json: { name: "anna", password: PASSWORD },
+    });
+    expect(right.body.account.name).toBe("Anna");
+    expect((await browser.call("plans")).status).toBe(200);
+    const session = browser.cookie;
+    await browser.call("logout", { method: "POST" });
+    expect(browser.cookie).toBe("");
+    // The old cookie does not work any more either.
+    browser.cookie = session;
+    expect((await browser.call("plans")).status).toBe(401);
+  });
+
+  it("stops the logins of a name after too many wrong passwords", async () => {
+    await account("Anna");
+    const browser = new Browser();
+    const login = (password: string) =>
+      browser.call("login", { method: "POST", json: { name: "Anna", password } });
+    for (let i = 0; i < 10; i++) expect((await login("wrong password")).status).toBe(401);
+    expect((await login(PASSWORD)).status).toBe(429);
+  });
+
+  it("makes an account with an invite link, which works once", async () => {
+    const { body } = await admin.call("invites", {
+      method: "POST",
+      json: { createPlans: false, seeAll: true },
+    });
+    expect(body.path).toMatch(/^\/invite\//);
+    const code = body.path.split("/").pop();
+    const anna = new Browser();
+    expect((await anna.call(`links/${code}`)).body.kind).toBe("invite");
+    const short = await anna.call(`links/${code}`, {
+      method: "POST",
+      json: { name: "Anna", password: "short" },
+    });
+    expect(short.status).toBe(400);
+    const taken = await anna.call(`links/${code}`, {
+      method: "POST",
+      json: { name: "admin", password: PASSWORD },
+    });
+    expect(taken.status).toBe(409);
+    const made = await anna.call(`links/${code}`, {
+      method: "POST",
+      json: { name: "Anna", password: PASSWORD },
+    });
+    expect(made.body.account).toMatchObject({ name: "Anna", createPlans: false, seeAll: true });
+    const again = await new Browser().call(`links/${code}`, {
+      method: "POST",
+      json: { name: "Ben", password: PASSWORD },
+    });
+    expect(again.status).toBe(404);
+  });
+
+  it("gives an invited account at most the rights of the account that invites", async () => {
+    const lead = await account("Lead", { makeAccounts: true, createPlans: true });
+    const { body } = await lead.call("invites", {
+      method: "POST",
+      json: { seeAll: true, makeAccounts: true, quota: 0 },
+    });
+    const code = body.path.split("/").pop();
+    const staff = new Browser();
+    const made = await staff.call(`links/${code}`, {
+      method: "POST",
+      json: { name: "Staff", password: PASSWORD },
+    });
+    expect(made.body.account).toMatchObject({ seeAll: false, makeAccounts: true, quota: null });
+    // Only the admin sees the accounts.
+    expect((await lead.call("accounts")).status).toBe(403);
+    expect((await admin.call("accounts")).body.map((a: { name: string }) => a.name)).toEqual([
+      "Admin",
+      "Lead",
+      "Staff",
+    ]);
+  });
+
+  it("sets a new password with a reset link of the admin, and ends the old sessions", async () => {
+    const anna = await account("Anna");
+    const id = (await anna.call("session")).body.account.id;
+    const { body } = await admin.call(`accounts/${id}/reset`, { method: "POST" });
+    const code = body.path.split("/").pop();
+    const browser = new Browser();
+    expect((await browser.call(`links/${code}`)).body).toMatchObject({
+      kind: "reset",
+      name: "Anna",
+    });
+    const reset = await browser.call(`links/${code}`, {
+      method: "POST",
+      json: { password: "a new password" },
+    });
+    expect(reset.body.account.name).toBe("Anna");
+    expect((await anna.call("plans")).status).toBe(401);
+    const login = await new Browser().call("login", {
+      method: "POST",
+      json: { name: "Anna", password: "a new password" },
+    });
+    expect(login.status).toBe(200);
+  });
+
+  it("changes the own password with the old one", async () => {
+    const anna = await account("Anna");
+    const wrong = await anna.call("password", {
+      method: "POST",
+      json: { old: "wrong password", password: "a new password" },
+    });
+    expect(wrong.status).toBe(403);
+    const right = await anna.call("password", {
+      method: "POST",
+      json: { old: PASSWORD, password: "a new password" },
+    });
+    expect(right.status).toBe(200);
+    // This session stays.
+    expect((await anna.call("plans")).status).toBe(200);
+  });
+
+  it("gives the plans of a removed account to the admin who removes it", async () => {
+    const anna = await account("Anna");
+    const id = (await anna.call("session")).body.account.id;
+    await anna.call("plans", { method: "POST", json: { name: "Anna's", data: plan() } });
+    expect((await admin.call(`accounts/${id}`, { method: "DELETE" })).status).toBe(200);
+    expect((await anna.call("plans")).status).toBe(401);
+    const [listed] = (await admin.call("plans")).body;
+    expect(listed).toMatchObject({ name: "Anna's", owner: "Admin" });
+    expect(
+      (
+        await admin.call(`accounts/${(await admin.call("session")).body.account.id}`, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it("lets only the admin change the settings", async () => {
+    const anna = await account("Anna");
+    expect((await anna.call("settings", { method: "PUT", json: { name: "X" } })).status).toBe(403);
+    const saved = await admin.call("settings", { method: "PUT", json: { name: "Home" } });
+    expect(saved.body).toMatchObject({ name: "Home", accounts: 2 });
+    expect((await anna.call("session")).body.server).toBe("Home");
   });
 });
 
 describe("plans and revisions", () => {
+  it("shows the plans of an account only to it, to the admin, and to who sees all", async () => {
+    const anna = await account("Anna");
+    const ben = await account("Ben");
+    const all = await account("All", { seeAll: true });
+    await anna.call("plans", { method: "POST", json: { name: "Anna's", data: plan() } });
+    expect((await anna.call("plans")).body).toHaveLength(1);
+    expect((await ben.call("plans")).body).toHaveLength(0);
+    expect((await all.call("plans")).body[0]).toMatchObject({ write: true, delete: false });
+    expect((await admin.call("plans")).body[0]).toMatchObject({ owner: "Anna", delete: true });
+  });
+
   it("does not delete a newer revision after a copy was downloaded", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    await call(root, `plans/${house.id}`, {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    await admin.call(`plans/${house.id}`, {
       method: "PUT",
       json: { parent: "1", data: plan("New") },
     });
-    expect((await call(root, `plans/${house.id}?parent=1`, { method: "DELETE" })).status).toBe(409);
-    expect((await call(root, `plans/${house.id}`)).body.revision).toBe("2");
-    expect((await call(root, `plans/${house.id}?parent=2`, { method: "DELETE" })).status).toBe(200);
+    expect((await admin.call(`plans/${house.id}?parent=1`, { method: "DELETE" })).status).toBe(409);
+    expect((await admin.call(`plans/${house.id}`)).body.revision).toBe("2");
+    expect((await admin.call(`plans/${house.id}?parent=2`, { method: "DELETE" })).status).toBe(200);
   });
 
   it("rejects an oversized body with HTTP 413 instead of resetting the connection", async () => {
-    const response = await call(root, "plans", {
+    const response = await admin.call("plans", {
       method: "POST",
       body: "x".repeat(10 * 1024 * 1024 + 1),
     });
     expect(response.status).toBe(413);
   });
 
-  it("rechecks token access after receiving a slow request body", async () => {
-    const { body: user } = await call(root, "tokens", {
-      method: "POST",
-      json: {
-        kind: "user",
-        label: "Writer",
-        write: true,
-        createPlans: true,
-      },
-    });
+  it("rechecks the access after receiving a slow request body", async () => {
+    const anna = await account("Anna");
+    const id = (await anna.call("session")).body.account.id;
     const payload = JSON.stringify({ data: plan() });
     let finish!: () => void;
     const answer = new Promise<number>((resolve, reject) => {
       const req = request(
-        `${base}/${user.token}/api/plans`,
+        `${base}/api/plans`,
         {
           method: "POST",
-          headers: { "Content-Length": Buffer.byteLength(payload) },
+          headers: { "Content-Length": Buffer.byteLength(payload), Cookie: anna.cookie },
         },
         (res) => {
           res.resume();
@@ -194,172 +389,199 @@ describe("plans and revisions", () => {
       req.write(payload.slice(0, 1));
       finish = () => req.end(payload.slice(1));
     });
-    await call(root, `tokens/${user.id}`, { method: "DELETE" });
+    await admin.call(`accounts/${id}`, { method: "DELETE" });
     finish();
-    expect(await answer).toBe(404);
-    expect((await call(root, "plans")).body).toHaveLength(0);
-  });
-
-  it("binds a lease to its token as well as its client", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const { body: reader } = await call(root, "tokens", {
-      method: "POST",
-      json: {
-        kind: "plan",
-        label: "Reader",
-        planId: house.id,
-      },
-    });
-    const { body: writer } = await call(root, "tokens", {
-      method: "POST",
-      json: {
-        kind: "plan",
-        label: "Writer",
-        planId: house.id,
-        write: true,
-      },
-    });
-    const path = `plans/${house.id}/lease`;
-    const headers = { "X-Client": "known-client" };
-    expect((await call(root, path, { method: "POST", headers })).status).toBe(200);
-    expect((await call(reader.token, path, { method: "DELETE", headers })).status).toBe(403);
-    expect((await call(writer.token, path, { method: "POST", headers })).status).toBe(423);
-    expect(
-      (
-        await call(writer.token, `plans/${house.id}`, {
-          method: "PUT",
-          headers,
-          json: { parent: "1", data: plan() },
-        })
-      ).status,
-    ).toBe(423);
-  });
-
-  it("checks the lease again after receiving a slow request body", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const payload = JSON.stringify({ parent: "1", data: plan() });
-    let finish!: () => void;
-    const answer = new Promise<number>((resolve, reject) => {
-      const req = request(
-        `${base}/${root}/api/plans/${house.id}`,
-        {
-          method: "PUT",
-          headers: { "X-Client": "slow", "Content-Length": Buffer.byteLength(payload) },
-        },
-        (res) => {
-          res.resume();
-          resolve(res.statusCode!);
-        },
-      );
-      req.on("error", reject);
-      req.write(payload.slice(0, 1));
-      finish = () => req.end(payload.slice(1));
-    });
-    await call(root, `plans/${house.id}/lease`, { method: "POST", headers: { "X-Client": "new" } });
-    finish();
-    expect(await answer).toBe(423);
+    expect(await answer).toBe(401);
+    expect((await admin.call("plans")).body).toHaveLength(0);
   });
 
   it("rejects non-object bodies and invalid names with a client error", async () => {
     for (const json of [null, [], 42, { data: plan(), name: 42 }]) {
-      expect((await call(root, "plans", { method: "POST", json })).status).toBe(400);
-    }
-  });
-
-  it("closes an event stream when its token is revoked", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const { body: link } = await call(root, "tokens", {
-      method: "POST",
-      json: {
-        kind: "plan",
-        label: "Reader",
-        planId: house.id,
-      },
-    });
-    const abort = new AbortController();
-    const response = await fetch(`${base}/${link.token}/api/plans/${house.id}/events`, {
-      signal: abort.signal,
-    });
-    const reader = response.body!.getReader();
-    await reader.read();
-    await call(root, `tokens/${link.id}`, { method: "DELETE" });
-    await call(root, `plans/${house.id}`, { method: "PUT", json: { parent: "1", data: plan() } });
-    try {
-      expect((await reader.read()).done).toBe(true);
-    } finally {
-      abort.abort();
+      expect((await admin.call("plans", { method: "POST", json })).status).toBe(400);
     }
   });
 
   it("saves a revision only on top of the current one", async () => {
-    const created = await call(root, "plans", {
+    const created = await admin.call("plans", {
       method: "POST",
       json: { name: "House", data: plan() },
     });
     expect(created.status).toBe(201);
     const id = created.body.id;
     expect(created.body.revision).toBe("1");
-    const saved = await call(root, `plans/${id}`, {
+    const saved = await admin.call(`plans/${id}`, {
       method: "PUT",
       json: { parent: "1", data: plan("First") },
     });
     expect(saved.body.revision).toBe("2");
     // A save on top of revision 1 comes too late.
-    const late = await call(root, `plans/${id}`, {
+    const late = await admin.call(`plans/${id}`, {
       method: "PUT",
       json: { parent: "1", data: plan("Second") },
     });
     expect(late.status).toBe(409);
-    const revisions = await call(root, `plans/${id}/revisions`);
-    expect(revisions.body.map((r: { id: string }) => r.id)).toEqual(["1", "2"]);
-    const old = await call(root, `plans/${id}/revisions/1`);
+    const revisions = await admin.call(`plans/${id}/revisions`);
+    expect(revisions.body.map((r: { id: string; by: string }) => [r.id, r.by])).toEqual([
+      ["1", "Admin"],
+      ["2", "Admin"],
+    ]);
+    const old = await admin.call(`plans/${id}/revisions/1`);
     expect(JSON.parse(old.body.data).stories[0].name).toBe("Ground floor");
   });
 
   it("lists each plan with a picture of its ground floor, also after a save", async () => {
-    const empty = await call(root, "plans", { method: "POST", json: { name: "x", data: plan() } });
-    expect((await call(root, "plans")).body[0].preview).toBe("");
+    const empty = await admin.call("plans", { method: "POST", json: { name: "x", data: plan() } });
+    expect((await admin.call("plans")).body[0].preview).toBe("");
     const house = serializeBuilding(makeHouse());
-    await call(root, `plans/${empty.body.id}`, {
+    await admin.call(`plans/${empty.body.id}`, {
       method: "PUT",
       json: { parent: "1", data: house },
     });
-    const [listed] = (await call(root, "plans")).body;
+    const [listed] = (await admin.call("plans")).body;
     expect(listed.preview).toMatch(/^<svg/);
     // The plan itself has no picture, because only the list shows it.
-    expect((await call(root, `plans/${empty.body.id}`)).body.preview).toBeUndefined();
+    expect((await admin.call(`plans/${empty.body.id}`)).body.preview).toBeUndefined();
   });
 
   it("refuses data that is not a plan", async () => {
-    const response = await call(root, "plans", { method: "POST", json: { name: "x", data: "{}" } });
+    const response = await admin.call("plans", {
+      method: "POST",
+      json: { name: "x", data: "{}" },
+    });
     expect(response.status).toBe(400);
   });
+});
 
-  it("lets one client edit at a time with the lease", async () => {
-    const { body } = await call(root, "plans", {
-      method: "POST",
-      json: { name: "House", data: plan() },
-    });
-    const take = (client: string) =>
-      call(root, `plans/${body.id}/lease`, { method: "POST", headers: { "X-Client": client } });
-    expect((await take("a")).status).toBe(200);
-    expect((await take("b")).status).toBe(423);
-    const save = await call(root, `plans/${body.id}`, {
+describe("the limits of an account", () => {
+  it("refuses a plan over the space or the number of plans of the account", async () => {
+    stop();
+    await start({}, { quota: 5000, maxPlans: 2 });
+    const anna = await account("Anna");
+    const first = await anna.call("plans", { method: "POST", json: { data: plan() } });
+    expect(first.status).toBe(201);
+    // The plan of another person counts for the owner.
+    const big = emptyBuilding();
+    big.stories[0].name = "x".repeat(6000);
+    const save = await admin.call(`plans/${first.body.id}`, {
       method: "PUT",
-      headers: { "X-Client": "b" },
-      json: { parent: "1", data: plan() },
+      json: { parent: "1", data: serializeBuilding(big) },
     });
-    expect(save.status).toBe(423);
-    await call(root, `plans/${body.id}/lease`, { method: "DELETE", headers: { "X-Client": "a" } });
-    expect((await take("b")).status).toBe(200);
+    expect(save.status).toBe(413);
+    expect((await anna.call(`plans/${first.body.id}`)).body.revision).toBe("1");
+    expect((await anna.call("plans", { method: "POST", json: { data: plan() } })).status).toBe(201);
+    const third = await anna.call("plans", { method: "POST", json: { data: plan() } });
+    expect(third.status).toBe(413);
+    const { body: me } = await anna.call("session");
+    expect(me.account).toMatchObject({ plans: 2, planLimit: 2, limit: 5000 });
+    expect(me.account.used).toBeGreaterThan(0);
+  });
+
+  it("lets the admin change the limits of an account", async () => {
+    stop();
+    await start({}, { maxPlans: 1 });
+    const anna = await account("Anna");
+    const id = (await anna.call("session")).body.account.id;
+    await anna.call("plans", { method: "POST", json: { data: plan() } });
+    expect((await anna.call("plans", { method: "POST", json: { data: plan() } })).status).toBe(413);
+    const changed = await admin.call(`accounts/${id}`, {
+      method: "PUT",
+      json: { maxPlans: 0, seeAll: true },
+    });
+    expect(changed.body).toMatchObject({ maxPlans: 0, planLimit: 0, seeAll: true });
+    expect((await anna.call("plans", { method: "POST", json: { data: plan() } })).status).toBe(201);
+  });
+});
+
+describe("share links", () => {
+  it("opens a plan without an account, only to view", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    await admin.call("plans", { method: "POST", json: { name: "Other", data: plan() } });
+    const { link, browser } = await shared(house.id);
+    expect(link.path).toMatch(/^\/s\//);
+    // The link went on to the plan; the token is not in that address.
+    const session = await browser.call("session");
+    expect(session.body).toMatchObject({ account: null, grants: [{ planId: house.id }] });
+    const plans = (await browser.call("plans")).body;
+    expect(plans.map((p: { id: string }) => p.id)).toEqual([house.id]);
+    expect(plans[0]).toMatchObject({ write: false, share: false, delete: false });
+    const change = await browser.call(`plans/${house.id}/changes`, {
+      method: "POST",
+      headers: { "X-Client": "x" },
+      json: { parent: "1", patch: { t: "keys", keys: { north: { t: "set", v: 10 } } } },
+    });
+    expect(change.status).toBe(403);
+    expect(
+      (await browser.call(`plans/${house.id}/shares`, { method: "POST", json: { label: "x" } }))
+        .status,
+    ).toBe(403);
+    expect((await browser.call("plans", { method: "POST", json: { data: plan() } })).status).toBe(
+      403,
+    );
+  });
+
+  it("names the person of a link that can edit by its label", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const { browser } = await shared(house.id, true);
+    const change = await browser.call(`plans/${house.id}/changes`, {
+      method: "POST",
+      headers: { "X-Client": "x" },
+      json: { parent: "1", patch: { t: "keys", keys: { north: { t: "set", v: 10 } } } },
+    });
+    expect(change.body).toMatchObject({ revision: "2", by: "Writer" });
+  });
+
+  it("adds the plan of a link to an account, and keeps it after a new login", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const anna = await account("Anna");
+    const { body: link } = await admin.call(`plans/${house.id}/shares`, {
+      method: "POST",
+      json: { label: "Anna", write: true },
+    });
+    await anna.fetch(link.path);
+    expect((await anna.call("plans")).body.map((p: { id: string }) => p.id)).toEqual([house.id]);
+    // A login of the same browser keeps the grants of its session.
+    const guest = new Browser();
+    await guest.fetch(link.path);
+    await guest.call("login", { method: "POST", json: { name: "Anna", password: PASSWORD } });
+    expect((await guest.call("session")).body).toMatchObject({
+      account: { name: "Anna" },
+      grants: [{ planId: house.id, write: true }],
+    });
+  });
+
+  it("ends the access and the stream of a link when its owner removes it", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const { link, browser } = await shared(house.id);
+    expect((await admin.call(`shares?plan=${house.id}`)).body).toHaveLength(1);
+    const abort = new AbortController();
+    const response = await browser.fetch(`/api/plans/${house.id}/events`, {
+      signal: abort.signal,
+    });
+    const reader = response.body!.getReader();
+    await reader.read();
+    await admin.call(`shares/${link.id}`, { method: "DELETE" });
+    try {
+      expect((await reader.read()).done).toBe(true);
+    } finally {
+      abort.abort();
+    }
+    expect((await browser.call(`plans/${house.id}`)).status).toBe(404);
+    expect((await browser.fetch(link.path)).status).toBe(404);
+  });
+
+  it("ends the links of a plan with the plan", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const { link } = await shared(house.id);
+    await admin.call(`plans/${house.id}`, { method: "DELETE" });
+    expect((await new Browser().fetch(link.path)).status).toBe(404);
   });
 });
 
 describe("live editing", () => {
   /** Reads the events of a stream until `stop` gives true for one of them. */
-  async function events(token: string, planId: string, client: string) {
+  async function events(browser: Browser, planId: string, client: string) {
     const abort = new AbortController();
-    const response = await fetch(`${base}/${token}/api/plans/${planId}/events?client=${client}`, {
+    const response = await browser.fetch(`/api/plans/${planId}/events?client=${client}`, {
       signal: abort.signal,
     });
     const reader = response.body!.getReader();
@@ -389,11 +611,11 @@ describe("live editing", () => {
   it("merges the changes of two people and sends each change to the others", async () => {
     const start = emptyBuilding();
     const story = start.stories[0];
-    const { body: house } = await call(root, "plans", {
+    const { body: house } = await admin.call("plans", {
       method: "POST",
       json: { name: "House", data: serializeBuilding(start) },
     });
-    const watcher = await events(root, house.id, "watcher");
+    const watcher = await events(admin, house.id, "watcher");
     await watcher.next((e) => e.event === "hello");
     const vertex = (id: string, x: number) => ({
       t: "keys",
@@ -414,14 +636,14 @@ describe("live editing", () => {
       ["a", "v-a"],
       ["b", "v-b"],
     ]) {
-      const sent = await call(root, `plans/${house.id}/changes`, {
+      const sent = await admin.call(`plans/${house.id}/changes`, {
         method: "POST",
         headers: { "X-Client": client },
         json: { parent: "1", patch: vertex(id, 1) },
       });
       expect(sent.status).toBe(200);
     }
-    const saved = await call(root, `plans/${house.id}`);
+    const saved = await admin.call(`plans/${house.id}`);
     expect(saved.body.revision).toBe("3");
     const ids = JSON.parse(saved.body.data).stories[0].vertices.map((v: { id: string }) => v.id);
     expect(ids).toEqual(["v-a", "v-b"]);
@@ -431,33 +653,25 @@ describe("live editing", () => {
     watcher.close();
   });
 
-  it("refuses changes of a token that only reads, and changes that do not fit", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const { body: link } = await call(root, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
-    });
-    const patch = { t: "keys", keys: { north: { t: "set", v: 10 } } };
-    const change = (token: string, body: unknown) =>
-      call(token, `plans/${house.id}/changes`, {
+  it("refuses changes that do not fit", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const change = (body: unknown) =>
+      admin.call(`plans/${house.id}/changes`, {
         method: "POST",
         headers: { "X-Client": "x" },
         json: { parent: "1", patch: body },
       });
-    expect((await change(link.token, patch)).status).toBe(403);
-    expect((await change(root, { t: "keys", keys: { stories: { t: "set", v: [] } } })).status).toBe(
-      400,
-    );
-    expect((await change(root, "nothing")).status).toBe(400);
-    expect((await change(root, patch)).status).toBe(200);
+    expect((await change({ t: "keys", keys: { stories: { t: "set", v: [] } } })).status).toBe(400);
+    expect((await change("nothing")).status).toBe(400);
+    expect((await change({ t: "keys", keys: { north: { t: "set", v: 10 } } })).status).toBe(200);
   });
 
   it("sends the change that the file has, and saves no revision without a change", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const watcher = await events(root, house.id, "watcher");
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const watcher = await events(admin, house.id, "watcher");
     await watcher.next((e) => e.event === "hello");
     const change = (patch: unknown) =>
-      call(root, `plans/${house.id}/changes`, {
+      admin.call(`plans/${house.id}/changes`, {
         method: "POST",
         headers: { "X-Client": "a" },
         json: { parent: "1", patch },
@@ -474,34 +688,28 @@ describe("live editing", () => {
     watcher.close();
   });
 
-  it("keeps the presence of a tab to the token that has it", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const { body: link } = await call(root, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
-    });
-    const post = (token: string, name: string) =>
-      call(token, `plans/${house.id}/presence`, {
+  it("keeps the presence of a tab to the session that has it", async () => {
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const { browser } = await shared(house.id);
+    const post = (who: Browser, name: string) =>
+      who.call(`plans/${house.id}/presence`, {
         method: "POST",
         headers: { "X-Client": "anna" },
         json: { name, state: null },
       });
-    expect((await post(root, "Anna")).status).toBe(200);
-    expect((await post(link.token, "Not Anna")).status).toBe(403);
+    expect((await post(admin, "Anna")).status).toBe(200);
+    expect((await post(browser, "Not Anna")).status).toBe(403);
   });
 
   it("shows who has the plan open, also to readers, until the tab goes", async () => {
-    const { body: house } = await call(root, "plans", { method: "POST", json: { data: plan() } });
-    const { body: link } = await call(root, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Reader", planId: house.id, write: false },
-    });
-    const reader = await events(link.token, house.id, "reader");
+    const { body: house } = await admin.call("plans", { method: "POST", json: { data: plan() } });
+    const { browser } = await shared(house.id);
+    const reader = await events(browser, house.id, "reader");
     await reader.next((e) => e.event === "hello");
-    const editor = await events(root, house.id, "editor");
+    const editor = await events(admin, house.id, "editor");
     await editor.next((e) => e.event === "hello");
     const state = { story: "s1", cursor: { x: 1, y: 2 } };
-    const sent = await call(root, `plans/${house.id}/presence`, {
+    const sent = await admin.call(`plans/${house.id}/presence`, {
       method: "POST",
       headers: { "X-Client": "editor" },
       json: { name: "Anna", state },
@@ -510,7 +718,7 @@ describe("live editing", () => {
     const seen = await reader.next((e) => e.event === "presence");
     expect(seen.data).toEqual({ client: "editor", name: "Anna", write: true, state });
     // A new stream gets the people in its hello.
-    const late = await events(link.token, house.id, "late");
+    const late = await events(browser, house.id, "late");
     const hello = await late.next((e) => e.event === "hello");
     expect(hello.data.people).toEqual([{ client: "editor", name: "Anna", write: true, state }]);
     late.close();
@@ -519,139 +727,6 @@ describe("live editing", () => {
     const gone = await reader.next((e) => e.event === "presence" && e.data.gone === true);
     expect(gone.data.client).toBe("editor");
     reader.close();
-  });
-});
-
-describe("tokens", () => {
-  async function user(rights: Record<string, unknown>) {
-    const made = await call(root, "tokens", {
-      method: "POST",
-      json: { kind: "user", label: "Anna", write: true, createPlans: true, ...rights },
-    });
-    expect(made.status).toBe(201);
-    return made.body.token as string;
-  }
-
-  it("shows the plans of a user only to the user and to root", async () => {
-    const anna = await user({});
-    const ben = await user({ label: "Ben" });
-    const house = await call(anna, "plans", {
-      method: "POST",
-      json: { name: "House", data: plan() },
-    });
-    expect((await call(anna, "plans")).body).toHaveLength(1);
-    expect((await call(ben, "plans")).body).toHaveLength(0);
-    expect((await call(root, "plans")).body).toHaveLength(1);
-    expect((await call(ben, `plans/${house.body.id}`)).status).toBe(404);
-    const all = await user({ label: "Office", seeAll: true, write: false });
-    expect((await call(all, "plans")).body).toHaveLength(1);
-    // A user that sees all plans but only reads cannot save.
-    const save = await call(all, `plans/${house.body.id}`, {
-      method: "PUT",
-      json: { parent: "1", data: plan() },
-    });
-    expect(save.status).toBe(403);
-  });
-
-  it("makes share links for one plan, with the right to read and an end date", async () => {
-    const anna = await user({});
-    const house = await call(anna, "plans", {
-      method: "POST",
-      json: { name: "House", data: plan() },
-    });
-    const link = await call(anna, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Bank", planId: house.body.id, write: false },
-    });
-    expect(link.status).toBe(201);
-    const bank = link.body.token as string;
-    expect((await call(bank, "me")).body.token).toMatchObject({ kind: "plan", write: false });
-    expect((await call(bank, "plans")).body.map((p: { id: string }) => p.id)).toEqual([
-      house.body.id,
-    ]);
-    expect((await call(bank, `plans/${house.body.id}`)).status).toBe(200);
-    // Root sees the link in the list of all links, with the name of its plan.
-    const links = (await call(root, "tokens")).body.filter(
-      (t: { kind: string }) => t.kind === "plan",
-    );
-    expect(links).toMatchObject([{ label: "Bank", planName: "House", write: false }]);
-    // A plan token makes no tokens, and it only reads.
-    const more = await call(bank, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "More", planId: house.body.id },
-    });
-    expect(more.status).toBe(403);
-    const lease = await call(bank, `plans/${house.body.id}/lease`, {
-      method: "POST",
-      headers: { "X-Client": "x" },
-    });
-    expect(lease.status).toBe(403);
-    // A past end date is refused.
-    const past = await call(anna, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Old", planId: house.body.id, expires: Date.now() - 1000 },
-    });
-    expect(past.status).toBe(400);
-  });
-
-  it("gives a token at most the rights of its maker", async () => {
-    const reader = await user({ write: false });
-    const denied = await call(reader, "tokens", {
-      method: "POST",
-      json: { kind: "user", label: "x" },
-    });
-    expect(denied.status).toBe(403);
-    const anna = await user({});
-    // Anna may not make users without the right.
-    const noUsers = await call(anna, "tokens", {
-      method: "POST",
-      json: { kind: "user", label: "x" },
-    });
-    expect(noUsers.status).toBe(403);
-    const lead = await user({ label: "Lead", makeUsers: true, expires: Date.now() + 3_600_000 });
-    const made = await call(lead, "tokens", {
-      method: "POST",
-      json: { kind: "user", label: "Staff", write: true, seeAll: true, makeUsers: true },
-    });
-    expect(made.status).toBe(201);
-    // Lead cannot see all plans, so Staff cannot either; Staff ends with Lead.
-    expect(made.body.seeAll).toBe(false);
-    expect(made.body.makeUsers).toBe(true);
-    expect(made.body.expires).toBeLessThanOrEqual(Date.now() + 3_600_000);
-  });
-
-  it("removes a token and the tokens that it made", async () => {
-    const lead = await user({ label: "Lead", makeUsers: true });
-    const staff = await call(lead, "tokens", {
-      method: "POST",
-      json: { kind: "user", label: "Staff", write: true, createPlans: true },
-    });
-    const staffToken = staff.body.token as string;
-    const house = await call(staffToken, "plans", {
-      method: "POST",
-      json: { name: "H", data: plan() },
-    });
-    const link = await call(staffToken, "tokens", {
-      method: "POST",
-      json: { kind: "plan", label: "Link", planId: house.body.id },
-    });
-    // Lead sees the tokens of Staff, and root sees all.
-    expect((await call(lead, "tokens")).body).toHaveLength(2);
-    const leadId = (await call(lead, "me")).body.token.id;
-    expect((await call(root, `tokens/${leadId}`, { method: "DELETE" })).status).toBe(200);
-    expect((await call(lead, "me")).status).toBe(404);
-    expect((await call(staffToken, "me")).status).toBe(404);
-    expect((await call(link.body.token, "me")).status).toBe(404);
-    // The plan of Staff stays, and root still sees it.
-    expect((await call(root, "plans")).body).toHaveLength(1);
-  });
-
-  it("lets only root change the settings", async () => {
-    const anna = await user({});
-    expect((await call(anna, "settings")).status).toBe(403);
-    const saved = await call(root, "settings", { method: "PUT", json: { name: "Office" } });
-    expect(saved.body).toMatchObject({ name: "Office", plans: 0 });
-    expect((await call(anna, "me")).body.server).toBe("Office");
   });
 });
 
@@ -668,16 +743,20 @@ describe("the store of the images", () => {
       opacity: 0.5,
     };
     const data = serializeBuilding(building);
-    const created = await call(root, "plans", { method: "POST", json: { name: "Scan", data } });
+    const created = await admin.call("plans", { method: "POST", json: { name: "Scan", data } });
     const id = created.body.id as string;
-    await call(root, `plans/${id}`, { method: "PUT", json: { parent: "1", data } });
+    await admin.call(`plans/${id}`, { method: "PUT", json: { parent: "1", data } });
     const blobs = readdirSync(join(dir, "data", "blobs"));
     expect(blobs).toHaveLength(1);
     const revision = readFileSync(join(dir, "data", "plans", id, "2.json"), "utf8");
     expect(revision).not.toContain("data:image");
-    const read = await call(root, `plans/${id}`);
+    const read = await admin.call(`plans/${id}`);
     expect(JSON.parse(read.body.data).stories[0].background.image).toBe(
       building.stories[0].background.image,
     );
+    // The image counts once in the space of the account.
+    const used = (await admin.call("session")).body.account.used;
+    expect(used).toBeGreaterThan(20_000);
+    expect(used).toBeLessThan(30_000);
   });
 });

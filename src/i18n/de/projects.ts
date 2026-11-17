@@ -72,38 +72,22 @@ export const PROJECTS: Record<string, string> = {
 
   "Grundriss {version}": "Grundriss {version}",
   // remote.ts: the plans on a server.
-  "The browser cannot keep the connection.": "Der Browser kann die Verbindung nicht speichern.",
-  "The server has another version of the API ({server}; the app knows {app}). Update the older one.":
-    "Der Server hat eine andere API-Version ({server}; die App kennt {app}). Aktualisieren Sie den älteren Teil.",
   "can edit": "kann bearbeiten",
   "can view": "kann ansehen",
   "makes plans": "legt Pläne an",
   "sees all plans": "sieht alle Pläne",
-  "adds users": "fügt Benutzer hinzu",
   "until {date}": "bis {date}",
   "no end": "unbefristet",
-  Root: "Root",
-  "Shared plan": "Geteilter Plan",
   'Opened "{name}" on {server}. Each change saves to the server.':
     "„{name}“ auf {server} geöffnet. Jede Änderung wird auf dem Server gespeichert.",
-  "{holder} edits this plan. You see it, and it updates itself.":
-    "{holder} bearbeitet diesen Plan. Sie sehen ihn, und er aktualisiert sich selbst.",
   'Opened "{name}" on {server} to view.': "„{name}“ auf {server} zum Ansehen geöffnet.",
-  Somebody: "Jemand",
-  "Somebody else edits the plan now. You see it, and it updates itself.":
-    "Jetzt bearbeitet jemand anderes den Plan. Sie sehen ihn, und er aktualisiert sich selbst.",
   "The plan is gone from the server. Save a copy to keep it.":
     "Der Plan ist nicht mehr auf dem Server. Speichern Sie eine Kopie, um ihn zu behalten.",
-  "Somebody else edits the plan now. Save a copy to keep your changes.":
-    "Jetzt bearbeitet jemand anderes den Plan. Speichern Sie eine Kopie, um Ihre Änderungen zu behalten.",
   "The server did not save the plan: {error}": "Der Server hat den Plan nicht gespeichert: {error}",
-  "Somebody saved a newer version of this plan. OK loads it. Cancel keeps your version as a copy in this browser.":
-    "Jemand hat eine neuere Version dieses Plans gespeichert. OK lädt sie. Abbrechen behält Ihre Version als Kopie in diesem Browser.",
   "The plan is now a copy in this browser, without the server.":
     "Der Plan ist jetzt eine Kopie in diesem Browser, ohne Server.",
   "Saving…": "Speichert…",
   "Not saved": "Nicht gespeichert",
-  "{holder} edits": "{holder} bearbeitet",
   "View only": "Nur ansehen",
   "This plan is on the server {server}, revision {revision}. Click for more.":
     "Dieser Plan liegt auf dem Server {server}, Version {revision}. Klicken für mehr.",
@@ -116,18 +100,8 @@ export const PROJECTS: Record<string, string> = {
   "The link, shown only now. Copy it and send it on a safe way:":
     "Der Link, nur jetzt sichtbar. Kopieren Sie ihn und schicken Sie ihn auf sicherem Weg:",
   Link: "Link",
-  "Link for this app": "Link für diese App",
   Copied: "Kopiert",
-  "Connect a server": "Server verbinden",
-  "Paste the link that you got from the owner of a Grundriss server, for example https://example.org/abc…. The link is your access, so keep it like a password.":
-    "Fügen Sie den Link ein, den Sie vom Betreiber eines Grundriss-Servers bekommen haben, zum Beispiel https://example.org/abc…. Der Link ist Ihr Zugang, behandeln Sie ihn wie ein Passwort.",
-  Connect: "Verbinden",
-  "Connected to {server}.": "Mit {server} verbunden.",
   "On {server}, revision {revision}.": "Auf {server}, Version {revision}.",
-  "You edit this plan. Each change saves to the server.":
-    "Sie bearbeiten diesen Plan. Jede Änderung wird auf dem Server gespeichert.",
-  "Nobody edits this plan.": "Niemand bearbeitet diesen Plan.",
-  "Your link can only view this plan.": "Ihr Link kann diesen Plan nur ansehen.",
   "Load again": "Neu laden",
   "Save a copy in this browser": "Kopie in diesem Browser speichern",
   "Share…": "Teilen…",
@@ -142,24 +116,9 @@ export const PROJECTS: Record<string, string> = {
   "Links of this plan": "Links dieses Plans",
   "None yet.": "Noch keine.",
   "Remove the access of {label}": "Zugang von {label} entfernen",
-  "Server settings": "Server-Einstellungen",
-  Users: "Benutzer",
   "Name of the server": "Name des Servers",
-  "Version {version}, mode {mode}, {plans} plans, {tokens} tokens.":
-    "Version {version}, Modus {mode}, {plans} Pläne, {tokens} Zugänge.",
-  "Each user gets an own link. A user sees the own plans, and the plans of others only with the right to see all plans. Removing a user also removes the links that the user made.":
-    "Jeder Benutzer bekommt einen eigenen Link. Ein Benutzer sieht seine eigenen Pläne, die Pläne anderer nur mit dem Recht, alle Pläne zu sehen. Wer einen Benutzer entfernt, entfernt auch die Links, die dieser erstellt hat.",
-  "For example: Anna": "Zum Beispiel: Anna",
   "Can make plans": "Kann Pläne anlegen",
-  "Sees all plans": "Sieht alle Pläne",
-  "Can add users": "Kann Benutzer hinzufügen",
-  "Add the user": "Benutzer hinzufügen",
-  "A user needs a name.": "Ein Benutzer braucht einen Namen.",
   "Copy: the plan stays here too": "Kopieren: der Plan bleibt auch hier",
-  '"{name}" to a server': "„{name}“ auf einen Server",
-  "On a server, each change saves to the server, and you can share the plan with links.":
-    "Auf einem Server wird jede Änderung dort gespeichert, und Sie können den Plan mit Links teilen.",
-  Server: "Server",
   "Move: the plan goes to the trash of this browser":
     "Verschieben: der Plan kommt in den Papierkorb dieses Browsers",
   "Put on the server": "Auf den Server legen",
@@ -172,16 +131,11 @@ export const PROJECTS: Record<string, string> = {
   "Put in this browser": "In diesen Browser holen",
   '"{name}" is in this browser now.': "„{name}“ ist jetzt in diesem Browser.",
   "New plan on this server": "Neuer Plan auf diesem Server",
-  "Remove the connection": "Verbindung entfernen",
-  "Remove the connection to {server}? Keep its link to connect again.":
-    "Verbindung zu {server} entfernen? Behalten Sie den Link, um sich wieder zu verbinden.",
   "No plans on this server yet.": "Noch keine Pläne auf diesem Server.",
   "Changed {time} by {by}": "{time} geändert von {by}",
   Share: "Teilen",
   "Copy or move to this browser": "In diesen Browser kopieren oder verschieben",
   'Delete "{name}" on the server for everybody?': "„{name}“ auf dem Server für alle löschen?",
-  "{holder} edits this plan, so you can only view it.":
-    "{holder} bearbeitet diesen Plan, darum können Sie ihn nur ansehen.",
   "This plan is only to view. Click the mark of the server for more.":
     "Dieser Plan ist nur zum Ansehen. Klicken Sie auf die Server-Marke für mehr.",
   "Copy or move to a server": "Auf einen Server kopieren oder verschieben",
@@ -247,4 +201,120 @@ export const PROJECTS: Record<string, string> = {
     "Sie bearbeiten diesen Plan gemeinsam mit den anderen, die ihn geöffnet haben. Jede Änderung wird auf dem Server gespeichert.",
   "You only view this plan. Click Edit to change it.":
     "Sie sehen diesen Plan nur an. Klicken Sie auf Bearbeiten, um ihn zu ändern.",
+  // remote.ts: the accounts, and the errors of the server.
+  "{used} of {limit}": "{used} von {limit}",
+  "{count} of {limit} plans": "{count} von {limit} Plänen",
+  "{count} plans": "{count} Pläne",
+  invites: "lädt ein",
+  "only shared plans": "nur geteilte Pläne",
+  "The server has another version of the API ({server}; the app knows {app}). Load the page again.":
+    "Der Server hat eine andere API-Version ({server}; die App kennt {app}). Laden Sie die Seite neu.",
+  "You can only view this plan now. Save a copy to keep your changes.":
+    "Sie können diesen Plan jetzt nur ansehen. Speichern Sie eine Kopie, um Ihre Änderungen zu behalten.",
+  copy: "Kopie",
+  "1 year": "1 Jahr",
+  Copy: "Kopieren",
+  Password: "Passwort",
+  "Password again": "Passwort wiederholen",
+  "An account needs a name.": "Ein Konto braucht einen Namen.",
+  "The password needs at least 8 characters.": "Das Passwort braucht mindestens 8 Zeichen.",
+  "The two passwords are not the same.": "Die zwei Passwörter sind nicht gleich.",
+  "Log in to {server}": "Bei {server} anmelden",
+  "No account? Ask the admin of the server for an invite link.":
+    "Kein Konto? Fragen Sie den Admin des Servers nach einem Einladungslink.",
+  "Log in": "Anmelden",
+  "Logged in as {name}.": "Angemeldet als {name}.",
+  "Set up {server}": "{server} einrichten",
+  "A new password": "Ein neues Passwort",
+  "Your account on {server}": "Ihr Konto auf {server}",
+  "This is the first account of the server: the admin. The admin invites the others.":
+    "Das ist das erste Konto des Servers: der Admin. Der Admin lädt die anderen ein.",
+  "Choose a new password for {name}. The other logins of the account end.":
+    "Wählen Sie ein neues Passwort für {name}. Die anderen Anmeldungen des Kontos enden.",
+  "Choose a name and a password. The link works only once.":
+    "Wählen Sie einen Namen und ein Passwort. Der Link funktioniert nur einmal.",
+  "Save the password": "Passwort speichern",
+  "Make the account": "Konto anlegen",
+  "On {server}: {usage}.": "Auf {server}: {usage}.",
+  "Change the password": "Passwort ändern",
+  "Old password": "Altes Passwort",
+  "New password": "Neues Passwort",
+  "The password is changed. The other logins of the account ended.":
+    "Das Passwort ist geändert. Die anderen Anmeldungen des Kontos sind beendet.",
+  "Log out": "Abmelden",
+  "Logged out.": "Abgemeldet.",
+  "You can only view this plan.": "Sie können diesen Plan nur ansehen.",
+  For: "Für",
+  "Sees and edits all plans": "Sieht und bearbeitet alle Pläne",
+  "Can invite others": "Kann andere einladen",
+  "Space in MB": "Speicher in MB",
+  "Server and accounts": "Server und Konten",
+  "Invite others": "Andere einladen",
+  "no limit": "unbegrenzt",
+  "Version {version}, {plans} plans, {accounts} accounts, {shares} share links. A new account gets {quota} for at most {count} plans; a link for one use works {hours} hours.":
+    "Version {version}, {plans} Pläne, {accounts} Konten, {shares} Freigabe-Links. Ein neues Konto bekommt {quota} für höchstens {count} Pläne; ein Link für eine Verwendung gilt {hours} Stunden.",
+  Accounts: "Konten",
+  admin: "Admin",
+  Admin: "Admin",
+  "Change {name}": "{name} ändern",
+  "A new password for {name}": "Ein neues Passwort für {name}",
+  "The link for a new password of {name}, shown only now:":
+    "Der Link für ein neues Passwort von {name}, nur jetzt sichtbar:",
+  "Remove {name}": "{name} entfernen",
+  "Remove the account {name}? Its plans become yours.":
+    "Das Konto {name} entfernen? Seine Pläne gehören dann Ihnen.",
+  Invite: "Einladung",
+  "An invite link is for one person. It works once, and ends after some days. The person chooses a name and a password.":
+    "Ein Einladungslink ist für eine Person. Er funktioniert einmal und endet nach einigen Tagen. Die Person wählt einen Namen und ein Passwort.",
+  "Make an invite link": "Einladungslink erstellen",
+  "The invite link, shown only now. Copy it and send it on a safe way:":
+    "Der Einladungslink, nur jetzt sichtbar. Kopieren Sie ihn und schicken Sie ihn auf sicherem Weg:",
+  "Open links": "Offene Links",
+  "New password for {name}": "Neues Passwort für {name}",
+  "Remove the link": "Link entfernen",
+  default: "Standard",
+  "Most plans": "Höchstens Pläne",
+  "Empty is the default of the server, 0 is no limit.":
+    "Leer ist der Standard des Servers, 0 ist unbegrenzt.",
+  '"{name}" to {server}': "„{name}“ auf {server}",
+  "On the server, each change saves to the server, and you can share the plan with links.":
+    "Auf dem Server wird jede Änderung dort gespeichert, und Sie können den Plan mit Links teilen.",
+  "Not logged in": "Nicht angemeldet",
+  "No connection": "Keine Verbindung",
+  "Your account": "Ihr Konto",
+  "Log in to see your plans on this server.":
+    "Melden Sie sich an, um Ihre Pläne auf diesem Server zu sehen.",
+  "The password is too long.": "Das Passwort ist zu lang.",
+  "The name is too long.": "Der Name ist zu lang.",
+  "This name is taken.": "Dieser Name ist vergeben.",
+  "Log in first.": "Melden Sie sich zuerst an.",
+  "The old password is wrong.": "Das alte Passwort ist falsch.",
+  "The account does not exist.": "Das Konto gibt es nicht.",
+  "You cannot remove your own account.": "Sie können Ihr eigenes Konto nicht entfernen.",
+  "Only the admin can do this.": "Das kann nur der Admin.",
+  "This account cannot invite.": "Dieses Konto kann nicht einladen.",
+  "The link does not exist.": "Den Link gibt es nicht.",
+  "The link is not valid. It can be used or too old.":
+    "Der Link ist nicht gültig. Er kann schon verwendet oder zu alt sein.",
+  "You cannot share this plan.": "Sie können diesen Plan nicht teilen.",
+  "A link needs a label.": "Ein Link braucht eine Bezeichnung.",
+  "The end date is in the past.": "Das Enddatum liegt in der Vergangenheit.",
+  "This account cannot make plans.": "Dieses Konto kann keine Pläne anlegen.",
+  "This account has the most plans that it may have.":
+    "Dieses Konto hat schon so viele Pläne, wie es haben darf.",
+  "The plan has a newer revision. Load it first.":
+    "Der Plan hat eine neuere Version. Laden Sie sie zuerst.",
+  "The space of the owner of the plan is full.": "Der Speicher des Besitzers des Plans ist voll.",
+  "The revision does not exist.": "Die Version gibt es nicht.",
+  "Only the owner or the admin can delete the plan.":
+    "Nur der Besitzer oder der Admin kann den Plan löschen.",
+  "Too many tries. Wait a few minutes.": "Zu viele Versuche. Warten Sie ein paar Minuten.",
+  "The request comes from another site.": "Die Anfrage kommt von einer anderen Seite.",
+  "The name or the password is wrong.": "Der Name oder das Passwort ist falsch.",
+  "The plan does not exist.": "Den Plan gibt es nicht.",
+  "The changes do not fit the plan.": "Die Änderungen passen nicht zum Plan.",
+  "The plan is too large for this server.": "Der Plan ist zu groß für diesen Server.",
+  "The server does not answer. Check the network.":
+    "Der Server antwortet nicht. Prüfen Sie das Netzwerk.",
+  "This is not a Grundriss server.": "Das ist kein Grundriss-Server.",
 };

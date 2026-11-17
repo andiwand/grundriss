@@ -3,12 +3,12 @@
 // shows, and the camera of the 3D view. The top bar shows a mark for each person, and the 2D
 // view shows their cursors and selections on the same story. A click on a mark follows that
 // person: the views show what the person sees, for example while the person explains the plan on
-// the phone. A pan, a zoom, or a click in a view stops it. A person whose token can write can also
+// the phone. A pan, a zoom, or a click in a view stops it. A person who can edit can also
 // only view the plan, so that a click does not change it.
 
 import { t } from "../i18n";
 import { icon } from "../icons";
-import type { Me, Person, ServerClient } from "../io/server";
+import type { Person, ServerClient } from "../io/server";
 import { findStory } from "../model/building";
 import { itemExists } from "../model/plan";
 import { findRooms } from "../model/rooms";
@@ -45,7 +45,8 @@ interface Other {
 interface Context {
   client: ServerClient;
   planId: string;
-  me: Me;
+  /** The name of the account, or "" for a share link: the server then takes its label. */
+  name: string;
   write: boolean;
   viewOnly: () => boolean;
   setViewOnly: (value: boolean) => Promise<void>;
@@ -79,15 +80,15 @@ function colorOf(client: string): string {
   return COLORS[Math.abs(hash) % COLORS.length];
 }
 
-/** The name that this browser shows to the others. */
-function myName(me: Me): string {
+/** The name that this browser shows to the others: an own name, else the name of the account. */
+function myName(fallback: string): string {
   try {
     const stored = localStorage.getItem(NAME_KEY)?.trim();
     if (stored) return stored;
   } catch {
-    // Without the storage, the name of the token.
+    // Without the storage, the name of the account.
   }
-  return me.token.kind === "root" ? t("Root") : me.token.label;
+  return fallback;
 }
 
 const initials = (name: string) =>
@@ -139,7 +140,7 @@ async function send(force = false): Promise<void> {
   sentText = text;
   sentAt = Date.now();
   try {
-    await current.client.sendPresence(current.planId, myName(current.me), state);
+    await current.client.sendPresence(current.planId, myName(current.name), state);
   } catch {
     // The next change or the heartbeat sends it again.
     sentText = "";
@@ -394,7 +395,7 @@ export function nameDialog(): void {
   const current = context;
   if (!current) return;
   const { element, body } = dialog(t("Your name"));
-  const input = textInput(myName(current.me));
+  const input = textInput(myName(current.name));
   body.append(fieldRow(t("Name"), input));
   const save = button(
     t("Save"),
