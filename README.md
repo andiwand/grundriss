@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/app.jpg" alt="The app: the plan of a house in 2D and the same house in 3D" width="900" />
+  <img src="docs/images/app.jpg" alt="The app: the plan of a house with its garden in 2D, and the same house in 3D" width="900" />
 </p>
 
 _Grundriss_ is the German word for a floor plan. The app runs fully in your browser. It needs no
