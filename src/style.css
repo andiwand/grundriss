@@ -3411,9 +3411,8 @@ body.compact {
   /* A long text, for example in the status line, must not make the page wider than the phone. */
   grid-template-columns: minmax(0, 1fr);
   --bottom-bar: calc(58px + env(safe-area-inset-bottom));
-  /* The sheet of the panel starts above the status line and the bar at the bottom. */
-  --status-height: 22px;
-  --sheet-bottom: calc(var(--bottom-bar) + var(--status-height));
+  /* The sheet of the panel starts above the bar at the bottom. The status floats over it. */
+  --sheet-bottom: var(--bottom-bar);
   grid-template-rows: auto 1fr auto auto;
 }
 
@@ -3587,33 +3586,49 @@ body.compact.overview #panel {
   display: none;
 }
 
-/* The status line of a phone: one short line above the sheet. */
-/* The status line and the bar at the bottom are fixed, like the sheet, so the three parts stay in
-   their order also when the toolbar of the browser of a phone changes the height of the page. */
+/* The bar at the bottom is fixed, like the sheet, so that both stay in their place also when the
+   toolbar of the browser of a phone changes the height of the page. */
 body.compact:not(.no-plan) {
   padding-bottom: var(--sheet-bottom);
 }
 
-body.compact:not(.no-plan) #status {
+/* The status of a phone: a small card above the bar at the bottom, only while it has a message
+   (src/ui/context.ts). The whole text shows, in more lines if it needs them. A message goes
+   after some seconds; an error stays until a tap. */
+body.compact #status {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--bottom-bar);
-  z-index: 25;
-  background: var(--bg);
+  left: 8px;
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 35;
+  min-height: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
 }
 
-body.compact #status {
-  grid-row: 3;
-  min-width: 0;
-  height: var(--status-height);
-  min-height: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  padding: 2px 10px;
+body.compact:not(.no-plan) #status {
+  bottom: calc(var(--bottom-bar) + 8px);
+}
+
+body.compact #status.error {
+  color: var(--danger);
+}
+
+body.compact #status.gone {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
 }
 
 /* The palette stays at the top of the view, and the stories below it, collapsed. */

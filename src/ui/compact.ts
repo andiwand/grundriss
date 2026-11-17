@@ -26,10 +26,10 @@ let dragHeight: number | null = null;
 /** The strip of the sheet in the state "peek", in pixels. */
 const PEEK = 72;
 
-/** The space for the sheet: from the top bar to the status line, in pixels. */
+/** The space for the sheet: from the top bar to the bar at the bottom, in pixels. */
 function space(): number {
   const top = $(".topbar").getBoundingClientRect().bottom;
-  const bottom = $("#status").getBoundingClientRect().top || window.innerHeight;
+  const bottom = $("#bottom-bar").getBoundingClientRect().top || window.innerHeight;
   return Math.max(PEEK, bottom - top);
 }
 

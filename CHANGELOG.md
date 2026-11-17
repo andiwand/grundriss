@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Phone: the status is a small card above the tabs, with its whole text in more lines if
+  needed. A message goes after some seconds, and an error stays until a tap. Before, it was one
+  line that cut long texts, and it always took a row; now the panel reaches down to the tabs.
 - The app has the look of the website: a floating top bar of glass, rounder panels with soft
   shadows, and the blue-to-violet gradient of the brand on the main buttons and on the active
   topic, view, tool, and story. The 3D view shows the building under a sky, on a disc of ground,

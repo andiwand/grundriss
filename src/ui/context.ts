@@ -65,10 +65,27 @@ export type Topic = "overview" | "structure" | "utilities" | "interior" | "energ
 
 export type LayerName = keyof typeof editor.layers;
 
+let statusTimer = 0;
+
+/**
+ * Shows a message in the status line. On a phone, the status is a card that goes after some
+ * seconds, longer for a longer text; an error stays until a tap.
+ */
 export function showStatus(text: string, error = false): void {
   status.textContent = text;
   status.classList.toggle("error", error);
+  status.classList.toggle("gone", !text);
+  window.clearTimeout(statusTimer);
+  if (text && !error) {
+    const time = Math.min(10_000, 4000 + text.length * 40);
+    statusTimer = window.setTimeout(() => status.classList.add("gone"), time);
+  }
 }
+
+status.addEventListener("click", () => {
+  window.clearTimeout(statusTimer);
+  status.classList.add("gone");
+});
 
 export type View = "2d" | "split" | "3d";
 
