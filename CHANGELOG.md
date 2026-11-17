@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.5.1 – 2026-11-17
+
 - Editor: with more corners selected, the panel has one "Pinned" check box for all of them. If
   only some of them are pinned, the box shows a mixed state, and a click pins all of them.
 
