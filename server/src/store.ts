@@ -1,6 +1,6 @@
 // The data of the server: the tokens, the plans, and their revisions.
 //
-// The tokens and the plans are in one JSON file (`data.json`), which the store writes again
+// The tokens and the plans are in one YAML file (`data.yaml`), which the store writes again
 // after each change, through a temporary file, so that a crash does not leave half a file. The
 // files of the revisions are separate, one file for each revision. The large images of a plan are
 // in `blobs/`, once for all revisions, and a revision refers to them by hash (src/model/blobs.ts). A private server has a few
@@ -12,6 +12,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { parse, stringify } from "yaml";
 import { dehydrate, hydrate } from "../../src/model/blobs";
 
 export type TokenKind = "root" | "user" | "plan";
@@ -100,12 +101,22 @@ export class Store {
   constructor(private readonly dir: string) {
     mkdirSync(join(dir, "plans"), { recursive: true });
     mkdirSync(join(dir, "blobs"), { recursive: true });
-    const file = join(dir, "data.json");
+    const file = join(dir, "data.yaml");
+    // Before 0.6, the data was in data.json. The store reads it once, writes data.yaml, and
+    // keeps the old file as data.json.old.
+    const old = join(dir, "data.json");
+    const migrate = !existsSync(file) && existsSync(old);
     this.data = existsSync(file)
-      ? (JSON.parse(readFileSync(file, "utf8")) as Data)
-      : { version: 1, settings: { name: "Grundriss" }, tokens: [], plans: [] };
+      ? (parse(readFileSync(file, "utf8")) as Data)
+      : migrate
+        ? (JSON.parse(readFileSync(old, "utf8")) as Data)
+        : { version: 1, settings: { name: "Grundriss" }, tokens: [], plans: [] };
     this.persisted = JSON.stringify(this.data);
     this.index();
+    if (migrate) {
+      this.save();
+      renameSync(old, `${old}.old`);
+    }
   }
 
   private index(): void {
@@ -113,12 +124,11 @@ export class Store {
   }
 
   private save(): void {
-    const file = join(this.dir, "data.json");
+    const file = join(this.dir, "data.yaml");
     try {
-      const text = JSON.stringify(this.data, null, 1);
-      writeFileSync(`${file}.tmp`, text);
+      writeFileSync(`${file}.tmp`, stringify(this.data));
       renameSync(`${file}.tmp`, file);
-      this.persisted = text;
+      this.persisted = JSON.stringify(this.data);
     } catch (error) {
       this.rollback();
       throw error;

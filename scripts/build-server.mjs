@@ -15,6 +15,11 @@ await build({
   target: "node20",
   outfile: "server/dist/main.mjs",
   define: { __VERSION__: JSON.stringify(version) },
+  // Packages in CommonJS (yaml) require the modules of Node. An ES module has no require, so the
+  // bundle makes one.
+  banner: {
+    js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+  },
   logLevel: "warning",
 });
 console.log(`Built server/dist/main.mjs, version ${version}.`);

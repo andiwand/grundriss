@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -17,7 +25,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 it("rolls back a revision and its name if saving the metadata fails", () => {
   const root = store.token(secret)!;
   const plan = store.createPlan(root, "Original", "one");
-  const metadata = join(dir, "data.json");
+  const metadata = join(dir, "data.yaml");
   renameSync(metadata, `${metadata}.backup`);
   mkdirSync(metadata);
   expect(() => store.saveRevision(root, plan, "1", "two", "Changed")).toThrow();
@@ -33,6 +41,21 @@ it("rolls back a revision and its name if saving the metadata fails", () => {
   expect(reopened.revisionData(reopened.plan(plan.id)!, "2")).toBe("retry");
 });
 
+it("moves the data of an old server from data.json to data.yaml", () => {
+  const root = store.token(secret)!;
+  store.createPlan(root, "Old house", "one");
+  const yaml = join(dir, "data.yaml");
+  const data = new Store(dir)["data"];
+  rmSync(yaml);
+  writeFileSync(join(dir, "data.json"), JSON.stringify(data));
+  const moved = new Store(dir);
+  expect(existsSync(yaml)).toBe(true);
+  expect(existsSync(join(dir, "data.json"))).toBe(false);
+  expect(existsSync(join(dir, "data.json.old"))).toBe(true);
+  expect(moved.plans(moved.token(secret)!).map((p) => p.name)).toEqual(["Old house"]);
+  expect(readFileSync(yaml, "utf8")).toContain("name: Old house");
+});
+
 it("does not retain a plan when its first revision cannot be written", () => {
   rmSync(join(dir, "plans"), { recursive: true });
   writeFileSync(join(dir, "plans"), "blocked");
@@ -41,7 +64,7 @@ it("does not retain a plan when its first revision cannot be written", () => {
 });
 
 it("does not retain a token after a failed metadata write", () => {
-  mkdirSync(join(dir, "data.json.tmp"));
+  mkdirSync(join(dir, "data.yaml.tmp"));
   expect(() => store.makeToken(store.token(secret)!, { kind: "user", label: "Failed" })).toThrow();
   expect(store.tokens(store.token(secret)!)).toHaveLength(1);
 });

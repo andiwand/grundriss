@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: the data of the server (the tokens and the plans) is now in `data.yaml`, which a person
+  can read. At its next start, the server moves an existing `data.json` to `data.yaml` and keeps
+  the old file as `data.json.old`.
 - Phone: the mark of the server in the top bar shows only the cloud again, as before 0.5.2.
 
 ## 0.5.2 – 2026-11-17

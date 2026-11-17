@@ -140,7 +140,7 @@ describe("the public website", () => {
     expect(await (await fetch(`${base}/app/`)).text()).toContain("Grundriss");
     expect((await fetch(`${base}/app`, { redirect: "manual" })).status).toBe(301);
     expect((await fetch(`${base}/nothing`)).status).toBe(404);
-    expect((await fetch(`${base}/../data/data.json`)).status).toBe(404);
+    expect((await fetch(`${base}/../data/data.yaml`)).status).toBe(404);
     expect((await call(root, "me")).status).toBe(200);
     rmSync(site, { recursive: true, force: true });
   });
