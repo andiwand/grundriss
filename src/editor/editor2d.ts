@@ -205,6 +205,9 @@ function svg<K extends keyof SVGElementTagNameMap>(
   return element;
 }
 
+/** The id of the mask that cuts the rooms out of the outdoor areas. */
+const MASK_ID = "grundriss-outdoor-mask";
+
 const points = (polygon: Point[]) => polygon.map((p) => `${p.x},${p.y}`).join(" ");
 
 /** The unit normal of a flat polygon in 3D, pointing up (Newell's method). */
@@ -2285,7 +2288,15 @@ export class Editor2D {
    * its corners, a "+" in the middle of each side, and the number of each side.
    */
   private renderAreas(plan: Plan): void {
+    if (plan.areas.length === 0) return;
+    // The areas are under the rooms, and a room shows a scan through its fill. A mask cuts the
+    // rooms out of the areas, so that a lawn around the house does not color its rooms.
+    const rooms = findRooms(plan);
+    const mask = svg("mask", { id: MASK_ID, maskUnits: "userSpaceOnUse" }, this.content);
+    svg("rect", { x: -1e5, y: -1e5, width: 2e5, height: 2e5, fill: "#fff" }, mask);
+    for (const room of rooms) svg("polygon", { points: points(room.polygon), fill: "#000" }, mask);
     const group = svg("g", { class: "areas" }, this.content);
+    const labels = svg("g", { class: "area-labels" }, this.content);
     // The lower surfaces first: the plot, the lawn, the paths, then the slabs and the neighbors.
     const areas = outdoorOrder(plan.areas);
     for (const area of areas) {
@@ -2304,15 +2315,27 @@ export class Editor2D {
         },
         group,
       );
-      svg("polygon", { points: points(area.points), fill: type.color, class: "surface" }, element);
+      svg(
+        "polygon",
+        {
+          points: points(area.points),
+          fill: type.color,
+          class: "surface",
+          mask: `url(#${MASK_ID})`,
+        },
+        element,
+      );
       for (const side of area.railings) {
         const p = area.points[side];
         const q = area.points[(side + 1) % area.points.length];
         if (p && q) svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "railing" }, element);
       }
-      const size = areaSize(area);
-      const name = area.name || t(type.name);
-      this.label(element, areaCenter(area.points), `${name} · ${fmt(size, 1)} m²`, "area-label");
+      // A label in a room, for example of a lawn around the house, shows only for a selection.
+      const center = areaCenter(area.points);
+      if (selected || !rooms.some((room) => pointInPolygon(center, room.polygon))) {
+        const name = area.name || t(type.name);
+        this.label(labels, center, `${name} · ${fmt(areaSize(area), 1)} m²`, "area-label");
+      }
     }
     for (const area of areas) {
       if (
