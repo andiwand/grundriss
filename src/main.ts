@@ -859,8 +859,17 @@ editor.onSelect = () => {
 setupEdit3d();
 
 // The top bar and the palette get shorter in steps, so that the long German texts fit too.
+// On a phone, the name of the plan shrinks to give room, so the bar must keep it readable: the
+// name of the server shows only if the name of the plan keeps a minimum width.
 const topbar = $(".topbar");
-fitBar(topbar, ["views", "topics", "brand", "dividers"], () => inOneRow(topbar));
+const fileName = $("#file-name");
+fitBar(
+  topbar,
+  ["views", "topics", "brand", "dividers", "server"],
+  () =>
+    inOneRow(topbar) &&
+    (!document.body.classList.contains("compact") || fileName.clientWidth >= 96),
+);
 const palette = $("#tools");
 fitBar(palette, ["keys", "icons"], () => noScroll(palette));
 

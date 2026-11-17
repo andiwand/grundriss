@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: on a phone, the mark of the server in the top bar shows the name of the server when the
+  bar has room for it. Before, it showed only the cloud.
+
 ## 0.5.1 – 2026-11-17
 
 - Editor: with more corners selected, the panel has one "Pinned" check box for all of them. If

@@ -560,7 +560,8 @@ body:not(.no-plan) #language {
 
 /* The top bar gets shorter in steps before it wraps (`fitBar` in src/ui/fit.ts): first the
    views, Layers, Export, and Share show only their icons, then the topics, then the brand shows
-   only its icon, then the dividers hide. Each button keeps its title. */
+   only its icon, then the dividers hide, then (on a phone) the mark of the server shows only its
+   icon. Each button keeps its title. */
 .topbar.fit-views :is(#views button, #layers-button, #export, #share) {
   gap: 0;
   padding: 0 8px;
@@ -580,7 +581,7 @@ body:not(.no-plan) #language {
   display: none;
 }
 
-/* The dividers hide last. In a bar with two rows, a divider must not start a row. */
+/* The dividers hide. In a bar with two rows, a divider must not start a row. */
 .topbar.fit-dividers .divider {
   display: none;
 }
@@ -3674,13 +3675,21 @@ body.compact .home h2 {
   color: var(--danger);
 }
 
-/* On a phone, the share button shows only its icon, like the mark of the server. */
-body.compact .remote-state {
+/* On a phone, the mark of the server shows only its icon if the top bar has no room for the
+   name of the server (`fitBar`). A wider window wraps the bar to a second row instead. */
+body.compact .topbar.fit-server .remote-state {
   font-size: 0;
   gap: 0;
   flex: none;
   padding: 0 7px;
 }
+
+body.compact .remote-state {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* On a phone, the share button shows only its icon. */
 
 body.compact #share {
   font-size: 0;
