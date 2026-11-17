@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: a person who follows another one also follows onto the roof level, and the mark of a
+  person names the roof level as the place.
 - Outdoor: the new tools **Outdoor** (A), **Fence** (G), and **Tree** (T) in Structure. An outdoor
   area is a terrace, a balcony, a roof terrace, a path, a driveway, a lawn, a pool, the plot, or
   a neighbor building, with an outline, a height, and a thickness. Its corners drag like the

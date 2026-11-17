@@ -32,6 +32,8 @@ export interface PresenceState {
   viewing: boolean;
   /** The tab that the person follows, or null. */
   following: string | null;
+  /** True on the roof level: the roofs of all stories from above. Missing in an older app. */
+  roof?: boolean;
 }
 
 interface Other {
@@ -111,6 +113,7 @@ function currentState(): PresenceState {
     camera: view === "2d" ? null : view3d.cameraState(),
     viewing: doc.readOnly,
     following,
+    roof: editor.roofLevel,
   };
 }
 
@@ -294,6 +297,8 @@ function follow(person: Other): void {
       editor.select(null);
       doc.setActiveStory(state.story);
     }
+    // The roof level, without a fit: the part of the plan comes from the person.
+    if (!!state.roof !== editor.roofLevel) shell.setRoofLevel(!!state.roof, false);
     if (state.topic !== app.topic) shell.setTopic(state.topic);
     if (state.view !== shell.view()) shell.setView(state.view);
     if (state.box && state.view !== "3d") editor.showBox(state.box);
@@ -349,7 +354,7 @@ function renderPeople(): void {
     mark.style.setProperty("--person", person.color);
     mark.textContent = initials(person.name);
     const story = person.state ? findStory(doc.building, person.state.story) : undefined;
-    const where = story ? t(story.name) : "";
+    const where = person.state?.roof ? t("Roof") : story ? t(story.name) : "";
     const what = person.state?.viewing || !person.write ? t("views") : t("edits");
     mark.title =
       person.client === following

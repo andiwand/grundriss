@@ -318,7 +318,7 @@ let showAbove = false;
  * The roof level: the view from above with the roofs of all stories (Editor2D.roofLevel). It is
  * an entry of the list of the stories, but not a story of the plan.
  */
-function setRoofLevel(on: boolean): void {
+function setRoofLevel(on: boolean, fit = true): void {
   if (editor.roofLevel === on) return;
   editor.roofLevel = on;
   document.body.classList.toggle("roof-level", on);
@@ -329,7 +329,7 @@ function setRoofLevel(on: boolean): void {
   renderStories();
   renderPanel();
   update3d();
-  if (on) requestAnimationFrame(() => editor.fit());
+  if (on && fit) requestAnimationFrame(() => editor.fit());
 }
 
 function renderStories(): void {

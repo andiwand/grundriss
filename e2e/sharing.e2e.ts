@@ -194,6 +194,10 @@ test("lets two people edit at once, see each other, and follow", async ({
   const name = (await other.locator("span").first().textContent())!;
   await other.click();
   await expect(ben.locator("#stories .story.active")).toContainText(name);
+  // The roof level comes along too.
+  await page.locator("#stories .story.roof").click();
+  await expect(ben.locator("body")).toHaveClass(/roof-level/);
+  await expect(ben.locator("#plan-2d .roof-top")).toHaveCount(1);
   // A click in the view of Ben stops the follow.
   await ben.mouse.click(area.x + 40, area.y + area.height - 40);
   await expect(ben.locator("body")).not.toHaveClass(/following/);
