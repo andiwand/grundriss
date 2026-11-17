@@ -102,7 +102,7 @@ const en = {
     plan: {
       kicker: "Draw",
       title: "Walls, doors, and rooms",
-      text: "Draw walls with snapping and angles, then add doors, windows, and dimensions. Each door and window shows which way it opens. Rooms close by themselves and get a name and an area. If a cupboard stands in the way of a door, the app marks it.",
+      text: "Draw walls with snapping and angles, then add doors, windows, and dimensions. Each door and window shows which way it opens. Rooms close by themselves and get a name and an area. Type the length of each wall side from wall to wall, and pin the corners that must stay. If a cupboard stands in the way of a door, the app marks it.",
     },
     walls: {
       kicker: "3D",
@@ -154,12 +154,12 @@ const en = {
     export: {
       kicker: "Export",
       title: "Print and export",
-      text: "Print the plan to PDF at 1:50 or 1:100, or export SVG, DXF for CAD, or glTF for Blender. A PDF report covers the rooms, the energy, and the renovation, and the quantities export as CSV. A .grundriss package holds everything.",
+      text: "Print the plan to PDF at 1:50 or 1:100, with the lengths in each room and along the facades, or export SVG, DXF for CAD, or glTF for Blender. A PDF report covers the rooms, the energy, and the renovation, and the quantities export as CSV. A .grundriss package holds everything.",
     },
   } as Record<ChapterId, ChapterText>,
   finale: {
     title: "Try it with your own house.",
-    lead: "Grundriss runs in your browser, with no install, no account, and no server. Your plans stay on your device.",
+    lead: "Grundriss runs in your browser, with no install, no account, and no server. Your plans stay on your device, unless you share them through your own server.",
     open: "Open Grundriss",
     facts: [
       {
@@ -168,7 +168,7 @@ const en = {
       },
       {
         title: "Private",
-        text: "Your plans never go to a server. The app sends your location only when you load the climate or the map.",
+        text: "Your plans go to no server, unless you run your own: then you share a plan with a link, keep its versions, and edit it together live. The app sends your location only when you load the climate or the map.",
       },
       {
         title: "Open source",
@@ -341,7 +341,7 @@ const de: Texts = {
     plan: {
       kicker: "Zeichnen",
       title: "Wände, Türen und Räume",
-      text: "Zeichnen Sie Wände mit Fang und Winkeln, dann Türen, Fenster und Bemaßungen. Jede Tür und jedes Fenster zeigt, wohin es aufgeht. Räume schließen sich von selbst und bekommen Namen und Fläche. Steht ein Schrank vor einer Tür, markiert die App das.",
+      text: "Zeichnen Sie Wände mit Fang und Winkeln, dann Türen, Fenster und Bemaßungen. Jede Tür und jedes Fenster zeigt, wohin es aufgeht. Räume schließen sich von selbst und bekommen Namen und Fläche. Tippen Sie die Länge jeder Wandseite von Wand zu Wand ein, und pinnen Sie die Ecken, die bleiben sollen. Steht ein Schrank vor einer Tür, markiert die App das.",
     },
     walls: {
       kicker: "3D",
@@ -393,12 +393,12 @@ const de: Texts = {
     export: {
       kicker: "Export",
       title: "Drucken und exportieren",
-      text: "Drucken Sie den Plan als PDF im Maßstab 1:50 oder 1:100, oder exportieren Sie SVG, DXF für CAD oder glTF für Blender. Ein PDF-Bericht fasst Räume, Energie und Sanierung zusammen, die Mengen gibt es als CSV. Ein .grundriss-Paket enthält alles.",
+      text: "Drucken Sie den Plan als PDF im Maßstab 1:50 oder 1:100, mit den Längen in jedem Raum und entlang der Fassaden, oder exportieren Sie SVG, DXF für CAD oder glTF für Blender. Ein PDF-Bericht fasst Räume, Energie und Sanierung zusammen, die Mengen gibt es als CSV. Ein .grundriss-Paket enthält alles.",
     },
   },
   finale: {
     title: "Probieren Sie es mit Ihrem Haus aus.",
-    lead: "Grundriss läuft im Browser, ohne Installation, ohne Konto und ohne Server. Ihre Pläne bleiben auf Ihrem Gerät.",
+    lead: "Grundriss läuft im Browser, ohne Installation, ohne Konto und ohne Server. Ihre Pläne bleiben auf Ihrem Gerät, außer Sie teilen sie über Ihren eigenen Server.",
     open: "Grundriss öffnen",
     facts: [
       {
@@ -407,7 +407,7 @@ const de: Texts = {
       },
       {
         title: "Privat",
-        text: "Ihre Pläne gehen an keinen Server. Ihren Standort sendet die App nur, wenn Sie das Klima oder die Karte laden.",
+        text: "Ihre Pläne gehen an keinen Server, außer Sie betreiben Ihren eigenen: Dann teilen Sie einen Plan mit einem Link, behalten seine Versionen und bearbeiten ihn gemeinsam live. Ihren Standort sendet die App nur, wenn Sie das Klima oder die Karte laden.",
       },
       {
         title: "Open Source",

@@ -32,18 +32,19 @@ account and no server, and your plans stay on your computer as files.
 
 ## Features
 
-| Part          | What it does                                                                                                                                                                |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.                     |
-| **Draw**      | Walls with snapping and angles, doors and windows that open in a direction, dimensions, rooms with names and areas, and a check for objects that collide.                   |
-| **3D**        | The 3D view shows the plan at the same time as you edit it. Click an object to select it, and drag furniture, doors, and windows to move them.                              |
-| **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                                   |
-| **Roofs**     | Gable, half-hip, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area. |
-| **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                                  |
-| **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                               |
-| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, solar panels, and an hourly balance with a battery.                          |
-| **Renovate**  | Variants with measures or another floor plan, an estimate of their cost, the subsidy, the saving per year, and the payback time.                                            |
-| **Export**    | PDF at 1:50 or 1:100, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                                         |
+| Part          | What it does                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Trace**     | Load a scan or a photo of a plan. A neural network finds the walls, the doors, and the windows in the browser. OpenCV straightens and cleans the image.                                                                                                       |
+| **Draw**      | Walls with snapping and angles, doors and windows that open in a direction, dimensions, rooms with names and areas, and a check for objects that collide. Type the length of each wall side, pin corners, turn and align walls, and measure without a change. |
+| **3D**        | The 3D view shows the plan at the same time as you edit it. Click an object to select it, and drag furniture, doors, and windows to move them.                                                                                                                |
+| **Stories**   | Cellars, floors, and attics. Straight, L, and U stairs, and chimneys through all stories.                                                                                                                                                                     |
+| **Roofs**     | Gable, half-hip, hip, shed, flat, or each side on its own, on any outline. Dormers and roof windows. The attic walls stop at the roof, and the attic shows its living area.                                                                                   |
+| **Furniture** | Generic pieces, the Kenney Furniture Kit, models from Poly Haven, and your own glTF files.                                                                                                                                                                    |
+| **Utilities** | Water, heating, electricity, and network, phone, TV, and SAT: devices, pipes, and cables, with their lengths.                                                                                                                                                 |
+| **Energy**    | The layers of the envelope, U-values, the heat loss of each room, the climate of the location, solar panels, and an hourly balance with a battery.                                                                                                            |
+| **Renovate**  | Variants with measures or another floor plan, an estimate of their cost, the subsidy, the saving per year, and the payback time.                                                                                                                              |
+| **Export**    | PDF at 1:50 or 1:100 with the lengths in the rooms and along the facades, a PDF report, the quantities as CSV, SVG, DXF, glTF, and one `.grundriss` package with everything.                                                                                  |
+| **Share**     | An optional self-hosted server: share links, the versions of each plan, and live editing together, with the cursors of the others and follow. See [Plans on your own server](#plans-on-your-own-server).                                                      |
 
 <p align="center">
   <a href="https://andiwand.github.io/grundriss/">
