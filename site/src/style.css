@@ -36,6 +36,12 @@
   box-sizing: border-box;
 }
 
+/* A hidden element stays hidden, also if its class sets a display, for example "Log in" on the
+   website without a server. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
