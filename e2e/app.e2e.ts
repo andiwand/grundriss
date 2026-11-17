@@ -100,6 +100,64 @@ test("shows the roofs of all stories on the roof level, also a roof of a lower s
   await expect(roofs).toHaveCount(0);
 });
 
+test("draws a terrace, a hedge, and a tree outside the house", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Uses the keyboard and the side panel.");
+  await openApp(page);
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  const box = (await page.locator("#plan-2d svg.editor2d").boundingBox())!;
+  const at = (x: number, y: number) => page.mouse.click(box.x + x, box.y + y);
+  // Away from the list of the stories at the bottom left.
+  const [x0, y0] = [box.width / 2 - 60, box.height - 120];
+
+  // A terrace: four corners, and a click on the first corner ends it.
+  await page.keyboard.press("a");
+  await expect(page.locator("#panel")).toContainText("Outdoor area");
+  await page.locator("#panel select").first().selectOption("terrace");
+  await page.locator("#panel select").first().blur();
+  for (const [x, y] of [
+    [x0, y0],
+    [x0 + 120, y0],
+    [x0 + 120, y0 + 60],
+    [x0, y0 + 60],
+    [x0, y0],
+  ]) {
+    await at(x, y);
+  }
+  const areas = page.locator("#plan-2d .area");
+  await expect(areas).toHaveCount(1);
+  // The new terrace is selected, and a quarter of it counts as living area.
+  await expect(page.locator("#panel h2").first()).toContainText("Terrace");
+  await expect(page.locator("#panel")).toContainText("living area (WoFlV, a quarter)");
+  await expect(page.locator('#tools [data-tool="select"]')).toHaveClass(/active/);
+  // As a balcony, it gets a railing on each side.
+  await page.locator("#panel select").first().selectOption("balcony");
+  await expect(page.locator("#plan-2d .area .railing")).toHaveCount(4);
+
+  // A hedge with two points, ended with Enter.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("g");
+  await page.locator("#panel select").first().selectOption("hedge");
+  await page.locator("#panel select").first().blur();
+  await at(x0 - 40, y0 - 40);
+  await at(x0 + 160, y0 - 40);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#plan-2d .fence.hedge")).toHaveCount(1);
+
+  // A tree, and an undo removes it again.
+  await page.keyboard.press("t");
+  await at(x0 + 200, y0);
+  await expect(page.locator("#plan-2d .tree")).toHaveCount(1);
+  await expect(page.locator("#panel")).toContainText("Crown diameter");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.locator("#plan-2d .tree")).toHaveCount(0);
+
+  // The balcony goes with Delete.
+  await at(x0 + 60, y0 + 30);
+  await expect(page.locator("#panel h2").first()).toContainText("Balcony");
+  await page.keyboard.press("Delete");
+  await expect(areas).toHaveCount(0);
+});
+
 test("shows each topic with its panel", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();

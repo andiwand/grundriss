@@ -62,7 +62,7 @@ import type {
   StairKind,
   Story,
 } from "../model/types";
-import { $, app, cached, doc, editor, panel, shell, showStatus } from "./context";
+import { $, app, cached, doc, editor, HINTS, panel, shell, showStatus } from "./context";
 import { renderEnergyTopic } from "./energy";
 import { renderConflicts } from "./conflicts";
 import { renderCircuit, renderNotes, type NoteChange } from "./notes";
@@ -71,6 +71,7 @@ import {
   checkField,
   colorField,
   field,
+  group,
   heading,
   layerEditor,
   angleField,
@@ -83,6 +84,17 @@ import {
   textField,
 } from "./panel";
 import { renderRenovationTopic } from "./renovation";
+import {
+  AREA_TYPES,
+  areaSize,
+  areaType,
+  FENCE_TYPES,
+  fenceLength,
+  fenceType,
+  findArea,
+  findFence,
+  findTree,
+} from "../model/outdoor";
 import {
   renderLivingArea,
   renderRoofLevelPanel,
@@ -178,6 +190,13 @@ const PANELS: Partial<Record<ItemKind, (plan: Story, id: Id) => void>> = {
   wall: renderWall,
   opening: renderOpening,
   vertex: renderVertex,
+  area: renderArea,
+  "area-corner": (plan, id) => {
+    const [areaId, index] = id.split(":");
+    renderAreaCorner(plan, areaId, Number(index));
+  },
+  fence: renderFence,
+  tree: renderTree,
 };
 
 export function renderPanel(): void {
@@ -209,6 +228,10 @@ export function renderPanel(): void {
   if (items.length > 1) return renderMany(items);
   const selection = items[0];
   if (selection) return PANELS[selection.kind]?.(plan, selection.id);
+  // The area tool and the fence tool choose the kind of the next object.
+  if (editor.tool === "area" || editor.tool === "fence" || editor.tool === "tree") {
+    return renderOutdoorTool();
+  }
   // The roof level shows the roofs of all stories in each topic but the overview.
   if (editor.roofLevel && app.topic !== "overview") return renderRoofLevelPanel();
 
@@ -710,6 +733,187 @@ function renderStair(plan: Story, id: Id): void {
   );
   button(t("Turn around"), () => edit((s) => ([s.a, s.b] = [s.b, s.a])), { icon: "flipHinge" });
   itemActions(stair, edit);
+}
+
+// ----- The outdoor parts -----
+
+/** The panel of the area tool, the fence tool, and the tree tool: the kind of the next object. */
+function renderOutdoorTool(): void {
+  if (editor.tool === "tree") {
+    heading(t("Tree"), "tree");
+    paragraph(HINTS.tree, "note");
+    return;
+  }
+  if (editor.tool === "fence") {
+    heading(t("Fence"), "fence");
+    selectField(
+      t("Kind"),
+      editor.fenceKind,
+      FENCE_TYPES.map((type) => [type.kind, t(type.name)]),
+      (kind) => (editor.fenceKind = kind),
+    );
+    paragraph(HINTS.fence, "note");
+    return;
+  }
+  heading(t("Outdoor area"), "terrace");
+  selectField(
+    t("Kind"),
+    editor.areaKind,
+    AREA_TYPES.map((type) => [type.kind, t(type.name)]),
+    (kind) => (editor.areaKind = kind),
+  );
+  paragraph(HINTS.area, "note");
+  paragraph(
+    t(
+      "A balcony or a roof terrace goes on its story, for example on the floor above or on a flat roof. The plot, the lawn, and the neighbors go on the ground floor.",
+    ),
+    "note",
+  );
+}
+
+/** The panel of an outdoor area. */
+function renderArea(plan: Story, id: Id): void {
+  const area = findArea(plan, id);
+  if (!area) return;
+  const edit = editOf(findArea, id);
+  const type = areaType(area.kind);
+  heading(area.name || t(type.name), "terrace");
+  const size = areaSize(area);
+  stats([
+    [`${fmt(size, 1)} m²`, t("area")],
+    ...(type.living > 0
+      ? ([[`${fmt(size * type.living, 1)} m²`, t("living area (WoFlV, a quarter)")]] as [
+          string,
+          string,
+        ][])
+      : []),
+  ]);
+  selectField(
+    t("Kind"),
+    area.kind,
+    AREA_TYPES.map((x) => [x.kind, t(x.name)]),
+    (kind) =>
+      edit((a) => {
+        // A new kind takes its defaults of the height and the slab.
+        const next = areaType(kind);
+        a.kind = kind;
+        a.level = next.level;
+        a.thickness = next.thickness;
+        if (next.railing && a.railings.length === 0) a.railings = a.points.map((_, i) => i);
+        if (!next.railing && !areaType(kind).living) a.railings = [];
+      }),
+  );
+  textField(t("Name"), area.name, (value) => edit((a) => (a.name = value)), {
+    placeholder: t(type.name),
+    allowEmpty: true,
+  });
+  if (area.kind !== "plot") {
+    numberField(
+      area.kind === "neighbor" ? t("Ground level") : t("Top above the floor"),
+      area.level,
+      (value) => edit((a) => (a.level = value)),
+      { min: -100, unit: "m" },
+    );
+    numberField(
+      area.kind === "neighbor" ? t("Height") : area.kind === "pool" ? t("Depth") : t("Thickness"),
+      area.thickness,
+      (value) => edit((a) => (a.thickness = Math.max(0, value))),
+      { min: 0, unit: "m" },
+    );
+  }
+  if (area.kind === "terrace" || area.kind === "balcony" || area.kind === "roof-terrace") {
+    group(
+      t("Railings · {count}", { count: area.railings.length }),
+      area.railings.length > 0,
+      () => {
+        paragraph(t("The plan shows the number of each side."), "note");
+        area.points.forEach((_, side) => {
+          checkField(t("Side {number}", { number: side + 1 }), area.railings.includes(side), (on) =>
+            edit((a) => {
+              a.railings = on
+                ? [...new Set([...a.railings, side])].sort((x, y) => x - y)
+                : a.railings.filter((s) => s !== side);
+            }),
+          );
+        });
+        button(
+          t("Railing on all sides"),
+          () => edit((a) => (a.railings = a.points.map((_, i) => i))),
+          {
+            icon: "check",
+          },
+        );
+      },
+    );
+  }
+  paragraph(
+    t(
+      "Drag a corner on the plan, or drag a + to add one. Select a corner and press Delete to remove it.",
+    ),
+    "note",
+  );
+  itemActions(area, edit);
+}
+
+/** The panel of a corner of an outdoor area. */
+function renderAreaCorner(plan: Story, areaId: Id, index: number): void {
+  const area = findArea(plan, areaId);
+  const point = area?.points[index];
+  if (!area || !point) return;
+  const edit = editOf(findArea, areaId);
+  heading(
+    t("{name} · corner {corner}", {
+      name: area.name || t(areaType(area.kind).name),
+      corner: index + 1,
+    }),
+    "terrace",
+  );
+  numberField("x", point.x, (v) => edit((a) => (a.points[index].x = v)), { min: -1e6 });
+  numberField("y", point.y, (v) => edit((a) => (a.points[index].y = v)), { min: -1e6 });
+  paragraph(t("Drag the corner on the plan. Delete removes it."), "note");
+  button(t("Whole area"), () => editor.select({ kind: "area", id: areaId }), {
+    icon: "terrace",
+    view: true,
+  });
+}
+
+/** The panel of a fence, a hedge, or a garden wall. */
+function renderFence(plan: Story, id: Id): void {
+  const fence = findFence(plan, id);
+  if (!fence) return;
+  const edit = editOf(findFence, id);
+  heading(t(fenceType(fence.kind).name), "fence");
+  stats([[`${fmt(fenceLength(fence), 1)} m`, t("length")]]);
+  selectField(
+    t("Kind"),
+    fence.kind,
+    FENCE_TYPES.map((x) => [x.kind, t(x.name)]),
+    (kind) =>
+      edit((f) => {
+        f.kind = kind;
+        f.height = fenceType(kind).height;
+      }),
+  );
+  numberOf(t("Height"), fence, "height", edit, { min: 0.1 });
+  itemActions(fence, edit);
+}
+
+/** The panel of a tree. */
+function renderTree(plan: Story, id: Id): void {
+  const tree = findTree(plan, id);
+  if (!tree) return;
+  const edit = editOf(findTree, id);
+  heading(t("Tree"), "tree");
+  numberOf(t("Crown diameter"), tree, "crown", edit, { min: 0.5, unit: "m" });
+  numberOf(t("Height"), tree, "height", edit, { min: 1, unit: "m" });
+  checkField(t("Loses its leaves in winter"), tree.deciduous, (value) =>
+    edit((x) => (x.deciduous = value)),
+  );
+  paragraph(
+    t("A tree shades the PV fields. A tree that loses its leaves shades only from May to October."),
+    "note",
+  );
+  itemActions(tree, edit);
 }
 
 function renderChimney(plan: Story, id: Id): void {

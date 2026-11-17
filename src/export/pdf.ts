@@ -13,6 +13,9 @@ import {
   type Arc,
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
+import { fmt } from "../model/format";
+import { areaCenter, areaSize, areaType, fenceType, outdoorOrder } from "../model/outdoor";
+
 import { wallDimensions } from "../model/wallsides";
 import type { Building, Plan, Point } from "../model/types";
 import { furnitureSymbol } from "../model/furniture";
@@ -189,6 +192,8 @@ export interface PlanOptions {
   outsideLengths?: boolean;
   /** The furniture. Without this option, the pages show it. */
   furniture?: boolean;
+  /** Translates the names of the model, for example of the outdoor areas. The app gives `t`. */
+  translate?: (text: string) => string;
 }
 
 /** The dimension lines of the walls of each plan, by the options: the box and the page use them. */
@@ -336,6 +341,28 @@ function pageContent(
     );
   };
 
+  // The outdoor areas lie under the rooms: the plot as its boundary, the others as surfaces.
+  const areas = outdoorOrder(plan.areas ?? []);
+  for (const area of areas) {
+    if (area.points.length < 3) continue;
+    const color = rgb(areaType(area.kind).color);
+    if (area.kind === "plot") {
+      ops.push(`${color} RG 1 w [6 2 1 2] 0 d`);
+      polygon(area.points);
+      ops.push("S [] 0 d");
+    } else {
+      ops.push(`${color} rg 0.357 0.392 0.455 RG 0.3 w`);
+      polygon(area.points);
+      ops.push("B");
+    }
+    ops.push("0.294 0.325 0.388 RG 1.2 w");
+    for (const side of area.railings) {
+      const p = area.points[side];
+      const q = area.points[(side + 1) % area.points.length];
+      if (p && q) line(p, q);
+    }
+  }
+
   const rooms = findRooms(plan);
   ops.push("0.945 0.902 0.824 rg");
   for (const room of rooms) {
@@ -481,6 +508,39 @@ function pageContent(
     polygon(symbol.outline);
     ops.push("B");
     for (const [a, b] of symbol.diagonals) line(a, b);
+  }
+
+  // The fences and the hedges, as thick as they are; the trees with their crowns.
+  for (const fence of plan.fences ?? []) {
+    if (fence.points.length < 2) continue;
+    const type = fenceType(fence.kind);
+    ops.push(`${rgb(type.color)} RG ${n(Math.max(0.6, type.thickness * k))} w 1 J 1 j`);
+    const [first, ...rest] = fence.points.map(map);
+    ops.push(`${n(first.x)} ${n(first.y)} m`);
+    for (const p of rest) ops.push(`${n(p.x)} ${n(p.y)} l`);
+    ops.push("S 0 J 0 j");
+  }
+  for (const tree of plan.trees ?? []) {
+    const color = rgb(tree.deciduous ? "#4f8a36" : "#24553a");
+    const crown = Array.from({ length: 32 }, (_, i) => ({
+      x: tree.x + (tree.crown / 2) * Math.cos((i / 32) * 2 * Math.PI),
+      y: tree.y + (tree.crown / 2) * Math.sin((i / 32) * 2 * Math.PI),
+    }));
+    ops.push(`${color} RG 0.6 w`);
+    polygon(crown);
+    ops.push("S 0.478 0.337 0.212 rg");
+    polygon(
+      crown.map((p) => ({ x: tree.x + (p.x - tree.x) * 0.06, y: tree.y + (p.y - tree.y) * 0.06 })),
+    );
+    ops.push("f");
+  }
+
+  // The names and the sizes of the outdoor areas.
+  ops.push("0.357 0.392 0.455 rg");
+  for (const area of areas) {
+    if (area.points.length < 3) continue;
+    const name = area.name || (options.translate ?? ((x: string) => x))(areaType(area.kind).name);
+    text(areaCenter(area.points), `${name} · ${fmt(areaSize(area), 1)} m²`, TEXT_SIZE * 0.85);
   }
 
   if (extras.north !== undefined) {

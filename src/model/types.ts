@@ -132,7 +132,12 @@ export type ItemKind =
   | "run"
   /** A roof of the building, and a corner of its outline: the id is "<roof id>:<index>". */
   | "roof"
-  | "roof-corner";
+  | "roof-corner"
+  /** An outdoor area, and a corner of its outline: the id is "<area id>:<index>". */
+  | "area"
+  | "area-corner"
+  | "fence"
+  | "tree";
 export interface Item {
   kind: ItemKind;
   id: Id;
@@ -149,6 +154,10 @@ export interface Clip {
   furniture: Furniture[];
   fixtures: Fixture[];
   runs: Run[];
+  /** Missing in a clip of an older version of the app. */
+  areas?: Area[];
+  fences?: Fence[];
+  trees?: Tree[];
 }
 
 export type StairKind = "straight" | "l" | "u";
@@ -502,7 +511,67 @@ export interface Plan {
   furniture: Furniture[];
   fixtures: Fixture[];
   runs: Run[];
+  /** The outdoor areas, the fences and hedges, and the trees (src/model/outdoor.ts). */
+  areas: Area[];
+  fences: Fence[];
+  trees: Tree[];
   background: Background | null;
+}
+
+/**
+ * The kinds of an outdoor area. A terrace, a balcony, and a roof terrace count for the living
+ * area (WoFlV). The plot is the boundary of the land, and a neighbor is a building next door as
+ * a simple box.
+ */
+export type AreaKind =
+  | "terrace"
+  | "balcony"
+  | "roof-terrace"
+  | "path"
+  | "driveway"
+  | "lawn"
+  | "pool"
+  | "plot"
+  | "neighbor";
+
+/**
+ * An area outside the rooms: a slab or a surface with an outline on the plan of a story.
+ * `level` is the height of its top above the floor of the story. `thickness` is the slab below
+ * the top; for a pool it is the depth of the water, and for a neighbor the height of the house.
+ */
+export interface Area {
+  note?: Note;
+  id: Id;
+  kind: AreaKind;
+  name: string;
+  points: Point[];
+  level: number;
+  thickness: number;
+  /** The sides with a railing: side i goes from point i to point i + 1. */
+  railings: number[];
+}
+
+export type FenceKind = "fence" | "hedge" | "wall";
+
+/** A fence, a hedge, or a garden wall: a line of points with a height. */
+export interface Fence {
+  note?: Note;
+  id: Id;
+  kind: FenceKind;
+  points: Point[];
+  height: number;
+}
+
+/** A tree: its trunk at the point, a crown of the diameter, and the height of its top. */
+export interface Tree {
+  note?: Note;
+  id: Id;
+  x: number;
+  y: number;
+  crown: number;
+  height: number;
+  /** A tree that loses its leaves in winter: then it shades less. */
+  deciduous: boolean;
 }
 
 /**

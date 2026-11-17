@@ -121,6 +121,9 @@ export function renderContents(): void {
       [t("Stairs"), all("stair", story.stairs), "stair"],
       [t("Chimneys"), all("chimney", story.chimneys), "chimney"],
       [t("Dimensions"), all("dimension", story.dimensions), "dimension"],
+      [t("Outdoor areas"), all("area", story.areas), "terrace"],
+      [t("Fences and hedges"), all("fence", story.fences), "fence"],
+      [t("Trees"), all("tree", story.trees), "tree"],
     ];
     for (const [title, items, iconName] of counts) {
       if (items.length > 0) {

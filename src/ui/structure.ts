@@ -3,6 +3,7 @@ import { livingArea, roofIsCeiling } from "../model/attic";
 import { findStory, sortStories } from "../model/building";
 import { fmt } from "../model/format";
 import { newId } from "../model/plan";
+import { outdoorLivingArea } from "../model/outdoor";
 import { newRoof, roofBase, roofGeometryOf } from "../model/roof";
 import { halfHipHeight, presetSides } from "../model/roofshape";
 import type { Room } from "../model/rooms";
@@ -119,6 +120,20 @@ function renderStoryLivingArea(story: Story): void {
   const areas = findRooms(story).map((room) => livingArea(doc.building, story, room));
   const floor = areas.reduce((sum, a) => sum + a.floor, 0);
   const living = areas.reduce((sum, a) => sum + a.living, 0);
+  // Terraces and balconies count with a quarter (WoFlV).
+  const outdoor = outdoorLivingArea(story);
+  if (outdoor > 0) {
+    stats([
+      [
+        `${fmt(living + outdoor, 1)} m²`,
+        t("living area (WoFlV) with {outdoor} m² of terraces and balconies", {
+          outdoor: fmt(outdoor, 1),
+        }),
+        true,
+      ],
+    ]);
+    return;
+  }
   if (areas.length === 0 || (living >= floor - 0.005 && !roofIsCeiling(doc.building, story))) {
     return;
   }

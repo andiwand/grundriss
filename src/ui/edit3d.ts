@@ -12,7 +12,16 @@ import type { Pick } from "../view3d/view3d";
 import { app, doc, editor, view3d } from "./context";
 
 /** The kinds that a drag in the 3D view moves. */
-const MOVABLE = new Set<ItemKind>(["furniture", "fixture", "stair", "chimney", "opening"]);
+const MOVABLE = new Set<ItemKind>([
+  "furniture",
+  "fixture",
+  "stair",
+  "chimney",
+  "opening",
+  "area",
+  "fence",
+  "tree",
+]);
 /** The step of a move, like the grid of the 2D editor. Alt moves without the step. */
 const STEP = 0.05;
 /** A ray that meets the plane of the drag farther away than this, in m, is not used. */

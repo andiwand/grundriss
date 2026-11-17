@@ -37,12 +37,13 @@ describe("quantities", () => {
     expect(csv([["=HYPERLINK(1)", "@x", "+1", -2]])).toBe("\uFEFF'=HYPERLINK(1),'@x,'+1,-2\r\n");
   });
 
-  it("puts five CSV files in the ZIP", () => {
+  it("puts six CSV files in the ZIP", () => {
     const files = unzipSync(takeoffZip(buildingTakeoff(makeHouse())));
     expect(Object.keys(files).sort()).toEqual([
       "envelope.csv",
       "materials.csv",
       "openings.csv",
+      "outdoor.csv",
       "rooms.csv",
       "services.csv",
     ]);

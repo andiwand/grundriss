@@ -14,6 +14,8 @@ import { furnitureSymbol } from "../model/furniture";
 import { fixtureSymbol, runKind, SERVICE_SYSTEMS } from "../model/services";
 import { grow, riseOf, withFurniture, type StoryExtras } from "./context";
 import { findRooms, roomLabel } from "../model/rooms";
+import { fmt } from "../model/format";
+import { areaCenter, areaSize, areaType, fenceType, outdoorOrder } from "../model/outdoor";
 
 import type { Plan, Point, ServiceSystem } from "../model/types";
 
@@ -54,6 +56,8 @@ export function textSize(plan: Plan): number {
 
 export interface SvgOptions extends StoryExtras {
   background?: boolean;
+  /** Translates the names of the model, for example of the outdoor areas. The app gives `t`. */
+  translate?: (text: string) => string;
 }
 
 export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
@@ -100,6 +104,41 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
         `height="${n(background.height * background.scale)}" ` +
         `opacity="${n(background.opacity)}" preserveAspectRatio="none"/>`,
     );
+  }
+
+  // The outdoor areas lie under the rooms: the plot as its boundary, the others as surfaces.
+  const areas = outdoorOrder(plan.areas ?? []);
+  if (areas.length > 0) {
+    out.push(`<g id="outdoor" stroke-width="${n(line)}" stroke-linejoin="round">`);
+    for (const area of areas) {
+      const type = areaType(area.kind);
+      if (area.kind === "plot") {
+        out.push(
+          `<polygon points="${points(area.points)}" fill="none" stroke="${type.color}" ` +
+            `stroke-width="${n(line * 2)}" stroke-dasharray="${n(font)} ${n(font / 3)} ${n(font / 6)} ${n(font / 3)}"/>`,
+        );
+      } else {
+        out.push(
+          `<polygon points="${points(area.points)}" fill="${type.color}" stroke="${COLORS.furniture}"/>`,
+        );
+      }
+      for (const side of area.railings) {
+        const p = area.points[side];
+        const q = area.points[(side + 1) % area.points.length];
+        if (p && q)
+          out.push(
+            `<line x1="${n(p.x)}" y1="${n(p.y)}" x2="${n(q.x)}" y2="${n(q.y)}" ` +
+              `stroke="${COLORS.stair}" stroke-width="${n(line * 3)}"/>`,
+          );
+      }
+      const at = areaCenter(area.points);
+      out.push(
+        `<text x="${n(at.x)}" y="${n(at.y)}" fill="${COLORS.furniture}" font-size="${n(font * 0.8)}" ` +
+          `text-anchor="middle" dominant-baseline="middle">` +
+          `${escape(`${area.name || (options.translate ?? ((x: string) => x))(type.name)} · ${fmt(areaSize(area), 1)} m²`)}</text>`,
+      );
+    }
+    out.push(`</g>`);
   }
 
   const rooms = findRooms(plan);
@@ -274,6 +313,31 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
           `<line x1="${n(a.x)}" y1="${n(a.y)}" x2="${n(b.x)}" y2="${n(b.y)}" stroke="${color}"/>`,
         );
       }
+    }
+    out.push(`</g>`);
+  }
+
+  if ((plan.fences ?? []).length > 0) {
+    out.push(`<g id="fences" fill="none" stroke-linecap="round" stroke-linejoin="round">`);
+    for (const fence of plan.fences) {
+      const type = fenceType(fence.kind);
+      out.push(
+        `<polyline points="${points(fence.points)}" stroke="${type.color}" ` +
+          `stroke-width="${n(Math.max(type.thickness, line * 1.5))}"/>`,
+      );
+    }
+    out.push(`</g>`);
+  }
+
+  if ((plan.trees ?? []).length > 0) {
+    out.push(`<g id="trees" stroke-width="${n(line * 1.5)}">`);
+    for (const tree of plan.trees) {
+      const color = tree.deciduous ? "#4f8a36" : "#24553a";
+      out.push(
+        `<circle cx="${n(tree.x)}" cy="${n(tree.y)}" r="${n(tree.crown / 2)}" fill="${color}" ` +
+          `fill-opacity="0.2" stroke="${color}"/>`,
+      );
+      out.push(`<circle cx="${n(tree.x)}" cy="${n(tree.y)}" r="${n(line * 3)}" fill="#7a5636"/>`);
     }
     out.push(`</g>`);
   }

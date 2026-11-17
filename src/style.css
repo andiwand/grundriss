@@ -2219,6 +2219,122 @@ body.roof-level #tools .divider {
   opacity: 0.7;
 }
 
+/* ----- The outdoor parts (src/model/outdoor.ts) ----- */
+
+.area {
+  cursor: move;
+}
+
+.area .surface {
+  fill-opacity: 0.75;
+  stroke: rgb(0 0 0 / 0.25);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.area.selected .surface {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* The plot is a boundary: a long dash and a dot, and no surface. */
+.area.plot .surface {
+  fill: none;
+  stroke: #6f8f3a;
+  stroke-width: 2;
+  stroke-dasharray: 12 4 2 4;
+  pointer-events: stroke;
+}
+
+.area.neighbor .surface {
+  fill-opacity: 0.9;
+  stroke: rgb(0 0 0 / 0.45);
+}
+
+.area.pool .surface {
+  stroke: #3a8ec0;
+  stroke-width: 2;
+}
+
+.area .railing {
+  stroke: var(--ink-2);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.area-label {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  fill: var(--ink-2);
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-linejoin: round;
+}
+
+.fence {
+  cursor: move;
+}
+
+.fence .hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+}
+
+.fence .body {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* A hedge and a wall have their real thickness, so the line scales with the zoom. */
+  vector-effect: none;
+}
+
+.fence.selected .body {
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+
+.tree {
+  cursor: move;
+}
+
+.tree .crown {
+  fill: #6aa84f;
+  fill-opacity: 0.28;
+  stroke: #4f8a36;
+  stroke-width: 1.5;
+  /* Only the edge of the crown takes a click, so the walls under it stay clickable. */
+  pointer-events: stroke;
+}
+
+.tree.conifer .crown {
+  fill: #2f6b45;
+  stroke: #24553a;
+  stroke-dasharray: 4 2;
+}
+
+.tree .trunk {
+  fill: #7a5636;
+}
+
+.tree.selected .crown {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.overlay .path-preview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.overlay .path-preview.closing {
+  stroke-dasharray: 5 4;
+  opacity: 0.6;
+}
+
 .services-menu {
   display: grid;
   grid-template-columns: 1fr 1fr;

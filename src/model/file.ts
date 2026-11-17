@@ -14,6 +14,9 @@
 // plan at the top level. parseBuilding reads it as a building with one story.
 
 import type {
+  Area,
+  Fence,
+  Tree,
   Background,
   Building,
   Chimney,
@@ -61,6 +64,7 @@ import { storyBox } from "./roof";
 import { roomSide, WIDE_WINDOW } from "./openings";
 import { findRooms } from "./rooms";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
+import { areaType, fenceType, isAreaKind, isFenceKind, TREE_DEFAULTS } from "./outdoor";
 import { switchVariant, syncBackgrounds } from "./variants";
 
 export const FILE_FORMAT = "grundriss";
@@ -803,6 +807,51 @@ function parsePlanData(data: Data, prefix: string): Plan {
     };
   });
 
+  // The outdoor parts. A broken value takes the default of its kind.
+  const areas: Area[] = list(data, "areas").map((d, i) => {
+    const where = `${prefix}area ${i}`;
+    if (!Array.isArray(d.points)) throw new Error(`The file is damaged: ${where} has no points.`);
+    const kind = isAreaKind(d.kind) ? d.kind : "terrace";
+    const type = areaType(kind);
+    const points = d.points.map((p, j) => pointOf(p, `${where}, point ${j}`));
+    return {
+      id: string(d, "id", where),
+      kind,
+      name: typeof d.name === "string" ? d.name : "",
+      points,
+      level: finite(d.level, type.level),
+      thickness: Math.max(0, finite(d.thickness, type.thickness)),
+      railings: Array.isArray(d.railings)
+        ? d.railings.filter(
+            (side): side is number =>
+              Number.isInteger(side) && (side as number) >= 0 && (side as number) < points.length,
+          )
+        : [],
+    };
+  });
+  const fences: Fence[] = list(data, "fences").map((d, i) => {
+    const where = `${prefix}fence ${i}`;
+    if (!Array.isArray(d.points)) throw new Error(`The file is damaged: ${where} has no points.`);
+    const kind = isFenceKind(d.kind) ? d.kind : "fence";
+    return {
+      id: string(d, "id", where),
+      kind,
+      points: d.points.map((p, j) => pointOf(p, `${where}, point ${j}`)),
+      height: Math.max(0, finite(d.height, fenceType(kind).height)),
+    };
+  });
+  const trees: Tree[] = list(data, "trees").map((d, i) => {
+    const where = `${prefix}tree ${i}`;
+    return {
+      id: string(d, "id", where),
+      x: number(d, "x", where),
+      y: number(d, "y", where),
+      crown: Math.max(0.5, finite(d.crown, TREE_DEFAULTS.crown)),
+      height: Math.max(1, finite(d.height, TREE_DEFAULTS.height)),
+      deciduous: d.deciduous !== false,
+    };
+  });
+
   let background: Background | null = null;
   if (data.background != null) {
     if (!isObject(data.background)) throw new Error('The file is damaged: invalid "background".');
@@ -832,6 +881,9 @@ function parsePlanData(data: Data, prefix: string): Plan {
   notes("furniture", furniture);
   notes("fixtures", fixtures);
   notes("runs", runs);
+  notes("areas", areas);
+  notes("fences", fences);
+  notes("trees", trees);
   // The circuits of the devices and of the lines of electricity.
   const circuits = (key: string, parsed: { circuit?: string }[]) =>
     list(data, key).forEach((raw, i) => {
@@ -853,6 +905,9 @@ function parsePlanData(data: Data, prefix: string): Plan {
     furniture,
     fixtures,
     runs,
+    areas,
+    fences,
+    trees,
     background,
   };
   // A window of an old file has no style. It gets hinged leaves that open into the room, like

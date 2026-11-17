@@ -23,14 +23,22 @@ export function grow(box: Box | null, points: Point[]): Box | null {
 }
 
 /**
- * The box of the plan with its furniture, its devices, and its lines. `planBounds` does not know
- * them, so a piece outside the walls would else be cut off. It gives null if all are empty.
+ * The box of the plan with its furniture, its devices, its lines, and its outdoor parts.
+ * `planBounds` does not know them, so a piece outside the walls would else be cut off. It gives
+ * null if all are empty.
  */
 export function withFurniture(box: Box | null, plan: Plan): Box | null {
   return grow(box, [
     ...(plan.furniture ?? []).flatMap(furnitureOutline),
     ...(plan.fixtures ?? []).map((f) => ({ x: f.x, y: f.y })),
     ...(plan.runs ?? []).flatMap((r) => r.points),
+    // The outdoor parts: the outlines, the fences, and the crowns of the trees.
+    ...(plan.areas ?? []).flatMap((a) => a.points),
+    ...(plan.fences ?? []).flatMap((f) => f.points),
+    ...(plan.trees ?? []).flatMap((t) => [
+      { x: t.x - t.crown / 2, y: t.y - t.crown / 2 },
+      { x: t.x + t.crown / 2, y: t.y + t.crown / 2 },
+    ]),
   ]);
 }
 
@@ -71,6 +79,9 @@ export function isEmptyStory(story: Plan, extras: StoryExtras = {}): boolean {
     (story.furniture ?? []).length === 0 &&
     (story.fixtures ?? []).length === 0 &&
     (story.runs ?? []).length === 0 &&
+    (story.areas ?? []).length === 0 &&
+    (story.fences ?? []).length === 0 &&
+    (story.trees ?? []).length === 0 &&
     (extras.through?.length ?? 0) === 0
   );
 }

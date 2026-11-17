@@ -30,6 +30,16 @@ import {
 } from "../model/furniture";
 import { MAP_SOURCES, tilesFor, type MapSourceId } from "../io/tiles";
 import { roofBounds, roofLines, roofsFromAbove, type Vec3 } from "../model/roof";
+import {
+  areaCenter,
+  areaSize,
+  areaType,
+  fenceType,
+  newArea,
+  newFence,
+  newTree,
+  outdoorOrder,
+} from "../model/outdoor";
 import { clearHeightLines, WOFLV } from "../model/attic";
 import {
   findFixture,
@@ -82,6 +92,9 @@ import { findRooms, pointInPolygon, roomLabel } from "../model/rooms";
 import { conflictIds, planConflicts } from "../model/conflicts";
 import { freeOffset, roomSide, WIDE_WINDOW } from "../model/openings";
 import type {
+  Area,
+  AreaKind,
+  FenceKind,
   Chimney,
   Fixture,
   Roof,
@@ -145,6 +158,10 @@ export type Tool =
   | "furniture"
   | "fixture"
   | "run"
+  /** An outdoor area, a fence or a hedge, and a tree (src/model/outdoor.ts). */
+  | "area"
+  | "fence"
+  | "tree"
   | "calibrate"
   | "rectify"
   /** Moves the map under the plan, and turns it with Shift. */
@@ -172,6 +189,7 @@ type Drag =
   | { kind: "fixture"; id: Id; grab: Point }
   | { kind: "roof-corner"; roofId: Id; index: number }
   | { kind: "roof"; id: Id; startWorld: Point; origin: Point[] }
+  | { kind: "area-corner"; areaId: Id; index: number }
   | { kind: "map"; start: Point; anchor: Point; north: number; turn: boolean };
 
 type Attributes = Record<string, string | number>;
@@ -252,6 +270,10 @@ export class Editor2D {
   private placingFixture: Fixture | null = null;
   /** The kind of line that the run tool draws, its points so far, and its first device. */
   private runKindName = "cable";
+  /** The kind of a new area or fence, and the points of the area or fence that the user draws. */
+  private areaKindName: AreaKind = "terrace";
+  private fenceKindName: FenceKind = "fence";
+  private pathPoints: Point[] = [];
   private runPoints: Point[] = [];
   private runFrom: Id | null = null;
   /** The layers of the building services that the editor shows. */
@@ -270,6 +292,8 @@ export class Editor2D {
   onSelect: (selection: Selection) => void = () => {};
   /** The furniture tool calls this after it places a piece. */
   onPlace: (piece: Furniture) => void = () => {};
+  /** An area, a fence, or a tree is done: the editor is back in the select tool, with it. */
+  onFinish: () => void = () => {};
   /** The run tool calls this after it adds a line. */
   onRun: (id: Id) => void = () => {};
   onCalibrate: (a: Point, b: Point) => void = () => {};
@@ -318,6 +342,7 @@ export class Editor2D {
     // tool, it does nothing, so the selection stays.
     this.element.addEventListener("dblclick", () => {
       if (this.currentTool === "run") this.finishRun();
+      else if (this.currentTool === "area" || this.currentTool === "fence") this.finishPath();
       else if (this.currentTool !== "select") this.cancel();
     });
     this.element.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -401,6 +426,7 @@ export class Editor2D {
     if (tool !== "fixture") this.placingFixture = null;
     this.runPoints = [];
     this.runFrom = null;
+    this.pathPoints = [];
     this.chain = null;
     this.measure = [];
     this.ruler = [];
@@ -430,6 +456,9 @@ export class Editor2D {
       ...plan.furniture.map((f) => ({ kind: "furniture" as const, id: f.id })),
       ...plan.fixtures.map((f) => ({ kind: "fixture" as const, id: f.id })),
       ...plan.runs.map((r) => ({ kind: "run" as const, id: r.id })),
+      ...plan.areas.map((a) => ({ kind: "area" as const, id: a.id })),
+      ...plan.fences.map((f) => ({ kind: "fence" as const, id: f.id })),
+      ...plan.trees.map((t) => ({ kind: "tree" as const, id: t.id })),
       ...plan.vertices.map((v) => ({ kind: "vertex" as const, id: v.id })),
     ]);
   }
@@ -450,6 +479,53 @@ export class Editor2D {
 
   get runKindOfTool(): string {
     return this.runKindName;
+  }
+
+  /** The kind of a new area of the area tool, for example "terrace" or "lawn". */
+  get areaKind(): AreaKind {
+    return this.areaKindName;
+  }
+
+  set areaKind(kind: AreaKind) {
+    this.areaKindName = kind;
+    this.render();
+  }
+
+  get fenceKind(): FenceKind {
+    return this.fenceKindName;
+  }
+
+  set fenceKind(kind: FenceKind) {
+    this.fenceKindName = kind;
+    this.render();
+  }
+
+  /** True while the area tool or the fence tool has points. */
+  get drawingPath(): boolean {
+    return this.pathPoints.length > 0;
+  }
+
+  /**
+   * Ends the outline of the area tool (at least three points) or the line of the fence tool (at
+   * least two points), and selects the new object.
+   */
+  finishPath(): void {
+    const points = this.pathPoints;
+    this.pathPoints = [];
+    if (this.currentTool === "area" && points.length >= 3) {
+      const area = newArea(this.areaKindName, points);
+      this.doc.edit((plan) => plan.areas.push(area));
+      this.tool = "select";
+      this.select({ kind: "area", id: area.id });
+      this.onFinish();
+    } else if (this.currentTool === "fence" && points.length >= 2) {
+      const fence = newFence(this.fenceKindName, points);
+      this.doc.edit((plan) => plan.fences.push(fence));
+      this.tool = "select";
+      this.select({ kind: "fence", id: fence.id });
+      this.onFinish();
+    }
+    this.render();
   }
 
   /** Ends the line of the run tool, if it has at least two points. */
@@ -519,6 +595,7 @@ export class Editor2D {
       return;
     }
     if (this.chain) this.chain = null;
+    else if (this.pathPoints.length > 0) this.pathPoints = [];
     else if (this.runPoints.length > 0) {
       this.runPoints = [];
       this.runFrom = null;
@@ -967,6 +1044,36 @@ export class Editor2D {
         this.onPlace(placed);
         break;
       }
+      case "area":
+      case "fence": {
+        const point = this.snap(world, e).point;
+        // A double click adds the same point twice. The second one does not count.
+        const last = this.pathPoints[this.pathPoints.length - 1];
+        if (last && distance(last, point) < 1e-6) break;
+        // A click on the first point closes the outline of an area.
+        const first = this.pathPoints[0];
+        if (
+          this.currentTool === "area" &&
+          first &&
+          this.pathPoints.length >= 3 &&
+          distance(first, point) * this.zoom < SNAP_PIXELS
+        ) {
+          this.finishPath();
+          break;
+        }
+        this.pathPoints.push(point);
+        this.render();
+        break;
+      }
+      case "tree": {
+        const tree = newTree(this.snap(world, e).point);
+        this.doc.edit((plan) => plan.trees.push(tree));
+        // Shift keeps the tool, for more trees.
+        if (!e.shiftKey) this.tool = "select";
+        this.select({ kind: "tree", id: tree.id });
+        this.onFinish();
+        break;
+      }
       case "chimney": {
         const point = this.snap(world, e).point;
         let id: Id = "";
@@ -1024,6 +1131,30 @@ export class Editor2D {
       this.drag = { kind: "roof-corner", roofId, index: i + 1 };
       return;
     }
+    // A "+" handle of the outline of an area adds a corner in the middle of its side.
+    const areaInsert =
+      e.target instanceof Element
+        ? e.target.closest<SVGElement>('[data-kind="area-insert"]')
+        : null;
+    if (areaInsert && !this.doc.readOnly) {
+      const [areaId, index] = areaInsert.dataset.id!.split(":");
+      const i = Number(index);
+      this.doc.begin();
+      this.doc.update((plan) => {
+        const area = plan.areas.find((a) => a.id === areaId)!;
+        const p = area.points[i];
+        const q = area.points[(i + 1) % area.points.length];
+        area.points.splice(i + 1, 0, scale(add(p, q), 0.5));
+        // The two halves of a side with a railing both keep it.
+        const railed = area.railings.includes(i);
+        area.railings = area.railings.map((side) => (side > i ? side + 1 : side));
+        if (railed) area.railings.push(i + 1);
+      });
+      this.items = [{ kind: "area-corner", id: `${areaId}:${i + 1}` }];
+      this.onSelect(this.items);
+      this.drag = { kind: "area-corner", areaId, index: i + 1 };
+      return;
+    }
     const hit = this.hitNear(e);
     // The roof level has no objects of a story: a press on the empty view pans it.
     if (this.roofView && (!hit || (hit.kind !== "roof" && hit.kind !== "roof-corner"))) {
@@ -1079,7 +1210,10 @@ export class Editor2D {
       this.items.length > 1 ||
       hit.kind === "stair" ||
       hit.kind === "chimney" ||
-      hit.kind === "run"
+      hit.kind === "run" ||
+      hit.kind === "area" ||
+      hit.kind === "fence" ||
+      hit.kind === "tree"
     ) {
       this.drag = {
         kind: "move",
@@ -1092,6 +1226,10 @@ export class Editor2D {
     if (hit.kind === "roof-corner") {
       const [roofId, index] = hit.id.split(":");
       this.drag = { kind: "roof-corner", roofId, index: Number(index) };
+    }
+    if (hit.kind === "area-corner") {
+      const [areaId, index] = hit.id.split(":");
+      this.drag = { kind: "area-corner", areaId, index: Number(index) };
     }
     if (hit.kind === "opening") this.drag = { kind: "opening", id: hit.id };
     if (hit.kind === "dimension") this.drag = { kind: "dimension", id: hit.id };
@@ -1219,6 +1357,15 @@ export class Editor2D {
         this.doc.updateBuilding((building) => {
           const roof = building.roofs.find((r) => r.id === drag.roofId);
           if (roof) roof.outline[drag.index] = { x: target.x, y: target.y };
+        });
+        break;
+      }
+      case "area-corner": {
+        // A corner snaps to the corners and the walls of the story, and else to the grid.
+        const target = this.snap(world, e).point;
+        this.doc.update((plan) => {
+          const area = plan.areas.find((a) => a.id === drag.areaId);
+          if (area) area.points[drag.index] = { x: target.x, y: target.y };
         });
         break;
       }
@@ -1441,6 +1588,15 @@ export class Editor2D {
         items.push({ kind: "run", id: run.id });
       }
     }
+    for (const area of plan.areas) {
+      if (area.points.every(inside)) items.push({ kind: "area", id: area.id });
+    }
+    for (const fence of plan.fences) {
+      if (fence.points.every(inside)) items.push({ kind: "fence", id: fence.id });
+    }
+    for (const tree of plan.trees) {
+      if (inside(tree)) items.push({ kind: "tree", id: tree.id });
+    }
     // A vertex of a selected wall moves with the wall, so only lone vertices go in.
     for (const vertex of plan.vertices) {
       if (!inside(vertex)) continue;
@@ -1467,10 +1623,13 @@ export class Editor2D {
         ? this.chain?.point
         : this.currentTool === "run" && this.runPoints.length > 0
           ? this.runPoints[this.runPoints.length - 1]
-          : (this.currentTool === "dimension" || this.currentTool === "stair") &&
-              this.measure.length === 1
-            ? this.measure[0]
-            : undefined;
+          : (this.currentTool === "area" || this.currentTool === "fence") &&
+              this.pathPoints.length > 0
+            ? this.pathPoints[this.pathPoints.length - 1]
+            : (this.currentTool === "dimension" || this.currentTool === "stair") &&
+                this.measure.length === 1
+              ? this.measure[0]
+              : undefined;
 
     if (start && keys.shiftKey) {
       return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, step) };
@@ -1745,6 +1904,7 @@ export class Editor2D {
       this.onRender();
       return;
     }
+    this.renderAreas(plan);
     this.renderRooms(plan);
     this.renderClearHeight();
     this.renderStoryBelow();
@@ -1755,9 +1915,11 @@ export class Editor2D {
     this.renderFixtures(plan);
     this.renderStairs(plan);
     this.renderChimneys(plan);
+    this.renderFences(plan);
     this.renderRoomLabels(plan);
     this.renderDimensions(plan);
     this.renderRoof();
+    this.renderTrees(plan);
     if (this.currentTool === "select" || this.currentTool === "wall") this.renderVertices(plan);
     for (const draw of this.overlays.values()) {
       draw(svg("g", { class: "extra" }, this.content), this.zoom);
@@ -2117,6 +2279,150 @@ export class Editor2D {
     });
   }
 
+  /**
+   * The outdoor areas, under the rooms: the plot as its boundary, and the other areas in the
+   * color of their kind, with their name and size, and their railings. A selected area shows
+   * its corners, a "+" in the middle of each side, and the number of each side.
+   */
+  private renderAreas(plan: Plan): void {
+    const group = svg("g", { class: "areas" }, this.content);
+    // The lower surfaces first: the plot, the lawn, the paths, then the slabs and the neighbors.
+    const areas = outdoorOrder(plan.areas);
+    for (const area of areas) {
+      const type = areaType(area.kind);
+      const selected = this.items.some(
+        (i) =>
+          (i.kind === "area" && i.id === area.id) ||
+          (i.kind === "area-corner" && i.id.startsWith(`${area.id}:`)),
+      );
+      const element = svg(
+        "g",
+        {
+          class: `area ${area.kind}${selected ? " selected" : ""}`,
+          "data-kind": "area",
+          "data-id": area.id,
+        },
+        group,
+      );
+      svg("polygon", { points: points(area.points), fill: type.color, class: "surface" }, element);
+      for (const side of area.railings) {
+        const p = area.points[side];
+        const q = area.points[(side + 1) % area.points.length];
+        if (p && q) svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "railing" }, element);
+      }
+      const size = areaSize(area);
+      const name = area.name || t(type.name);
+      this.label(element, areaCenter(area.points), `${name} · ${fmt(size, 1)} m²`, "area-label");
+    }
+    for (const area of areas) {
+      if (
+        this.items.some(
+          (i) =>
+            (i.kind === "area" && i.id === area.id) ||
+            (i.kind === "area-corner" && i.id.startsWith(`${area.id}:`)),
+        )
+      ) {
+        this.renderAreaHandles(area);
+      }
+    }
+  }
+
+  /** The corners of a selected area, a "+" in the middle of each side, and the side numbers. */
+  private renderAreaHandles(area: Area): void {
+    const handles = svg("g", { class: "roof-outline area-outline" }, this.content);
+    const n = area.points.length;
+    const center = areaCenter(area.points);
+    area.points.forEach((p, i) => {
+      const q = area.points[(i + 1) % n];
+      const mid = scale(add(p, q), 0.5);
+      const length = distance(p, q) || 1;
+      let normal = perpendicular(scale(sub(q, p), 1 / length));
+      if (dot(normal, sub(mid, center)) < 0) normal = scale(normal, -1);
+      this.label(handles, add(mid, scale(normal, 14 / this.zoom)), String(i + 1), "side-number");
+      svg(
+        "circle",
+        {
+          cx: mid.x,
+          cy: mid.y,
+          r: 4 / this.zoom,
+          class: "insert",
+          "data-kind": "area-insert",
+          "data-id": `${area.id}:${i}`,
+        },
+        handles,
+      );
+    });
+    area.points.forEach((p, i) => {
+      const id = `${area.id}:${i}`;
+      svg(
+        "rect",
+        {
+          x: p.x - 5 / this.zoom,
+          y: p.y - 5 / this.zoom,
+          width: 10 / this.zoom,
+          height: 10 / this.zoom,
+          class: this.isSelected("area-corner", id) ? "corner selected" : "corner",
+          "data-kind": "area-corner",
+          "data-id": id,
+        },
+        handles,
+      );
+    });
+  }
+
+  /**
+   * The fences, the hedges, and the garden walls: a line as thick as the object, and a wider
+   * line without color under it that takes the clicks.
+   */
+  private renderFences(plan: Plan): void {
+    const group = svg("g", { class: "fences" }, this.content);
+    for (const fence of plan.fences) {
+      const type = fenceType(fence.kind);
+      const element = svg(
+        "g",
+        {
+          class: `fence ${fence.kind}${this.isSelected("fence", fence.id) ? " selected" : ""}`,
+          "data-kind": "fence",
+          "data-id": fence.id,
+        },
+        group,
+      );
+      const line = points(fence.points);
+      svg("polyline", { points: line, class: "hit" }, element);
+      svg(
+        "polyline",
+        {
+          points: line,
+          class: "body",
+          stroke: type.color,
+          "stroke-width": Math.max(type.thickness, 2 / this.zoom),
+        },
+        element,
+      );
+    }
+  }
+
+  /**
+   * The trees: the crown as a circle, and the trunk as a dot. Only the edge of the crown and the
+   * trunk take a click, so that a crown over the house does not hide the walls under it.
+   */
+  private renderTrees(plan: Plan): void {
+    const group = svg("g", { class: "trees" }, this.content);
+    for (const tree of plan.trees) {
+      const element = svg(
+        "g",
+        {
+          class: `tree${tree.deciduous ? "" : " conifer"}${this.isSelected("tree", tree.id) ? " selected" : ""}`,
+          "data-kind": "tree",
+          "data-id": tree.id,
+        },
+        group,
+      );
+      svg("circle", { cx: tree.x, cy: tree.y, r: tree.crown / 2, class: "crown" }, element);
+      svg("circle", { cx: tree.x, cy: tree.y, r: 5 / this.zoom, class: "trunk" }, element);
+    }
+  }
+
   private renderStairs(plan: Plan): void {
     const group = svg("g", { class: "stairs" }, this.content);
     const rise = stairRise(this.doc.building, this.doc.plan);
@@ -2441,6 +2747,25 @@ export class Editor2D {
           group,
         );
         if (kind.dashed) element.setAttribute("stroke-dasharray", "6 4");
+      }
+    }
+    if (this.currentTool === "area" || this.currentTool === "fence") {
+      // The outline or the line so far, to the cursor. An area shows its closing side dashed.
+      const line = [...this.pathPoints];
+      if (this.cursor) {
+        const target = this.snap(this.cursor.point, { altKey: false, shiftKey: false }).point;
+        marker(target);
+        if (line.length > 0) line.push(target);
+      }
+      this.pathPoints.forEach((p, i) => marker(p, i === 0 ? "on-vertex" : ""));
+      if (line.length > 1) svg("polyline", { points: points(line), class: "path-preview" }, group);
+      if (this.currentTool === "area" && line.length > 2) {
+        const [first, last] = [line[0], line[line.length - 1]];
+        svg(
+          "line",
+          { x1: last.x, y1: last.y, x2: first.x, y2: first.y, class: "path-preview closing" },
+          group,
+        );
       }
     }
     if (this.currentTool === "furniture" && this.placing && this.cursor) {

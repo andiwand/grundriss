@@ -139,6 +139,9 @@ const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
   stair: "structure",
   chimney: "structure",
   dimension: "structure",
+  area: "structure",
+  fence: "structure",
+  tree: "structure",
   fixture: "utilities",
   run: "utilities",
   furniture: "interior",
@@ -253,6 +256,8 @@ function setTool(tool: Tool): void {
   if (owner && owner !== app.topic) setTopic(owner);
   // A tool that draws on a story leaves the roof level.
   if (!VIEW_TOOLS.has(tool)) setRoofLevel(false);
+  // A tool for an outdoor part shows the kind of the next object in the panel.
+  if (tool === "area" || tool === "fence" || tool === "tree") editor.select(null);
   editor.tool = tool;
   app.calibration = null;
   markTool(tool);
@@ -510,6 +515,8 @@ const catalog = new Catalog($("#catalog"), {
   toggled: () => markTool(editor.tool),
 });
 
+editor.onFinish = () => markTool(editor.tool);
+
 editor.onPlace = (piece) => {
   // After one piece, the editor is back in the select tool, unless Shift kept the furniture tool.
   markTool(editor.tool);
@@ -605,9 +612,9 @@ async function exportFile(
 ): Promise<Uint8Array | string> {
   const story = findStory(building, doc.activeStoryId) ?? building.stories[0];
   if (format === "svg") {
-    return planToSvg(story, { ...storyExtras(building, story), background: false });
+    return planToSvg(story, { ...storyExtras(building, story), background: false, translate: t });
   }
-  if (format === "pdf") return buildingToPdf(building, pdf);
+  if (format === "pdf") return buildingToPdf(building, { ...pdf, translate: t });
   if (format === "dxf") return buildingToDxf(building);
   // The model has the whole building, also the stories that the 3D view hides now.
   return new Uint8Array(await exportGlb(await buildModelAsync(building)));
@@ -923,6 +930,7 @@ setupCompact({
   },
   done: () => {
     if (editor.tool === "run") editor.finishRun();
+    if (editor.tool === "area" || editor.tool === "fence") editor.finishPath();
     editor.cancel();
     setTool("select");
   },
@@ -1053,6 +1061,9 @@ const TOOL_KEYS: Record<string, Tool> = {
   s: "stair",
   h: "chimney",
   c: "calibrate",
+  a: "area",
+  g: "fence",
+  t: "tree",
 };
 
 const ARROWS: Record<string, Point> = {
@@ -1103,6 +1114,11 @@ window.addEventListener("keydown", (e) => {
     else if (key === "d") editor.duplicate();
     else if (key === "a") editor.selectAll();
     else return;
+    e.preventDefault();
+    return;
+  }
+  if (key === "enter" && (editor.tool === "area" || editor.tool === "fence")) {
+    editor.finishPath();
     e.preventDefault();
     return;
   }

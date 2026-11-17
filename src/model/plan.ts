@@ -53,6 +53,9 @@ export function emptyPlan(): Plan {
     furniture: [],
     fixtures: [],
     runs: [],
+    areas: [],
+    fences: [],
+    trees: [],
     background: null,
   };
 }
@@ -316,12 +319,41 @@ export function itemExists(plan: Plan, item: Item): boolean {
   if (item.kind === "furniture") return plan.furniture.some((f) => f.id === item.id);
   if (item.kind === "fixture") return plan.fixtures.some((f) => f.id === item.id);
   if (item.kind === "run") return plan.runs.some((r) => r.id === item.id);
+  if (item.kind === "area") return plan.areas.some((a) => a.id === item.id);
+  if (item.kind === "area-corner") {
+    const [areaId, index] = item.id.split(":");
+    const area = plan.areas.find((a) => a.id === areaId);
+    return !!area && Number(index) < area.points.length;
+  }
+  if (item.kind === "fence") return plan.fences.some((f) => f.id === item.id);
+  if (item.kind === "tree") return plan.trees.some((t) => t.id === item.id);
   return !!findDimension(plan, item.id);
 }
 
-/** Removes the items. A wall takes its openings with it, and a vertex takes its walls. */
+/**
+ * Removes the items. A wall takes its openings with it, and a vertex takes its walls. A corner of
+ * an area goes from its outline, if three corners stay.
+ */
 export function removeItems(plan: Plan, items: Item[]): void {
+  // The corners of an area go from the last to the first, so that the indexes stay right.
+  const corners = items
+    .filter((i) => i.kind === "area-corner")
+    .map((i) => i.id.split(":"))
+    .map(([areaId, index]) => ({ areaId, index: Number(index) }))
+    .sort((a, b) => b.index - a.index);
+  for (const { areaId, index } of corners) {
+    const area = plan.areas.find((a) => a.id === areaId);
+    if (!area || area.points.length <= 3) continue;
+    area.points.splice(index, 1);
+    // A railing keeps its side; the sides after the corner move one down.
+    area.railings = area.railings
+      .filter((side) => side !== index)
+      .map((side) => (side > index ? side - 1 : side));
+  }
   for (const item of items) {
+    if (item.kind === "area") plan.areas = plan.areas.filter((a) => a.id !== item.id);
+    if (item.kind === "fence") plan.fences = plan.fences.filter((f) => f.id !== item.id);
+    if (item.kind === "tree") plan.trees = plan.trees.filter((t) => t.id !== item.id);
     if (item.kind === "vertex") removeVertex(plan, item.id);
     if (item.kind === "wall") removeWall(plan, item.id);
     if (item.kind === "opening") removeOpening(plan, item.id);
@@ -368,6 +400,10 @@ export interface MoveOrigin {
   furniture: Map<Id, Point>;
   fixtures: Map<Id, Point>;
   runs: Map<Id, Point[]>;
+  /** The outlines of the areas and the lines of the fences, and the trees. */
+  areas: Map<Id, Point[]>;
+  fences: Map<Id, Point[]>;
+  trees: Map<Id, Point>;
 }
 
 export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
@@ -379,6 +415,9 @@ export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
     furniture: new Map(),
     fixtures: new Map(),
     runs: new Map(),
+    areas: new Map(),
+    fences: new Map(),
+    trees: new Map(),
   };
   for (const id of itemVertices(plan, items)) {
     const vertex = getVertex(plan, id);
@@ -402,6 +441,20 @@ export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
         id,
         run.points.map((p) => ({ ...p })),
       );
+    const area = kind === "area" ? find(plan.areas, id) : undefined;
+    if (area)
+      origin.areas.set(
+        id,
+        area.points.map((p) => ({ ...p })),
+      );
+    const fence = kind === "fence" ? find(plan.fences, id) : undefined;
+    if (fence)
+      origin.fences.set(
+        id,
+        fence.points.map((p) => ({ ...p })),
+      );
+    const tree = kind === "tree" ? find(plan.trees, id) : undefined;
+    if (tree) origin.trees.set(id, { x: tree.x, y: tree.y });
   }
   return origin;
 }
@@ -440,6 +493,18 @@ export function moveFromOrigin(plan: Plan, origin: MoveOrigin, delta: Point): vo
     const run = plan.runs.find((r) => r.id === id);
     if (run) run.points = start.map((p) => add(p, delta));
   }
+  for (const [id, start] of origin.areas) {
+    const area = plan.areas.find((a) => a.id === id);
+    if (area) area.points = start.map((p) => add(p, delta));
+  }
+  for (const [id, start] of origin.fences) {
+    const fence = plan.fences.find((f) => f.id === id);
+    if (fence) fence.points = start.map((p) => add(p, delta));
+  }
+  for (const [id, start] of origin.trees) {
+    const tree = plan.trees.find((t) => t.id === id);
+    if (tree) Object.assign(tree, add(start, delta));
+  }
 }
 
 /**
@@ -468,6 +533,9 @@ export function copyItems(plan: Plan, items: Item[]): Clip {
     ),
     fixtures: plan.fixtures.filter((x) => items.some((i) => i.kind === "fixture" && i.id === x.id)),
     runs: plan.runs.filter((x) => items.some((i) => i.kind === "run" && i.id === x.id)),
+    areas: plan.areas.filter((x) => items.some((i) => i.kind === "area" && i.id === x.id)),
+    fences: plan.fences.filter((x) => items.some((i) => i.kind === "fence" && i.id === x.id)),
+    trees: plan.trees.filter((x) => items.some((i) => i.kind === "tree" && i.id === x.id)),
   });
 }
 
@@ -533,6 +601,29 @@ export function pasteClip(plan: Plan, clip: Clip, delta: Point): Item[] {
     };
     plan.runs.push(copy);
     items.push({ kind: "run", id: copy.id });
+  }
+  for (const area of clip.areas ?? []) {
+    const copy = {
+      ...structuredClone(area),
+      id: newId("a"),
+      points: area.points.map((p) => add(p, delta)),
+    };
+    plan.areas.push(copy);
+    items.push({ kind: "area", id: copy.id });
+  }
+  for (const fence of clip.fences ?? []) {
+    const copy = {
+      ...structuredClone(fence),
+      id: newId("g"),
+      points: fence.points.map((p) => add(p, delta)),
+    };
+    plan.fences.push(copy);
+    items.push({ kind: "fence", id: copy.id });
+  }
+  for (const tree of clip.trees ?? []) {
+    const copy = { ...structuredClone(tree), id: newId("t"), ...add(tree, delta) };
+    plan.trees.push(copy);
+    items.push({ kind: "tree", id: copy.id });
   }
   return items;
 }

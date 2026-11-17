@@ -36,6 +36,10 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   stair: '<path d="M4 20h4v-4h4v-4h4V8h4"/><path d="M4 20V4"/>',
   chimney: '<path d="M3 21V11l9-7 9 7v10z"/><path d="M15 7V3h3v6.3"/>',
+  terrace:
+    '<path d="M3 9h18v6H3z"/><path d="M9 9v6M15 9v6"/><path d="M5 15v5M19 15v5"/><path d="M12 9V4"/>',
+  fence: '<path d="M5 21V6l2-3 2 3v15M15 21V6l2-3 2 3v15"/><path d="M3 10h18M3 16h18"/>',
+  tree: '<circle cx="12" cy="9" r="6"/><path d="M12 15v6M9 21h6"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   roof: '<path d="m2 12 10-8 10 8"/><path d="M5 10v10h14V10"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

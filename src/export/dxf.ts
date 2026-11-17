@@ -15,6 +15,7 @@ import { findRooms, roomLabel } from "../model/rooms";
 import type { Building, Plan, Point, ServiceSystem } from "../model/types";
 import { furnitureSymbol } from "../model/furniture";
 import { fixtureSymbol } from "../model/services";
+import { areaCenter, areaType } from "../model/outdoor";
 import { riseOf, storyExtras, type StoryExtras } from "./context";
 
 /** The layers and their AutoCAD color numbers. */
@@ -31,6 +32,9 @@ export const DXF_LAYERS = {
   HEATING: 1,
   WATER: 150,
   COMMS: 200,
+  OUTDOOR: 94,
+  FENCES: 34,
+  TREES: 82,
 } as const;
 
 type Layer = keyof typeof DXF_LAYERS;
@@ -242,6 +246,26 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
       const symbol = chimneySymbol(chimney);
       polygon(L.CHIMNEYS, symbol.outline);
       for (const [a, b] of symbol.diagonals) line(L.CHIMNEYS, a, b);
+    }
+    // The outdoor parts: the outlines of the areas with their names, the fences, and the trees.
+    for (const area of plan.areas ?? []) {
+      if (area.points.length < 3) continue;
+      polygon(L.OUTDOOR, area.points);
+      for (const side of area.railings) {
+        const p = area.points[side];
+        const q = area.points[(side + 1) % area.points.length];
+        if (p && q) line(L.OUTDOOR, p, q);
+      }
+      text(L.OUTDOOR, areaCenter(area.points), area.name || areaType(area.kind).name, 0.2);
+    }
+    for (const fence of plan.fences ?? []) {
+      if (fence.points.length >= 2) polygon(L.FENCES, fence.points, false);
+    }
+    for (const tree of plan.trees ?? []) {
+      pair(0, "CIRCLE");
+      pair(8, L.TREES);
+      xy(tree);
+      pair(40, tree.crown / 2);
     }
   }
   pair(0, "ENDSEC");

@@ -11,6 +11,7 @@ import { defaultWallHeight } from "./building";
 import { buildingHeatLoss, type WallPart } from "./energy";
 import { material } from "./insulation";
 import { buildingQuantities } from "./quantities";
+import { areaSize, areaType } from "./outdoor";
 import { findRooms, netRoomArea } from "./rooms";
 import type { Building, Layer, OpeningKind } from "./types";
 
@@ -48,8 +49,20 @@ export interface MaterialTakeoff {
   volume: number;
 }
 
+/** An outdoor area: its kind, its area, and the part that counts as living area (WoFlV). */
+export interface OutdoorTakeoff {
+  story: string;
+  /** The English name of the kind, for the translation. */
+  kind: string;
+  name: string;
+  area: number;
+  livingArea: number;
+}
+
 export interface Takeoff {
   rooms: RoomTakeoff[];
+  /** The outdoor areas, without the plot and the neighbor buildings. */
+  outdoor: OutdoorTakeoff[];
   openings: OpeningTakeoff[];
   /** The areas of the envelope of the heated rooms, in m². */
   envelope: {
@@ -177,8 +190,21 @@ export function buildingTakeoff(building: Building): Takeoff {
     ...layerMaterials("Floor on the ground", envelope.floor, areas.floor),
     ...layerMaterials("Slab to an unheated story", envelope.ceiling, areas.slabs),
   ];
+  const outdoor: OutdoorTakeoff[] = building.stories.flatMap((story) =>
+    story.areas
+      .filter((a) => a.kind !== "plot" && a.kind !== "neighbor")
+      .map((a) => ({
+        story: story.name,
+        kind: areaType(a.kind).name,
+        name: a.name,
+        area: areaSize(a),
+        livingArea: areaSize(a) * areaType(a.kind).living,
+      })),
+  );
+
   return {
     rooms,
+    outdoor,
     openings,
     envelope: {
       walls: areas.walls.reduce((sum, part) => sum + part.area, 0),

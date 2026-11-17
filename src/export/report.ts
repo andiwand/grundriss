@@ -237,10 +237,18 @@ export function buildingReport(building: Building, options: ReportOptions): Uint
   const loss = buildingHeatLoss(building);
   w.heading(t("Areas"));
   const living = takeoff.rooms.reduce((s, r) => s + r.livingArea, 0);
+  // Terraces and balconies count with a quarter of their area (WoFlV).
+  const outdoorLiving = takeoff.outdoor.reduce((s, a) => s + a.livingArea, 0);
   w.values([
     [t("Gross floor area (heated)"), m2(takeoff.envelope.grossFloor)],
     [t("Net floor area (heated)"), m2(takeoff.envelope.netFloor)],
     [t("Living area (WoFlV), all rooms"), m2(living)],
+    ...(outdoorLiving > 0
+      ? ([
+          [t("Terraces and balconies, a quarter (WoFlV)"), m2(outdoorLiving)],
+          [t("Living area (WoFlV) with terraces and balconies"), m2(living + outdoorLiving)],
+        ] as [string, string][])
+      : []),
     [t("Heated volume"), `${num(takeoff.envelope.volume, 0)} m³`],
     [t("Stories"), String(building.stories.length)],
     [t("Rooms"), String(takeoff.rooms.length)],
@@ -258,6 +266,15 @@ export function buildingReport(building: Building, options: ReportOptions): Uint
     [2, 3, 1.6, 1.6, 1.2, 1],
     [false, false, true, true, true, false],
   );
+
+  if (takeoff.outdoor.length > 0) {
+    w.table(
+      [t("Story"), t("Outdoor area"), t("Area"), t("Living area")],
+      takeoff.outdoor.map((a) => [t(a.story), a.name || t(a.kind), m2(a.area), m2(a.livingArea)]),
+      [2, 3, 1.6, 1.6],
+      [false, false, true, true],
+    );
+  }
 
   // The envelope.
   const envelope = building.envelope;

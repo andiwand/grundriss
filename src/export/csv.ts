@@ -72,6 +72,10 @@ export function takeoffZip(
         t(r.heated ? "yes" : "no"),
       ]),
     ),
+    "outdoor.csv": file(
+      ["Story", "Kind", "Name", "Area m²", "Living area m²"],
+      takeoff.outdoor.map((a) => [t(a.story), t(a.kind), a.name, a.area, a.livingArea]),
+    ),
     "openings.csv": file(
       ["Kind", "Width m", "Height m", "Sill m", "Count", "Area m²", "Stories"],
       takeoff.openings.map((o) => [

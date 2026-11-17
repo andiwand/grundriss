@@ -5,6 +5,7 @@
 // height of a story is its elevation.
 
 import * as THREE from "three";
+import { addOutdoor } from "./outdoor3d";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   chimneyExtent,
@@ -763,6 +764,7 @@ function buildGroup(
       storyGroup.add(object);
     }
     addServices(storyGroup, story, layers);
+    addOutdoor(storyGroup, story);
     group.add(storyGroup);
   }
   if (roofs.length > 0) {
@@ -779,7 +781,7 @@ function buildGroup(
 function disposeTree(root: THREE.Object3D): void {
   const visit = (object: THREE.Object3D) => {
     if (object.userData.shared) return;
-    if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
       object.geometry.dispose();
     }
     for (const child of object.children) visit(child);
