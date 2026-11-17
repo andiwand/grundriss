@@ -10,6 +10,8 @@ The changes that a user notices.
   corners of a roof, and a terrace or a balcony can have a railing on each side. A fence, a
   hedge, or a garden wall is a line with a height, and a tree has a crown and a height. All show
   in 2D and in 3D, and in the SVG, PDF, and DXF exports.
+- PV: trees, neighbor buildings, hedges, fences, and garden walls shade the PV fields. A tree
+  that loses its leaves shades only from May to October.
 - Living area: a terrace, a balcony, and a roof terrace count with a quarter of their area
   (WoFlV), in the panel of the story, in the report, and in the new file `outdoor.csv`.
 - Phone: the status is a small card above the tabs, with its whole text in more lines if

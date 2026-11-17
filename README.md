@@ -397,6 +397,24 @@ the story that you choose. A story shows its roofs as dashed lines. Click a roof
 - **Dormers** and **roof windows** go on an eave side, at a position along the side and a
   distance from the eave.
 
+### Outdoor
+
+**Outdoor** (A) in Structure draws an outdoor area: click its corners, and a click on the first
+corner, a double click, or Enter ends it. The panel chooses the kind: a **terrace**, a
+**balcony**, a **roof terrace**, a **path**, a **driveway**, a **lawn**, a **pool**, the
+**plot**, or a **neighbor building**. An area belongs to its story, so a balcony goes on the floor
+above, and a roof terrace on its story or on a flat roof. Each area has a height of its top
+above the floor and a thickness (a pool has a depth, and a neighbor a height). Its corners drag
+like the corners of a roof, and a terrace or a balcony has a railing on each side that you
+choose. A terrace, a balcony, and a roof terrace count with a quarter of their area as living
+area (WoFlV).
+
+**Fence** (G) draws a fence, a hedge, or a garden wall with a height, and **Tree** (T) puts a tree
+with its crown and its height. Only the edge of a crown takes a click, so the walls under it stay
+easy to select. Trees, neighbor buildings, hedges, fences, and garden walls shade the PV
+fields; a tree that loses its leaves shades only from May to October. The 3D view, the exports,
+and the report show all of it.
+
 ### Energy and photovoltaic
 
 The **Energy** and the **Renovation** topics show the 2D plan or the 3D view, and a wide panel for the calculations:
@@ -528,8 +546,10 @@ its windows, people and devices, and windows that open when the outside is coole
 uses the degree hours over 27 °C (1200 K·h is the limit for homes in DIN 4108-2). **External
 blinds** show their effect.
 
-The PV yield counts the shade of the roofs, the dormers, and the chimneys, hour by hour. Trees,
-neighbors, and walls do not count.
+The PV yield counts the shade of the roofs, the dormers, the chimneys, the trees, the neighbor
+buildings, and the fences and hedges, hour by hour. A crown is a prism with eight sides, and a
+tree without leaves (November to April) does not shade. The walls of the house and the rows of
+other fields do not count.
 
 Without a climate, the PV yield is a general estimate for Central Europe.
 

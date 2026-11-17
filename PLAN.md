@@ -57,23 +57,19 @@
   its own server; the app on GitHub Pages is only local. The data of the server is in
   `data.yaml`.
 
+- The outdoor area: terraces, balconies and roof terraces with railings, paths, driveways,
+  lawns, pools, the plot, neighbor buildings, fences, hedges, garden walls, and trees, in 2D, 3D,
+  and the exports. Terraces and balconies count a quarter for the WoFlV living area. Trees,
+  neighbors, and fences shade the PV; a tree that loses its leaves only in summer.
+
 ## Next
 
 - Edits without the network: edit the offline copy of a server plan. The revision check then
   makes a copy if the server went on.
-- **The outdoor area.** The plot with its boundary, surfaces (lawn, paths, terrace, driveway),
-  fences and hedges, trees, a pool, and neighbor buildings as simple boxes. A garage, a carport,
-  or a shed reuses the walls and roofs. Trees and neighbors cast shade on the PV, which removes a
-  known limit; a tree that loses its leaves shades less in winter. The areas help to choose a
-  mowing robot, with its zones; the floor area and no-go zones do the same for a vacuum robot.
-  The plot and its content also give a site plan for a building permit.
-  - **Terraces first.** An outdoor surface belongs to a story: an outline that a new tool draws,
-    a kind (terrace, balcony, roof terrace, path, driveway), a height above the floor of the
-    story, and a thickness. The 2D plan hatches it, and the 3D view shows a slab. It is not
-    heated, so the energy leaves it out. The WoFlV living area counts a terrace or a balcony
-    with a quarter of its area (at most a half). Then a railing on chosen edges, for a balcony
-    or a roof terrace. A cover (a pergola, a carport) is a roof on the same story with its own
-    outline, on the roof level.
+- **The rest of the outdoor area.** The areas help to choose a mowing robot, with its zones;
+  the floor area and no-go zones do the same for a vacuum robot. A site plan for a building
+  permit: the distances of the house to the boundary of the plot, and the heights of the
+  ground. A slope of the ground, and steps between the levels of the garden.
 - **The house as a library.** First a module that only builds the 3D scene from a building,
   without the editor: `buildGroup()` in `src/view3d/view3d.ts` today, mixed with the editing.
   Then a web component, `<grundriss-view src="house.grundriss">`, with a small API: lights on
@@ -235,8 +231,10 @@ step.
   income and the iSFP. A variant does not keep the own layers of single walls.
 - **Summer**: each room is one node, so the peaks are lower than in a real room. The model has no
   heat flow between rooms and no shade of the eaves.
-- **Shade**: the shade of the PV counts the roofs, the dormers, and the chimneys, but not trees,
-  neighbors, walls, or the rows of other fields. The loss is linear in the lit area.
+- **Shade**: the shade of the PV counts the roofs, the dormers, the chimneys, the trees, the
+  neighbor buildings, and the fences, but not the walls of the house or the rows of other
+  fields. A crown is a prism of eight sides, and a tree without leaves does not shade. The loss
+  is linear in the lit area.
 - **Languages**: the names of the Kenney models stay English. A plan stores the names of new
   stories and roofs in the language of the code (English), and the app translates them when it
   shows them. Some error messages with values stay English.

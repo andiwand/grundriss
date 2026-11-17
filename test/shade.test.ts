@@ -3,7 +3,8 @@ import { energyBalance } from "../src/model/balance";
 import { climateFace, HOURS } from "../src/model/climate";
 import { makeHouse } from "../src/model/example";
 import { faceInfo, fieldShade, pvLayout, specificYield } from "../src/model/pv";
-import { BEAM_SHARE, shadePolygons } from "../src/model/shade";
+import { BEAM_SHARE, shadeParts, shadePolygons } from "../src/model/shade";
+import { newArea, newTree } from "../src/model/outdoor";
 import { boxHouse } from "./houses";
 import type { Building, Climate, PvArray, RoofKind } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
@@ -204,5 +205,56 @@ describe("balance with shade", () => {
     let sum = 0;
     for (let h = 0; h < HOURS; h++) sum += hourly[h];
     expect(a.pv).toBeCloseTo(layout.peak * sum, 3);
+  });
+});
+
+describe("shade of the outdoor parts on a field", () => {
+  /** A south field of the house, with a tree 3 m south of the house. */
+  function withTree(deciduous: boolean) {
+    const building = house();
+    const array = withField(building, 180);
+    building.stories[0].trees.push({
+      ...newTree({ x: 6, y: 11 }),
+      crown: 6,
+      height: 12,
+      deciduous,
+    });
+    return pvLayout(building, array)!.shade;
+  }
+
+  it("gives shade from a high tree south of a south field, without leaves only in summer", () => {
+    expect(withTree(false).factor).toBeLessThan(1);
+    const shade = withTree(true);
+    expect(shade.factor).toBeLessThan(1);
+    const hourly = shade.hourly!;
+    const days = (from: number, to: number) => hourly.slice(from * 24, to * 24);
+    // January has no shade from the tree; July has some.
+    expect(days(0, 31).every((f) => f === 1)).toBe(true);
+    expect(days(181, 212).some((f) => f < 1)).toBe(true);
+  });
+
+  it("marks the crown of a tree that loses its leaves for the summer only", () => {
+    const building = house();
+    building.stories[0].trees.push(newTree({ x: 6, y: 11 }));
+    const parts = shadeParts(building).filter((part) => part.summer);
+    // Eight sides, the top, and the bottom of the crown.
+    expect(parts).toHaveLength(10);
+  });
+
+  it("gives shade from a high neighbor building south of a south field", () => {
+    const building = house();
+    const array = withField(building, 180);
+    const free = pvLayout(building, array)!.shade.factor;
+    building.stories[0].areas.push({
+      ...newArea("neighbor", [
+        { x: -4, y: 12 },
+        { x: 16, y: 12 },
+        { x: 16, y: 20 },
+        { x: -4, y: 20 },
+      ]),
+      thickness: 14,
+    });
+    expect(free).toBe(1);
+    expect(pvLayout(building, array)!.shade.factor).toBeLessThan(0.95);
   });
 });

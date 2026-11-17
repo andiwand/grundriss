@@ -1,6 +1,8 @@
 // The shade on the PV fields from the parts of the building: the faces and the gables of all
-// roofs, the faces and the walls of the dormers, and the chimneys. Trees, neighbors, and the
-// panels of other fields are not in the model.
+// roofs, the faces and the walls of the dormers, and the chimneys; and from the outdoor parts:
+// the trees, the neighbor buildings, and the fences, hedges, and garden walls. A crown is a
+// prism of eight sides; a tree that loses its leaves shades only from May to October. The panels
+// of other fields are not in the model.
 //
 // The method:
 //
@@ -31,7 +33,7 @@
 import { chimneyExtent, chimneyOutline } from "./building";
 import { climateSeries, climateSun, faceYear, HOURS, sunPath } from "./climate";
 import { roofGeometries, type Vec3 } from "./roof";
-import type { Building } from "./types";
+import type { Building, Story, Tree } from "./types";
 
 /** The part of the yearly irradiation on a tilted face that the beam gives, without a climate. */
 export const BEAM_SHARE = 0.55;
@@ -67,6 +69,8 @@ export interface FieldShade {
 /** A polygon that can block the sun, with its plane and its projection on the plane. */
 interface Blocker {
   points: Vec3[];
+  /** True for a tree that loses its leaves: it blocks only in the summer half of the year. */
+  summer: boolean;
   /** The unit normal and the distance of the plane: n · p = d. */
   nx: number;
   ny: number;
@@ -81,7 +85,7 @@ interface Blocker {
   max: Vec3;
 }
 
-function blocker(points: Vec3[]): Blocker | null {
+function blocker({ polygon: points, summer }: ShadePart): Blocker | null {
   if (points.length < 3) return null;
   // Newell's method gives the normal of a polygon that is not convex too.
   let nx = 0;
@@ -120,7 +124,19 @@ function blocker(points: Vec3[]): Blocker | null {
     max.z = Math.max(max.z, p.z);
   }
   const p0 = points[0];
-  return { points, nx, ny, nz, d: nx * p0.x + ny * p0.y + nz * p0.z, drop, u, v, min, max };
+  return {
+    points,
+    summer,
+    nx,
+    ny,
+    nz,
+    d: nx * p0.x + ny * p0.y + nz * p0.z,
+    drop,
+    u,
+    v,
+    min,
+    max,
+  };
 }
 
 /** True if the ray from o in the direction (dx, dy, dz) hits the polygon. */
@@ -147,35 +163,125 @@ function hits(b: Blocker, ox: number, oy: number, oz: number, dx: number, dy: nu
   return inside;
 }
 
+/** A polygon that can block the sun, and if it blocks only in the summer half of the year. */
+export interface ShadePart {
+  polygon: Vec3[];
+  summer: boolean;
+}
+
+/** The sides, the top, and the bottom of a prism from `bottom` to `top`, of the outline. */
+function prism(outline: { x: number; y: number }[], bottom: number, top: number, topScale = 1) {
+  const n = outline.length;
+  const c = {
+    x: outline.reduce((s, p) => s + p.x, 0) / n,
+    y: outline.reduce((s, p) => s + p.y, 0) / n,
+  };
+  const up = outline.map((p) => ({
+    x: c.x + (p.x - c.x) * topScale,
+    y: c.y + (p.y - c.y) * topScale,
+    z: top,
+  }));
+  const result: Vec3[][] = outline.map((p, i) => {
+    const q = outline[(i + 1) % n];
+    return [{ x: p.x, y: p.y, z: bottom }, { x: q.x, y: q.y, z: bottom }, up[(i + 1) % n], up[i]];
+  });
+  result.push(
+    up,
+    outline.map((p) => ({ x: p.x, y: p.y, z: bottom })),
+  );
+  return result;
+}
+
 /**
- * The polygons of the building that can block the sun: the faces and the gables of all roofs,
- * the faces and the walls of the dormers, and the sides and the tops of the chimneys.
+ * The crown of a tree as a prism of eight sides, at the heights of the 3D view: a round crown
+ * from the top of the trunk to the top of the tree, a conifer as a cone (a prism that gets
+ * narrow at the top). The crown is a little smaller than its circle, because a crown lets
+ * some light through.
  */
-export function shadePolygons(building: Building): Vec3[][] {
-  const result: Vec3[][] = [];
+function treeCrown(tree: Tree, floor: number): Vec3[][] {
+  const radius = (tree.crown / 2) * 0.85;
+  const trunkTop = Math.max(0.5, tree.height - (tree.deciduous ? tree.crown : tree.height * 0.8));
+  const outline = Array.from({ length: 8 }, (_, i) => ({
+    x: tree.x + radius * Math.cos((i / 8) * 2 * Math.PI),
+    y: tree.y + radius * Math.sin((i / 8) * 2 * Math.PI),
+  }));
+  return prism(outline, floor + trunkTop, floor + tree.height, tree.deciduous ? 1 : 0.15);
+}
+
+/** The outdoor parts of a story that can block the sun. */
+function outdoorParts(story: Story): ShadePart[] {
+  const result: ShadePart[] = [];
+  const floor = story.elevation;
+  for (const area of story.areas) {
+    if (area.kind !== "neighbor" || area.points.length < 3) continue;
+    const base = floor + area.level;
+    for (const polygon of prism(area.points, base, base + area.thickness)) {
+      result.push({ polygon, summer: false });
+    }
+  }
+  for (const fence of story.fences) {
+    fence.points.slice(1).forEach((q, i) => {
+      const p = fence.points[i];
+      result.push({
+        polygon: [
+          { x: p.x, y: p.y, z: floor },
+          { x: q.x, y: q.y, z: floor },
+          { x: q.x, y: q.y, z: floor + fence.height },
+          { x: p.x, y: p.y, z: floor + fence.height },
+        ],
+        summer: false,
+      });
+    });
+  }
+  for (const tree of story.trees) {
+    for (const polygon of treeCrown(tree, floor)) result.push({ polygon, summer: tree.deciduous });
+  }
+  return result;
+}
+
+/**
+ * The polygons that can block the sun: the faces and the gables of all roofs, the faces and the
+ * walls of the dormers, the sides and the tops of the chimneys, and the outdoor parts.
+ */
+export function shadeParts(building: Building): ShadePart[] {
+  const result: ShadePart[] = [];
+  const always = (polygon: Vec3[]) => result.push({ polygon, summer: false });
   for (const { geometry } of roofGeometries(building)) {
-    for (const face of geometry.faces) result.push(face.polygon);
-    result.push(...geometry.gables);
-    for (const dormer of geometry.dormers) result.push(...dormer.faces, ...dormer.walls);
+    for (const face of geometry.faces) always(face.polygon);
+    geometry.gables.forEach(always);
+    for (const dormer of geometry.dormers) [...dormer.faces, ...dormer.walls].forEach(always);
   }
   for (const story of building.stories) {
     for (const chimney of story.chimneys) {
       const { bottom, top } = chimneyExtent(building, story, chimney);
-      const outline = chimneyOutline(chimney);
-      outline.forEach((p, i) => {
-        const q = outline[(i + 1) % outline.length];
-        result.push([
-          { x: p.x, y: p.y, z: bottom },
-          { x: q.x, y: q.y, z: bottom },
-          { x: q.x, y: q.y, z: top },
-          { x: p.x, y: p.y, z: top },
-        ]);
-      });
-      result.push(outline.map((p) => ({ x: p.x, y: p.y, z: top })));
+      for (const polygon of prism(chimneyOutline(chimney), bottom, top)) {
+        // The bottom of a chimney is inside the house, so it blocks nothing.
+        if (polygon.every((p) => p.z === bottom)) continue;
+        always(polygon);
+      }
     }
+    result.push(...outdoorParts(story));
   }
-  return result.filter((polygon) => polygon.length >= 3);
+  return result.filter((part) => part.polygon.length >= 3);
 }
+
+/** The polygons of `shadeParts`, without the season. */
+export function shadePolygons(building: Building): Vec3[][] {
+  return shadeParts(building).map((part) => part.polygon);
+}
+
+/**
+ * True for each hour of the typical year from May to October, when a tree has its leaves: from
+ * day 120 (May 1) to day 303 (October 31) of a year of 365 days.
+ */
+const SUMMER = (() => {
+  const result = new Uint8Array(HOURS);
+  for (let h = 0; h < HOURS; h++) {
+    const day = Math.floor(h / 24);
+    result[h] = day >= 120 && day <= 303 ? 1 : 0;
+  }
+  return result;
+})();
 
 /** The unit normal of a panel in plan coordinates, pointing up. */
 function panelNormal(quad: Vec3[]): Vec3 {
@@ -236,7 +342,7 @@ export function panelShade(
   const climate = building.climate;
   const latitude = building.location?.latitude ?? DEFAULT_LATITUDE;
   const sun = climate ? climateSun(climate) : estimatePath(latitude);
-  const polygons = shadePolygons(building);
+  const polygons = shadeParts(building);
 
   let entries = cache.get(sun);
   if (!entries) {
@@ -248,7 +354,7 @@ export function panelShade(
     parts.map((p) => `${p.tilt}:${p.azimuth}:${p.peak}`).join("|"),
     partOf.join(","),
     panels.map(polygonKey).join("|"),
-    polygons.map(polygonKey).join("|"),
+    polygons.map((part) => `${part.summer ? "s" : ""}${polygonKey(part.polygon)}`).join("|"),
   ].join("#");
   const hit = entries.get(key);
   if (hit) return hit;
@@ -261,7 +367,7 @@ export function panelShade(
 function computeShade(
   building: Building,
   sun: Float64Array,
-  polygons: Vec3[][],
+  polygons: ShadePart[],
   panels: Vec3[][],
   parts: { tilt: number; azimuth: number; peak: number }[],
   partOf: number[],
@@ -351,6 +457,7 @@ function computeShade(
       const dy = dir[h * 3 + 1];
       const dz = dir[h * 3 + 2];
       for (const b of candidates) {
+        if (b.summer && !SUMMER[h]) continue;
         if (!hits(b, p.x, p.y, p.z, dx, dy, dz)) continue;
         counts[h]++;
         let own = panelShaded.get(panel);
