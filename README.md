@@ -168,8 +168,13 @@ The app of the server is at `/app/`. Without a login, it asks for the name and t
   as a move. The app on GitHub Pages has no server: save a plan there as a file, and open it in
   the app of the server.
 - **Without the network**, the app opens the copy of a plan of the server that it keeps in the
-  browser, only to view. The Projects page shows these copies under the server. A logout removes
-  them.
+  browser. A person who could edit the plan edits the copy: the browser keeps the changes, also
+  after the tab closes, and the top bar shows "Offline · changes wait". When the server answers
+  again, the app loads its newest revision, puts your changes on top, and sends them. Changes of
+  different things all stay; for the same field, your change comes last and wins. A send that
+  fails, for example on a short loss of the network, tries again by itself. The Projects page
+  shows the copies under the server, and marks a plan whose changes wait. A logout removes the
+  copies.
 - **Links that end** go away by themselves: the server removes them at the start and every hour.
 
 The settings are environment variables:

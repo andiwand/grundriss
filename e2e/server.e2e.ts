@@ -105,3 +105,40 @@ test("shows two people who edit through share links, and their changes", async (
     await b.close();
   }
 });
+
+test("keeps the changes without the network, and sends them when it is back", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Uses the side panel.");
+  const { store, admin, base, login, plans } = await startServer();
+  const access = store.access(store.createSession(admin))!;
+  store.createPlan(access, "House", serializeBuilding(emptyBuilding()));
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    await login(context);
+    const page = await context.newPage();
+    await openServerApp(page, base, `/app/plans/${plans()[0].id}`);
+    await expect(page.locator("#remote-state")).toHaveText("Grundriss");
+    // The network goes: the change stays in the browser.
+    await context.setOffline(true);
+    const north = page.getByRole("spinbutton", { name: "North" });
+    await north.fill("33");
+    await north.press("Tab");
+    await expect(page.locator("#remote-state")).toContainText("kept in the browser");
+    expect(plans()[0].revisions).toHaveLength(1);
+    // The network comes back: the stream connects again, and the change goes to the server.
+    await context.setOffline(false);
+    await expect
+      .poll(
+        () => {
+          const plan = plans()[0];
+          return JSON.parse(store.revisionData(plan, plan.revisions.at(-1)!.id)).north;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(33);
+    await expect(page.locator("#remote-state")).toHaveText("Grundriss");
+  } finally {
+    await context.close();
+  }
+});

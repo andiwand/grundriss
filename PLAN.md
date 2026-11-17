@@ -62,10 +62,12 @@
   and the exports. Terraces and balconies count a quarter for the WoFlV living area. Trees,
   neighbors, and fences shade the PV; a tree that loses its leaves only in summer.
 
+- Edits without the network: a person who can edit a plan of the server edits its copy in the
+  browser, which keeps the changes; when the server answers again, they go as a patch on its
+  newest revision. A failed send tries again by itself.
+
 ## Next
 
-- Edits without the network: edit the offline copy of a server plan. The revision check then
-  makes a copy if the server went on.
 - **The rest of the outdoor area.** The areas help to choose a mowing robot, with its zones;
   the floor area and no-go zones do the same for a vacuum robot. A site plan for a building
   permit: the distances of the house to the boundary of the plot, and the heights of the
@@ -84,9 +86,9 @@
 - **A public service.** We run the same server for all users, in the EU, with the business model
   below. A floor plan of a home is personal data (GDPR), so a user must be able to delete a plan,
   and the service needs a privacy policy.
-- **Live editing, offline.** Edits without the network that merge later. The patches by id
-  already merge, so this needs a queue of patches in the browser, and a CRDT (Yjs or Automerge)
-  only if the merge of the fields of one object is not enough.
+- **Merge of the fields of one object.** Offline changes merge by object and by field, and the
+  later change of a field wins. A CRDT (Yjs or Automerge) only if that is not enough, for
+  example for the text of a note that two people change at the same time.
 - **API tokens.** For clients that are not the app, for example a script, a backup, or the card
   for Home Assistant: an account makes a token with its own rights and an end date. The client
   sends it as `Authorization: Bearer …` to the same `/api/`, and the server takes the rights as

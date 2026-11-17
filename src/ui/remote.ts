@@ -17,6 +17,7 @@ import {
   listRemoteCopies,
   loadRemoteCopy,
   removeRemoteCopies,
+  saveRemoteEdits,
   type RemoteCopy,
   saveRemoteCopy,
 } from "../io/projects";
@@ -230,6 +231,20 @@ interface Session {
   gap: number;
   /** The timer of the copy in the browser, which waits for a pause of the changes. */
   copyTimer: number;
+  /**
+   * The building whose changes the browser keeps for the server (`saveRemoteEdits`), so that
+   * they stay without the network and after the tab closes. `saved` if there are none.
+   */
+  stored: Building;
+  /** True if the browser keeps changes for the server. */
+  edits: boolean;
+  /** The timer of the changes in the browser, which waits for a pause of the changes. */
+  editsTimer: number;
+  /** The timer that asks the server again, without the network. */
+  reconnect: number;
+  /** The timer and the pause of the next try of a send that failed, in ms. */
+  retry: number;
+  retryDelay: number;
 }
 
 /** A change of the plan on the server: a new revision with its patch, from the stream. */
@@ -254,7 +269,38 @@ function storeCopy(current: Session, name: string, data: string): void {
     current.revision,
     data,
     planPreview(current.saved),
+    current.write,
   ).catch(() => undefined);
+}
+
+/**
+ * Keeps the changes that the server does not have in the browser, or removes them if there are
+ * none: without the network, and while a send fails. The server gets them when it answers again.
+ */
+function storeEdits(current: Session): void {
+  window.clearTimeout(current.editsTimer);
+  current.editsTimer = 0;
+  const building = doc.building;
+  const changed = building !== current.saved && !!diffBuildings(current.saved, building);
+  current.stored = building;
+  if (!changed && !current.edits) return;
+  current.edits = changed;
+  void saveRemoteEdits(
+    current.client.base,
+    current.planId,
+    changed ? serializeBuilding(building) : null,
+  ).catch(() =>
+    showStatus(t("The browser cannot keep your changes. Save a copy to a file."), true),
+  );
+  updateRemoteState();
+}
+
+/** Keeps the changes in the browser after a short pause, and at once when the page closes. */
+function storeEditsSoon(current: Session): void {
+  window.clearTimeout(current.editsTimer);
+  current.editsTimer = window.setTimeout(() => {
+    if (session === current) storeEdits(current);
+  }, 500);
 }
 
 /** Keeps the copy in the browser after a pause of the changes of the others. */
@@ -268,7 +314,9 @@ function storeCopySoon(current: Session): void {
 let session: Session | null = null;
 let opening = 0;
 
-const unsaved = (current: Session) => doc.building !== current.saved || current.saving !== null;
+/** True if the open plan has changes that neither the server nor the browser keeps. */
+const unsaved = (current: Session) =>
+  (doc.building !== current.saved && doc.building !== current.stored) || current.saving !== null;
 
 /** True if the open plan has changes that the server does not have. */
 const unsentChanges = (current: Session) =>
@@ -312,9 +360,26 @@ export async function openRemote(planId: string): Promise<void> {
       inflightRevision: "",
       gap: 0,
       copyTimer: 0,
+      stored: doc.building,
+      edits: false,
+      editsTimer: 0,
+      reconnect: 0,
+      retry: 0,
+      retryDelay: 0,
     };
     session = current;
     doc.readOnly = !current.editing;
+    // The changes that the person made without the network go on top of the newest revision.
+    const copy = await loadRemoteCopy(state.client.base, planId).catch(() => undefined);
+    if (session !== current) return;
+    const own = copy?.editedData
+      ? diffBuildings(parseBuilding(copy.data), parseBuilding(copy.editedData))
+      : undefined;
+    if (own) {
+      current.edits = true;
+      adopt(current, current.saved, own);
+      current.stored = doc.building;
+    }
     storeCopy(current, plan.name, plan.data);
     // The address names the plan, for a bookmark.
     history.replaceState(null, "", planAddress(planId));
@@ -328,14 +393,22 @@ export async function openRemote(planId: string): Promise<void> {
       setViewOnly: (value) => setViewOnly(current, value),
     });
     showStatus(
-      current.editing
-        ? t('Opened "{name}" on {server}. Each change saves to the server.', {
-            name: plan.name,
-            server: state.name,
-          })
-        : t('Opened "{name}" on {server} to view.', { name: plan.name, server: state.name }),
+      own && current.editing
+        ? t("Your changes without the network go to the server now.")
+        : own
+          ? t(
+              "You can only view this plan now. Your changes without the network stay in this browser: save a copy to keep them.",
+            )
+          : current.editing
+            ? t('Opened "{name}" on {server}. Each change saves to the server.', {
+                name: plan.name,
+                server: state.name,
+              })
+            : t('Opened "{name}" on {server} to view.', { name: plan.name, server: state.name }),
+      !!own && !current.editing,
     );
     shell.enterPlan("structure");
+    if (own && current.editing) void save();
   } catch (error) {
     // Without the network, the copy of the browser opens to view.
     if (error instanceof ServerError && error.status === 0 && request === opening) {
@@ -350,23 +423,35 @@ export async function openRemote(planId: string): Promise<void> {
   updateRemoteState();
 }
 
-/** Opens the copy of a plan of the server that the browser keeps, only to view. */
+/**
+ * Opens the copy of a plan of the server that the browser keeps. A person who could edit the
+ * plan edits the copy: the browser keeps the changes, and they go to the server when it answers
+ * again (`tryOnline`). The changes of an earlier time without the network are there too.
+ */
 async function openOffline(planId: string, client: ServerClient): Promise<boolean> {
   const copy = await loadRemoteCopy(client.base, planId).catch(() => undefined);
   if (!copy) return false;
   const name = server?.name ?? "";
+  const write = copy.write === true;
   endSession();
-  doc.readOnly = true;
-  load(parseBuilding(copy.data), `${copy.name}.grundriss`, null, "remote");
-  session = {
+  doc.readOnly = !write;
+  const base = parseBuilding(copy.data);
+  load(
+    copy.editedData ? parseBuilding(copy.editedData) : base,
+    `${copy.name}.grundriss`,
+    null,
+    "remote",
+  );
+  const current: Session = {
     client,
     planId,
     serverName: name,
     revision: copy.revision,
-    write: false,
+    write,
     share: false,
-    editing: false,
-    saved: doc.building,
+    editing: write,
+    // The plan of the server, under the changes of the browser.
+    saved: copy.editedData ? base : doc.building,
     saving: null,
     failed: false,
     events: null,
@@ -379,17 +464,105 @@ async function openOffline(planId: string, client: ServerClient): Promise<boolea
     inflightRevision: "",
     gap: 0,
     copyTimer: 0,
+    stored: doc.building,
+    edits: !!copy.editedData,
+    editsTimer: 0,
+    reconnect: 0,
+    retry: 0,
+    retryDelay: 0,
   };
+  session = current;
+  current.reconnect = window.setInterval(() => void tryOnline(current), RECONNECT);
   showStatus(
-    t("No connection to {server}. You see the copy of this browser from {time}, only to view.", {
-      server: name,
-      time: ago(copy.time),
-    }),
+    write
+      ? t(
+          "No connection to {server}. You edit the copy of this browser from {time}. The changes go to the server when it answers again.",
+          { server: name, time: ago(copy.time) },
+        )
+      : t(
+          "No connection to {server}. You see the copy of this browser from {time}, only to view.",
+          {
+            server: name,
+            time: ago(copy.time),
+          },
+        ),
     true,
   );
   shell.enterPlan("structure");
   updateRemoteState();
   return true;
+}
+
+/** How often the app asks the server again without the network, in ms. */
+const RECONNECT = 20_000;
+
+/** Asks the server again. If it answers, the session goes on with it (`goOnline`). */
+async function tryOnline(current: Session): Promise<void> {
+  if (session !== current || !current.offline || current.loading) return;
+  current.loading++;
+  let plan: RemotePlan & { data: string };
+  try {
+    plan = await current.client.plan(current.planId);
+  } catch (error) {
+    // A plan that the server removed, or a lost access: the changes stay in the browser.
+    if (session === current && error instanceof ServerError && error.status !== 0) {
+      window.clearInterval(current.reconnect);
+      showStatus(
+        t("The server does not give this plan any more. Save a copy to keep your changes."),
+        true,
+      );
+    }
+    return;
+  } finally {
+    current.loading = 0;
+  }
+  if (session === current && current.offline) goOnline(current, plan);
+}
+
+/**
+ * The server answers again: the newest revision of the server comes, with the changes of the
+ * browser on top, which then go to the server as a patch. Changes of different things all stay;
+ * for the same field, the change of the browser comes last and wins.
+ */
+function goOnline(current: Session, plan: RemotePlan & { data: string }): void {
+  window.clearInterval(current.reconnect);
+  storeEdits(current);
+  const own = diffBuildings(current.saved, doc.building);
+  current.offline = false;
+  current.write = plan.write;
+  current.share = plan.share;
+  current.editing = plan.write && !current.viewOnly;
+  current.revision = plan.revision;
+  current.failed = false;
+  adopt(current, parseBuilding(plan.data), own);
+  current.stored = doc.building;
+  doc.readOnly = !current.editing;
+  storeCopy(current, plan.name, plan.data);
+  listen(current);
+  startPresence({
+    client: current.client,
+    planId: current.planId,
+    name: account()?.name ?? "",
+    write: current.write,
+    viewOnly: () => current.viewOnly,
+    setViewOnly: (value) => setViewOnly(current, value),
+  });
+  // The session of the server, for example after a start without the network.
+  if (server) void server.client.session().then(setSession, () => undefined);
+  if (own && current.editing) {
+    showStatus(t("The server answers again. Your changes go to it now."));
+    void save();
+  } else if (own) {
+    showStatus(
+      t(
+        "You can only view this plan now. Your changes without the network stay in this browser: save a copy to keep them.",
+      ),
+      true,
+    );
+  } else {
+    showStatus(t("The server answers again."));
+  }
+  updateRemoteState();
 }
 
 /** The stream of the plan: the changes and the people. */
@@ -403,7 +576,14 @@ function listen(current: Session): void {
     // revision loads.
     const hello = read(event) as { revision: string | null; people?: Person[] };
     peopleAgain(hello.people ?? []);
-    if (hello.revision && hello.revision !== current.revision) void catchUp(current);
+    // Changes that failed to go to the server, for example without the network, go now.
+    const resend = () => {
+      if (session === current && current.editing && current.failed && unsentChanges(current)) {
+        void save();
+      }
+    };
+    if (hello.revision && hello.revision !== current.revision) void catchUp(current).then(resend);
+    else resend();
   });
   events.addEventListener("revision", (event) => {
     if (session !== current) return;
@@ -580,6 +760,9 @@ async function sendChanges(current: Session): Promise<void> {
     current.failed = false;
     // The change comes back on the stream, with the changes of the others before it.
     await knows(current, plan.revision);
+    current.retryDelay = 0;
+    // The server has all changes: the browser keeps none for it any more.
+    if (session === current && current.edits && !unsentChanges(current)) storeEdits(current);
   } catch (error) {
     if (session !== current) return;
     if (error instanceof ServerError && (error.status === 403 || error.status === 401)) {
@@ -605,6 +788,14 @@ async function sendChanges(current: Session): Promise<void> {
       showStatus(t("The server did not save the plan: {error}", { error: errorText(error) }), true);
     }
     current.failed = true;
+    // The browser keeps the changes, also if the tab closes, until the server takes them. The
+    // send tries again after a pause that grows from 2 s to 30 s.
+    storeEditsSoon(current);
+    current.retryDelay = Math.min(30_000, Math.max(2000, current.retryDelay * 2));
+    window.clearTimeout(current.retry);
+    current.retry = window.setTimeout(() => {
+      if (session === current && current.failed) void save();
+    }, current.retryDelay);
   } finally {
     // Without an answer, the patch may or may not be on the server: its echo or a load of the
     // whole plan decides. With the answer, `knows` waited for it.
@@ -658,6 +849,8 @@ async function reload(current: Session): Promise<boolean> {
 async function save(): Promise<void> {
   const current = session;
   if (!current || !current.editing) return;
+  // Without the network, the browser keeps the changes for the server.
+  if (current.offline) return storeEditsSoon(current);
   if (current.saving) return current.saving;
   if (doc.building === current.saved || doc.inTransaction) return;
   current.saving = sendChanges(current).finally(() => {
@@ -694,9 +887,13 @@ function endSession(): void {
   opening++;
   const current = session;
   if (!current) return;
+  // Changes that wait for the browser go there now.
+  if (current.editsTimer) storeEdits(current);
   session = null;
   window.clearTimeout(current.gap);
   window.clearTimeout(current.copyTimer);
+  window.clearInterval(current.reconnect);
+  window.clearTimeout(current.retry);
   current.events?.close();
   endPresence();
   doc.readOnly = false;
@@ -718,16 +915,26 @@ function updateRemoteState(): void {
   document.body.classList.toggle("remote-plan", !!current);
   if (!current) return;
   const [iconName, text, tone]: [IconName, string, string] = current.offline
-    ? ["cloud", t("Offline copy"), "busy"]
-    : current.editing
-      ? current.saving
-        ? ["cloud", t("Saving…"), ""]
-        : current.failed
-          ? ["alert", t("Not saved"), "bad"]
-          : ["cloud", current.serverName, ""]
-      : current.viewOnly
-        ? ["eye", t("Viewing"), ""]
-        : ["cloud", t("View only"), "busy"];
+    ? [
+        "cloud",
+        current.edits
+          ? t("Offline · changes wait")
+          : current.editing
+            ? t("Offline")
+            : t("Offline copy"),
+        "busy",
+      ]
+    : current.editing && current.failed && current.edits
+      ? ["alert", t("Not sent · kept in the browser"), "bad"]
+      : current.editing
+        ? current.saving
+          ? ["cloud", t("Saving…"), ""]
+          : current.failed
+            ? ["alert", t("Not saved"), "bad"]
+            : ["cloud", current.serverName, ""]
+        : current.viewOnly
+          ? ["eye", t("Viewing"), ""]
+          : ["cloud", t("View only"), "busy"];
   state.innerHTML = icon(iconName);
   state.append(text);
   state.className = `remote-state plan-tools ${tone}`;
@@ -994,18 +1201,36 @@ function planDialog(): void {
   if (current.offline) {
     note(
       body,
-      t(
-        "No connection to {server}. This is the copy of this browser, revision {revision}, only to view.",
-        { server: current.serverName, revision: current.revision },
-      ),
+      current.editing
+        ? t(
+            "No connection to {server}. You edit the copy of this browser, revision {revision}. The browser keeps your changes, and they go to the server when it answers again.",
+            { server: current.serverName, revision: current.revision },
+          )
+        : t(
+            "No connection to {server}. This is the copy of this browser, revision {revision}, only to view.",
+            { server: current.serverName, revision: current.revision },
+          ),
     );
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    actions.append(
+      actionButton(t("Save a copy in this browser"), () => {
+        element.close();
+        void keepCopy();
+      }),
+    );
+    body.append(actions);
     footer(
       element,
       actionButton(
         t("Connect again"),
         () => {
           element.close();
-          void openRemote(current.planId);
+          void tryOnline(current).then(() => {
+            if (session === current && current.offline) {
+              showStatus(t("The server does not answer yet. The app tries again by itself."), true);
+            }
+          });
         },
         true,
       ),
@@ -1620,6 +1845,25 @@ function renderServers(list: HTMLElement): void {
     (plans) => {
       if (plans.length === 0) empty(t("No plans on this server yet."));
       grid.append(...plans.map((plan) => remoteCard(client, plan)));
+      // The plans with changes that the browser keeps for the server: they go when it opens.
+      void listRemoteCopies(client.base).then(
+        (copies) => {
+          for (const copy of copies) {
+            if (!copy.edited) continue;
+            const card = grid.querySelector(
+              `[data-plan="${CSS.escape(copy.planId)}"] .project-marks`,
+            );
+            const element = document.createElement("span");
+            element.className = "remote-mark busy";
+            element.textContent = t("Changes wait");
+            element.title = t(
+              "Your changes without the network go to the server when you open the plan.",
+            );
+            card?.append(element);
+          }
+        },
+        () => undefined,
+      );
     },
     (error) => {
       if (error instanceof ServerError && error.status === 0) return void offline(error);
@@ -1672,7 +1916,7 @@ function offlineCard(copy: RemoteCopy): HTMLElement {
   marks.className = "project-marks";
   const mark = document.createElement("span");
   mark.className = "remote-mark busy";
-  mark.textContent = t("Offline copy");
+  mark.textContent = copy.edited ? t("Changes wait") : t("Offline copy");
   marks.append(mark);
   text.append(name, time, marks);
   open.append(picture, text);
@@ -1685,6 +1929,7 @@ function offlineCard(copy: RemoteCopy): HTMLElement {
 function remoteCard(client: ServerClient, plan: RemotePlan): HTMLElement {
   const card = document.createElement("article");
   card.className = "project remote";
+  card.dataset.plan = plan.id;
   const open = document.createElement("button");
   open.className = "project-open";
   open.title = t("Open {name}", { name: plan.name });
@@ -1789,7 +2034,14 @@ export function setupRemote(): Promise<void> {
     if (session && !doc.inTransaction && session.waiting.size) advance(session);
   });
   window.addEventListener("pagehide", () => {
+    // Changes that wait for the browser go there now.
+    if (session?.editsTimer) storeEdits(session);
     if (session && !session.offline) session.client.leaveOnUnload(session.planId);
+  });
+  // The network is back: an open copy goes on with the server.
+  window.addEventListener("online", () => {
+    if (session?.offline) void tryOnline(session);
+    else if (session?.failed) void save();
   });
   return start();
 }

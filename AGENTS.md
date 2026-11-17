@@ -61,8 +61,10 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   top: the patch on its way (`inflight`), and the changes after it. The history keeps the building before and after each change, so an undo after
   the changes of others applies the change back as a patch. `src/ui/presence.ts` sends the
   state of the tab (`POST plans/<id>/presence`: story, topic, view, cursor, selection, camera)
-  and shows the others, their cursors, and the follow. Without the right to edit, or in "View
-  only", `doc.readOnly` keeps the plan from changes.
+  and shows the others, their cursors, and the follow. Without the network, the copy of a plan
+  in the browser (`saveRemoteCopy`) opens to edit; `saveRemoteEdits` keeps the changes, and
+  `goOnline` sends them as a patch on the newest revision when the server answers. Without the
+  right to edit, or in "View only", `doc.readOnly` keeps the plan from changes.
   With `doc.readOnly`, the body has the class `read-only`: the palette has only select and pan,
   the editors do not start a drag, and the panel disables each control without `data-view`. A
   save names its parent revision, so the server refuses a save on an old revision (409). The

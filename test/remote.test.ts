@@ -36,6 +36,7 @@ vi.mock("../src/ui/projects", async () => {
       app.fileName = name;
     },
     projectName: () => "Plan",
+    ago: () => "now",
     updateTitle: vi.fn(),
     renderHome: vi.fn(),
   };
@@ -50,10 +51,26 @@ vi.mock("../src/ui/presence", () => ({
   nameDialog: vi.fn(),
 }));
 vi.mock("../src/i18n", () => ({ locale: () => "en", t: (s: string) => s }));
+// The copies of the server plans in the browser, in memory.
+const copies = new Map<string, Record<string, unknown>>();
+vi.mock("../src/io/projects", () => ({
+  newProjectId: () => `tab-${Math.random()}`,
+  listRemoteCopies: vi.fn(async () => [...copies.values()]),
+  loadRemoteCopy: vi.fn(async (_address: string, planId: string) => copies.get(planId)),
+  removeRemoteCopies: vi.fn(async () => undefined),
+  saveRemoteCopy: vi.fn(async () => undefined),
+  saveRemoteEdits: vi.fn(async (_address: string, planId: string, edited: string | null) => {
+    const copy = copies.get(planId);
+    if (!copy) return;
+    if (edited === null) delete copy.editedData;
+    else copy.editedData = edited;
+  }),
+}));
 
 import { doc } from "../src/ui/context";
 import { load, remoteHooks } from "../src/ui/projects";
 import { openRemote, setupRemote } from "../src/ui/remote";
+import { saveRemoteEdits } from "../src/io/projects";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -135,6 +152,7 @@ beforeEach(async () => {
       return json(path === "session" ? session : info());
     }),
   );
+  copies.clear();
   doc.replace(emptyBuilding());
   doc.readOnly = false;
   await setupRemote();
@@ -227,5 +245,73 @@ describe("remote sessions", () => {
     await saving;
     expect(remoteHooks.active()).toBe(false);
     expect(doc.readOnly).toBe(false);
+  });
+
+  it("edits the copy without the network, and sends the changes when the server answers", async () => {
+    copies.set("house", {
+      key: "x|house",
+      planId: "house",
+      name: "House",
+      revision: "1",
+      time: 1,
+      write: true,
+      data: serializeBuilding(emptyBuilding()),
+    });
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    let online = false;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (!online && String(url).includes("/plans/")) throw new TypeError("No network");
+      return original(url as string, init);
+    });
+    await openRemote("house");
+    // The copy opens to edit, and the browser keeps the change.
+    expect(remoteHooks.active()).toBe(true);
+    expect(doc.readOnly).toBe(false);
+    doc.editBuilding((b) => {
+      b.north = 25;
+    });
+    await remoteHooks.save();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(saveRemoteEdits).toHaveBeenCalledWith("https://server", "house", expect.any(String));
+    expect(JSON.parse(String(copies.get("house")!.editedData)).north).toBe(25);
+    // The network comes back: the change goes to the server as a patch on its newest revision.
+    online = true;
+    const onOnline = vi
+      .mocked(window.addEventListener)
+      .mock.calls.find(([name]) => name === "online")![1] as () => void;
+    onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+    const sent = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => String(url).endsWith("/plans/house/changes"));
+    expect(sent).toBeDefined();
+    expect(JSON.parse(String(sent![1]!.body)).patch).toMatchObject({
+      keys: { north: { t: "set", v: 25 } },
+    });
+    expect(doc.building.north).toBe(25);
+  });
+
+  it("sends the changes of an earlier time without the network when the plan opens", async () => {
+    const edited = emptyBuilding();
+    edited.north = 40;
+    copies.set("house", {
+      key: "x|house",
+      planId: "house",
+      name: "House",
+      revision: "1",
+      time: 1,
+      write: true,
+      data: serializeBuilding(emptyBuilding()),
+      editedData: serializeBuilding(edited),
+    });
+    await openRemote("house");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(doc.building.north).toBe(40);
+    const sent = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => String(url).endsWith("/plans/house/changes"));
+    expect(JSON.parse(String(sent![1]!.body)).patch).toMatchObject({
+      keys: { north: { t: "set", v: 40 } },
+    });
   });
 });

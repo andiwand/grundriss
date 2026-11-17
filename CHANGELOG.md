@@ -4,6 +4,10 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: a plan of a server opens without the network to edit, if you could edit it. The browser
+  keeps your changes, also after the tab closes, and sends them when the server answers again;
+  they merge with the changes of the others. A send that fails tries again by itself, and the
+  Projects page marks a plan whose changes wait. Before, the copy was only to view.
 - Server: a person who follows another one also follows onto the roof level, and the mark of a
   person names the roof level as the place.
 - Outdoor: the new tools **Outdoor** (A), **Fence** (G), and **Tree** (T) in Structure. An outdoor

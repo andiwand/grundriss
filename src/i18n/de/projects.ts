@@ -317,4 +317,28 @@ export const PROJECTS: Record<string, string> = {
   "The server does not answer. Check the network.":
     "Der Server antwortet nicht. Prüfen Sie das Netzwerk.",
   "This is not a Grundriss server.": "Das ist kein Grundriss-Server.",
+  // remote.ts: the changes without the network.
+  "The browser cannot keep your changes. Save a copy to a file.":
+    "Der Browser kann Ihre Änderungen nicht behalten. Speichern Sie eine Kopie in eine Datei.",
+  "Your changes without the network go to the server now.":
+    "Ihre Änderungen ohne Netzwerk gehen jetzt an den Server.",
+  "You can only view this plan now. Your changes without the network stay in this browser: save a copy to keep them.":
+    "Sie können diesen Plan jetzt nur ansehen. Ihre Änderungen ohne Netzwerk bleiben in diesem Browser: Speichern Sie eine Kopie, um sie zu behalten.",
+  "No connection to {server}. You edit the copy of this browser from {time}. The changes go to the server when it answers again.":
+    "Keine Verbindung zu {server}. Sie bearbeiten die Kopie dieses Browsers von {time}. Die Änderungen gehen an den Server, sobald er wieder antwortet.",
+  "The server does not give this plan any more. Save a copy to keep your changes.":
+    "Der Server gibt diesen Plan nicht mehr heraus. Speichern Sie eine Kopie, um Ihre Änderungen zu behalten.",
+  "The server answers again. Your changes go to it now.":
+    "Der Server antwortet wieder. Ihre Änderungen gehen jetzt an ihn.",
+  "The server answers again.": "Der Server antwortet wieder.",
+  "Offline · changes wait": "Offline · Änderungen warten",
+  Offline: "Offline",
+  "Not sent · kept in the browser": "Nicht gesendet · im Browser behalten",
+  "No connection to {server}. You edit the copy of this browser, revision {revision}. The browser keeps your changes, and they go to the server when it answers again.":
+    "Keine Verbindung zu {server}. Sie bearbeiten die Kopie dieses Browsers, Version {revision}. Der Browser behält Ihre Änderungen, und sie gehen an den Server, sobald er wieder antwortet.",
+  "The server does not answer yet. The app tries again by itself.":
+    "Der Server antwortet noch nicht. Die App versucht es von selbst wieder.",
+  "Changes wait": "Änderungen warten",
+  "Your changes without the network go to the server when you open the plan.":
+    "Ihre Änderungen ohne Netzwerk gehen an den Server, wenn Sie den Plan öffnen.",
 };

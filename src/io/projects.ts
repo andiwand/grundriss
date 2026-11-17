@@ -370,12 +370,34 @@ export interface RemoteCopy {
   name: string;
   revision: string;
   time: number;
+  /** The images of the plan, and of the changes without the network. */
   blobs?: string[];
   /** The SVG of the ground floor, or "". Old copies do not have it. */
   preview?: string;
+  /** True if the person could edit the plan the last time. Old copies do not have it. */
+  write?: boolean;
+  /**
+   * The time of the changes that the person made without the network, which the server does not
+   * have yet, or nothing.
+   */
+  edited?: number;
 }
 
-/** Keeps the state of a plan of a server, so that the app can open it without the network. */
+/** The record of the plan of a copy: the plan of the server, and the changes without network. */
+interface CopyData {
+  key: string;
+  data: string;
+  /** The plan with the changes without the network, or nothing. */
+  edited?: string;
+  /** The images of `data`, so that new changes keep them. */
+  dataBlobs?: string[];
+  editedBlobs?: string[];
+}
+
+/**
+ * Keeps the state of a plan of a server, so that the app can open it without the network. The
+ * changes without the network stay.
+ */
 export async function saveRemoteCopy(
   address: string,
   planId: string,
@@ -383,22 +405,75 @@ export async function saveRemoteCopy(
   revision: string,
   data: string,
   preview = "",
+  write = false,
 ): Promise<void> {
   const { json, blobs } = dehydrate(data);
-  const copy: RemoteCopy = {
-    key: `${address}|${planId}`,
-    address,
-    planId,
-    name,
-    revision,
-    time: Date.now(),
-    blobs: [...blobs.keys()],
-    preview,
-  };
+  const key = `${address}|${planId}`;
   await run([REMOTE_COPIES, REMOTE_COPY_DATA, BLOBS], "readwrite", (t) => {
     putBlobs(t, blobs);
-    t.objectStore(REMOTE_COPIES).put(copy);
-    t.objectStore(REMOTE_COPY_DATA).put({ key: copy.key, data: json });
+    const old = t.objectStore(REMOTE_COPIES).get(key) as IDBRequest<RemoteCopy | undefined>;
+    const oldData = t.objectStore(REMOTE_COPY_DATA).get(key) as IDBRequest<CopyData | undefined>;
+    oldData.onsuccess = () => {
+      const kept = oldData.result;
+      const dataBlobs = [...blobs.keys()];
+      const record: CopyData = { key, data: json, dataBlobs };
+      if (kept?.edited) {
+        record.edited = kept.edited;
+        record.editedBlobs = kept.editedBlobs ?? [];
+      }
+      const copy: RemoteCopy = {
+        key,
+        address,
+        planId,
+        name,
+        revision,
+        time: Date.now(),
+        blobs: [...new Set([...dataBlobs, ...(record.editedBlobs ?? [])])],
+        preview,
+        write,
+      };
+      if (record.edited) copy.edited = old.result?.edited ?? Date.now();
+      t.objectStore(REMOTE_COPIES).put(copy);
+      t.objectStore(REMOTE_COPY_DATA).put(record);
+    };
+    return () => undefined;
+  });
+}
+
+/**
+ * Keeps the plan with the changes that the person made without the network, or removes them
+ * (null), for example after the server took them. The copy must exist.
+ */
+export async function saveRemoteEdits(
+  address: string,
+  planId: string,
+  edited: string | null,
+): Promise<void> {
+  const key = `${address}|${planId}`;
+  const dehydrated = edited === null ? null : dehydrate(edited);
+  await run([REMOTE_COPIES, REMOTE_COPY_DATA, BLOBS], "readwrite", (t) => {
+    if (dehydrated) putBlobs(t, dehydrated.blobs);
+    const copy = t.objectStore(REMOTE_COPIES).get(key) as IDBRequest<RemoteCopy | undefined>;
+    const record = t.objectStore(REMOTE_COPY_DATA).get(key) as IDBRequest<CopyData | undefined>;
+    record.onsuccess = () => {
+      if (!copy.result || !record.result) return;
+      const next: CopyData = { ...record.result };
+      const entry: RemoteCopy = { ...copy.result };
+      if (dehydrated) {
+        next.edited = dehydrated.json;
+        next.editedBlobs = [...dehydrated.blobs.keys()];
+        entry.edited = Date.now();
+      } else {
+        delete next.edited;
+        delete next.editedBlobs;
+        delete entry.edited;
+      }
+      entry.blobs = [
+        ...new Set([...(next.dataBlobs ?? entry.blobs ?? []), ...(next.editedBlobs ?? [])]),
+      ];
+      t.objectStore(REMOTE_COPY_DATA).put(next);
+      t.objectStore(REMOTE_COPIES).put(entry);
+    };
     return () => undefined;
   });
 }
@@ -414,20 +489,24 @@ export async function listRemoteCopies(address: string): Promise<RemoteCopy[]> {
   return list.sort((a, b) => b.time - a.time);
 }
 
-/** The copy of a plan of a server with its plan, or undefined. */
+/**
+ * The copy of a plan of a server with its plan, and the plan with the changes without the
+ * network if there are some, or undefined.
+ */
 export async function loadRemoteCopy(
   address: string,
   planId: string,
-): Promise<(RemoteCopy & { data: string }) | undefined> {
+): Promise<(RemoteCopy & { data: string; editedData?: string }) | undefined> {
   const key = `${address}|${planId}`;
   const [copy, record] = await run([REMOTE_COPIES, REMOTE_COPY_DATA], "readonly", (t) => {
     const a = t.objectStore(REMOTE_COPIES).get(key) as IDBRequest<RemoteCopy | undefined>;
-    const b = t.objectStore(REMOTE_COPY_DATA).get(key) as IDBRequest<
-      { key: string; data: string } | undefined
-    >;
+    const b = t.objectStore(REMOTE_COPY_DATA).get(key) as IDBRequest<CopyData | undefined>;
     return () => [a.result, b.result] as const;
   });
-  return copy && record ? { ...copy, data: await withBlobs(record.data) } : undefined;
+  if (!copy || !record) return undefined;
+  const data = await withBlobs(record.data);
+  const editedData = record.edited ? await withBlobs(record.edited) : undefined;
+  return { ...copy, data, ...(editedData ? { editedData } : {}) };
 }
 
 /** Removes the copies of the plans of a server, for example at a logout. */
