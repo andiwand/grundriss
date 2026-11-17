@@ -293,6 +293,7 @@ function renderMany(items: Item[]): void {
       items.map((item) => item.id),
     );
   }
+  pinField(items);
   alignButton(items);
   button(t("Duplicate"), () => editor.duplicate(), { icon: "copy" });
   deleteButton();
@@ -336,6 +337,27 @@ function directionFields(plan: Story, ids: Id[]): void {
       "note",
     );
   }
+}
+
+/**
+ * Pins or unpins all the selected corners together. If only some of them are pinned, the check
+ * box shows a mixed state, and a click pins all of them.
+ */
+function pinField(items: Item[]): void {
+  const ids = new Set(items.filter((item) => item.kind === "vertex").map((item) => item.id));
+  if (ids.size === 0) return;
+  const pinned = doc.plan.vertices.filter((v) => ids.has(v.id) && v.pinned).length;
+  const input = checkField(t("Pinned"), pinned === ids.size, (pin) =>
+    doc.edit((plan) => {
+      for (const v of plan.vertices) {
+        if (!ids.has(v.id)) continue;
+        if (pin) v.pinned = true;
+        else delete v.pinned;
+      }
+    }),
+  );
+  input.indeterminate = pinned > 0 && pinned < ids.size;
+  paragraph(t("A pinned corner stays in its place when you type a new length of a wall."), "note");
 }
 
 /**

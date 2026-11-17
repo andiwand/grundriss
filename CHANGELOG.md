@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Editor: with more corners selected, the panel has one "Pinned" check box for all of them. If
+  only some of them are pinned, the box shows a mixed state, and a click pins all of them.
+
 ## 0.5.0 – 2026-11-16
 
 - Server: all people who can edit a plan now edit it at the same time. Each change goes to the

@@ -223,17 +223,18 @@ export const compassName = (azimuth: number) => COMPASS[Math.round(azimuth / 45)
 
 /**
  * A check box with the box before its label, like in the dialogs and the menus. With `view`, it
- * does not change the plan, so it stays in a plan to view.
+ * does not change the plan, so it stays in a plan to view. It gives the input.
  */
 export function checkField(
   text: string,
   value: boolean,
   change: (value: boolean) => void,
   view = false,
-): void {
+): HTMLInputElement {
   const { element, input } = checkbox(text, value, change);
   if (view) input.dataset.view = "";
   section.append(element);
+  return input;
 }
 
 /** A group that the user can open and close. The helpers append to it while it is open. */
