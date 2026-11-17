@@ -389,4 +389,12 @@ export const PANELS: Record<string, string> = {
   Climate: "Klima",
   "{first} to {last}": "{first} bis {last}",
   "not loaded": "nicht geladen",
+  // The roof level.
+  "The roofs of all stories, from above": "Die Dächer aller Geschosse, von oben",
+  "Show the roofs": "Dächer zeigen",
+  "The roofs of all stories, from above. Click a roof to change it, and drag it to move it. A higher roof covers a lower one.":
+    "Die Dächer aller Geschosse, von oben. Klicken Sie auf ein Dach, um es zu ändern, und ziehen Sie es, um es zu verschieben. Ein höheres Dach verdeckt ein tieferes.",
+  "Add a roof": "Dach hinzufügen",
+  "Draw the walls of a story first. A new roof takes their outline.":
+    "Zeichnen Sie zuerst die Wände eines Geschosses. Ein neues Dach übernimmt ihren Umriss.",
 };

@@ -5,7 +5,9 @@ import {
   offsetOutline,
   roofCeiling,
   roofGeometryOf,
+  roofBounds,
   roofLines,
+  roofsFromAbove,
   type Vec3,
 } from "../src/model/roof";
 import { FLAT_THICKNESS } from "../src/model/roofshape";
@@ -15,6 +17,38 @@ const heights = (polygons: Vec3[][]) => polygons.flat().map((p) => p.z);
 const tan35 = Math.tan((35 * Math.PI) / 180);
 
 describe("roofs of a building", () => {
+  it("shows the roofs of all stories from above, a roof of a lower story first", () => {
+    // A house with two stories, and a roof on the ground floor over the part without a story
+    // above, for example a garage.
+    const building = boxHouse(16, 6, null);
+    const ground = building.stories[0];
+    const upper = addStoryOnTop(building);
+    upper.walls = [];
+    upper.vertices = [];
+    wallsAround(upper, [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 6 },
+      { x: 0, y: 6 },
+    ]);
+    const main = { ...newRoof(building, upper, "gable")!, id: "main" };
+    const garage = { ...newRoof(building, ground, "shed")!, id: "garage" };
+    garage.outline = [
+      { x: 10, y: 0 },
+      { x: 16, y: 0 },
+      { x: 16, y: 6 },
+      { x: 10, y: 6 },
+    ];
+    garage.sides = garage.sides.slice(0, 4);
+    building.roofs.push(main, garage);
+    expect(roofsFromAbove(building).map(({ roof }) => roof.id)).toEqual(["garage", "main"]);
+    const box = roofBounds(building)!;
+    // The eaves of both roofs, with their overhangs.
+    expect(box.minX).toBeLessThan(0);
+    expect(box.maxX).toBeGreaterThan(16);
+    expect(roofBounds(boxHouse(4, 4, null))).toBeNull();
+  });
+
   it("puts a gable roof on the walls, with the ridge in the middle", () => {
     const building = boxHouse(10, 6, "gable");
     const roof = building.roofs[0];

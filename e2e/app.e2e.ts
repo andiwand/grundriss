@@ -52,6 +52,54 @@ test("measures a distance without a change of the plan", async ({ page }) => {
   await expect(page.locator("#undo")).toBeDisabled();
 });
 
+test("shows the roofs of all stories on the roof level, also a roof of a lower story", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Uses the arrow keys and the side panel.");
+  await openApp(page);
+  await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
+  const roofs = page.locator("#plan-2d .roof-top");
+  // A story shows its roof as dashed lines only.
+  await expect(roofs).toHaveCount(0);
+  await page.locator("#stories .story.roof").click();
+  await expect(roofs).toHaveCount(1);
+  // The roof level has only the tools to view.
+  await expect(page.locator('#tools [data-tool="wall"]')).toBeHidden();
+  await expect(page.locator('#tools [data-tool="select"]')).toBeVisible();
+
+  // A second roof on the ground floor, for example over a part without a story above.
+  await page.locator("#panel select").first().selectOption({ label: "Ground floor" });
+  await page.locator("#panel button", { hasText: "Shed roof" }).click();
+  await expect(roofs).toHaveCount(2);
+  await expect(page.locator("#panel h2").first()).toContainText("Roof 2");
+  // The new roof is selected; the arrow keys move it out from under the main roof.
+  const before = await page
+    .locator("#plan-2d .roof-top.selected .face")
+    .first()
+    .getAttribute("points");
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.locator("#plan-2d .roof-top.selected .face").first()).not.toHaveAttribute(
+    "points",
+    before!,
+  );
+  // Without a selection, the panel lists the roofs of all stories.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#panel")).toContainText("Ground floor");
+  await page
+    .locator("#panel")
+    .getByRole("button", { name: /Main roof/ })
+    .click();
+  await expect(page.locator("#panel h2").first()).toContainText("Main roof");
+
+  // A story leaves the roof level, and a drawing tool too.
+  await page.locator("#stories .story", { hasText: "Attic" }).click();
+  await expect(roofs).toHaveCount(0);
+  await expect(page.locator('#tools [data-tool="wall"]')).toBeVisible();
+  await page.locator("#stories .story.roof").click();
+  await page.keyboard.press("w");
+  await expect(roofs).toHaveCount(0);
+});
+
 test("shows each topic with its panel", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();

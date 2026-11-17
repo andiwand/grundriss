@@ -1661,6 +1661,64 @@ body.wide:not(.compact) #panel > section .field.stacked {
   pointer-events: none;
 }
 
+/* The roof level: the roofs of all stories from above (Editor2D.renderRoofLevel). Each face has
+   the color of its roof, and a shade of its slope. */
+
+.roof-top {
+  cursor: move;
+}
+
+.roof-top .face {
+  stroke: rgb(0 0 0 / 0.25);
+  stroke-width: 0.6;
+}
+
+.roof-top:hover .face {
+  filter: brightness(1.06);
+}
+
+.roof-top .shade {
+  fill: #000;
+  pointer-events: none;
+}
+
+.roof-top .edge {
+  stroke: rgb(58 29 16 / 0.7);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.roof-top .roof-window {
+  fill: #a9c8e6;
+  stroke: #4a6b8a;
+  stroke-width: 1;
+}
+
+.roof-top.selected .edge {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+/* Over the roofs, the walls are light, so that the roofs stay clear. */
+.roof-walls polygon {
+  stroke: #fff;
+  opacity: 0.55;
+}
+
+.chimney.on-roof {
+  pointer-events: none;
+}
+
+body.read-only .roof-top {
+  cursor: default;
+}
+
+/* The roof level has no tools that draw on a story. */
+body.roof-level #tools [data-topic],
+body.roof-level #tools .divider {
+  display: none;
+}
+
 /* The lines of 1 m and 2 m clear height under a pitched roof (WoFlV). */
 
 .clear-height line {

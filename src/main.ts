@@ -72,6 +72,7 @@ import { isPackageName, readBuildingFile, writePackage } from "./io/package";
 import { renameProject } from "./io/projects";
 
 import { addCellar, addStoryOnTop, findStory } from "./model/building";
+import { roofGeometries } from "./model/roof";
 
 import { newRevision, serializeBuilding } from "./model/file";
 
@@ -250,6 +251,8 @@ function setTool(tool: Tool): void {
   // A tool of another topic, for example from a shortcut, opens its topic first.
   const owner = TOOL_TOPIC[tool];
   if (owner && owner !== app.topic) setTopic(owner);
+  // A tool that draws on a story leaves the roof level.
+  if (!VIEW_TOOLS.has(tool)) setRoofLevel(false);
   editor.tool = tool;
   app.calibration = null;
   markTool(tool);
@@ -306,10 +309,46 @@ editor.onCorners = (corners) => {
 
 let showAbove = false;
 
+/**
+ * The roof level: the view from above with the roofs of all stories (Editor2D.roofLevel). It is
+ * an entry of the list of the stories, but not a story of the plan.
+ */
+function setRoofLevel(on: boolean): void {
+  if (editor.roofLevel === on) return;
+  editor.roofLevel = on;
+  document.body.classList.toggle("roof-level", on);
+  // The roof level keeps a selected roof, and a story keeps nothing of the roof level.
+  const roofs = editor.selection.filter((i) => i.kind === "roof" || i.kind === "roof-corner");
+  editor.select(on ? roofs : null);
+  if (on && !VIEW_TOOLS.has(editor.tool)) setTool("select");
+  renderStories();
+  renderPanel();
+  update3d();
+  if (on) requestAnimationFrame(() => editor.fit());
+}
+
 function renderStories(): void {
   const list = $("#stories");
   list.replaceChildren();
-  const active = doc.activeStoryId;
+  const active = editor.roofLevel ? null : doc.activeStoryId;
+  // The roofs of all stories, above the highest story.
+  const roofs = document.createElement("button");
+  roofs.className = editor.roofLevel ? "story roof active" : "story roof";
+  const roofName = document.createElement("span");
+  roofName.textContent = t("Roof");
+  roofs.append(roofName);
+  const top = roofGeometries(doc.building).reduce(
+    (m, { geometry }) => Math.max(m, geometry.top),
+    0,
+  );
+  if (top > 0) {
+    const level = document.createElement("small");
+    level.textContent = `+${fmt(top, 2)}`;
+    roofs.append(level);
+  }
+  roofs.title = t("The roofs of all stories, from above");
+  roofs.addEventListener("click", () => setRoofLevel(true));
+  list.append(roofs);
   const stories = [...doc.building.stories].reverse();
   for (const story of stories) {
     const element = document.createElement("button");
@@ -325,6 +364,7 @@ function renderStories(): void {
       elevation: fmt(story.elevation, 2),
     });
     element.addEventListener("click", () => {
+      setRoofLevel(false);
       editor.select(null);
       doc.setActiveStory(story.id);
     });
@@ -407,7 +447,8 @@ function update3d(): void {
   const { water, heating, electric, comms, pv } = editor.layers;
   view3d.update(doc.building, {
     activeStoryId: doc.activeStoryId,
-    showAbove,
+    // The roof level shows the whole building with its roofs.
+    showAbove: showAbove || editor.roofLevel,
     layers: { water, heating, electric, comms, pv },
   });
 }
@@ -785,6 +826,7 @@ function afterChange(): void {
 // The modules of the panel reach the shell through these hooks.
 Object.assign(shell, {
   setTool,
+  setRoofLevel,
   setTopic,
   setView,
   view: () => currentView,
@@ -852,6 +894,16 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-add-st
 }
 
 editor.onSelect = () => {
+  // A roof of the roof level makes its story active, so that its corners snap to the walls of
+  // that story.
+  const roofItem = editor.roofLevel ? editor.selection[0] : undefined;
+  if (roofItem && (roofItem.kind === "roof" || roofItem.kind === "roof-corner")) {
+    const roof = doc.building.roofs.find((r) => r.id === roofItem.id.split(":")[0]);
+    if (roof && roof.storyId !== doc.activeStoryId && findStory(doc.building, roof.storyId)) {
+      app.shownStoryId = roof.storyId;
+      doc.setActiveStory(roof.storyId);
+    }
+  }
   renderPanel();
   selectionChanged();
   view3d.setSelection(editor.selection);

@@ -13,6 +13,8 @@ import { SYSTEM_ICONS } from "./utilities";
 /** Opens the topic of an item, makes its story active, and selects it. */
 function showItems(storyId: string, items: Item[], itemTopic: Topic): void {
   shell.setTopic(itemTopic);
+  // A roof shows on the roof level, the other objects on their story.
+  shell.setRoofLevel(items.some((i) => i.kind === "roof"));
   doc.setActiveStory(storyId);
   // A change of the story clears the selection in the next frame, unless it knows the story.
   app.shownStoryId = doc.activeStoryId;

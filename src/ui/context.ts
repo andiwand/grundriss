@@ -97,6 +97,8 @@ export const app = {
  */
 export const shell = {
   setTool: (_tool: Tool): void => {},
+  /** Shows the roof level (the roofs of all stories from above), or the active story. */
+  setRoofLevel: (_on: boolean): void => {},
   setTopic: (_topic: Topic): void => {},
   setView: (_view: View): void => {},
   view: (): View => "split",

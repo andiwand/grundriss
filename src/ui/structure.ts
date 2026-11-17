@@ -194,23 +194,55 @@ function renderBuildingPanel(): void {
   );
   colorField(t("Facade"), building.facade, (value) => doc.editBuilding((b) => (b.facade = value)));
   heading(t("Roofs"), "roof");
+  roofList();
+  button(t("Show the roofs"), () => shell.setRoofLevel(true), { icon: "roof", view: true });
+}
+
+/** The roofs of all stories, as rows that select a roof on the roof level. */
+function roofList(): void {
+  const building = doc.building;
   for (const roof of building.roofs) {
     const story = findStory(building, roof.storyId);
     button(
       t(roof.name),
       () => {
-        if (story && story.id !== doc.activeStoryId) doc.setActiveStory(story.id);
+        shell.setRoofLevel(true);
         editor.select({ kind: "roof", id: roof.id });
       },
-      { icon: "roof", detail: story ? t(story.name) : t("No story") },
+      { icon: "roof", detail: story ? t(story.name) : t("No story"), view: true },
     );
   }
+}
+
+/**
+ * The panel of the roof level without a selection: the roofs of all stories, and a new roof on
+ * the walls of a story. A roof can sit on any story, for example on the ground floor over a part
+ * without a story above.
+ */
+export function renderRoofLevelPanel(): void {
+  const building = doc.building;
+  heading(t("Roofs"), "roof");
   paragraph(
     t(
-      "Add a roof on the walls of {story}. Then click it to change its sides, its outline, and its dormers.",
-      { story: t(doc.plan.name) },
+      "The roofs of all stories, from above. Click a roof to change it, and drag it to move it. A higher roof covers a lower one.",
     ),
     "note",
+  );
+  roofList();
+  heading(t("Add a roof"), "plus");
+  // The stories with walls that close an outline. The highest one comes first.
+  const stories = [...building.stories].reverse().filter((story) => planOutline(story));
+  if (stories.length === 0) {
+    paragraph(t("Draw the walls of a story first. A new roof takes their outline."), "note");
+    return;
+  }
+  const preferred = stories.find((s) => s.id === doc.activeStoryId) ?? stories[0];
+  let storyId = preferred.id;
+  selectField(
+    t("On story"),
+    storyId,
+    stories.map((s) => [s.id, t(s.name)]),
+    (value) => (storyId = value),
   );
   for (const [preset, name] of [
     ["gable", "Gable roof"],
@@ -219,13 +251,15 @@ function renderBuildingPanel(): void {
     ["shed", "Shed roof"],
     ["flat", "Flat roof"],
   ] as const) {
-    button(t(name), () => addRoof(preset), { icon: "plus" });
+    button(t(name), () => addRoof(preset, findStory(doc.building, storyId) ?? doc.plan), {
+      icon: "plus",
+    });
   }
 }
 
-/** Adds a roof on the outline of the walls of the active story. */
-function addRoof(preset: RoofKind): void {
-  const roof = newRoof(doc.building, doc.plan, preset);
+/** Adds a roof on the outline of the walls of a story, and shows it on the roof level. */
+function addRoof(preset: RoofKind, story: Story = doc.plan): void {
+  const roof = newRoof(doc.building, story, preset);
   if (!roof) {
     showStatus(
       t("The walls of this story close no outline, so the roof has no outline yet."),
@@ -234,6 +268,7 @@ function addRoof(preset: RoofKind): void {
     return;
   }
   doc.editBuilding((b) => b.roofs.push(roof));
+  shell.setRoofLevel(true);
   editor.select({ kind: "roof", id: roof.id });
   showStatus(t("Added the roof. Drag its corners, or drag a + to add a corner."));
 }

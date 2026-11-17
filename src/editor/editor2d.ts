@@ -29,7 +29,7 @@ import {
   wallFaces,
 } from "../model/furniture";
 import { MAP_SOURCES, tilesFor, type MapSourceId } from "../io/tiles";
-import { roofLines } from "../model/roof";
+import { roofBounds, roofLines, roofsFromAbove, type Vec3 } from "../model/roof";
 import { clearHeightLines, WOFLV } from "../model/attic";
 import {
   findFixture,
@@ -171,6 +171,7 @@ type Drag =
   | { kind: "furniture"; id: Id; grab: Point }
   | { kind: "fixture"; id: Id; grab: Point }
   | { kind: "roof-corner"; roofId: Id; index: number }
+  | { kind: "roof"; id: Id; startWorld: Point; origin: Point[] }
   | { kind: "map"; start: Point; anchor: Point; north: number; turn: boolean };
 
 type Attributes = Record<string, string | number>;
@@ -187,6 +188,22 @@ function svg<K extends keyof SVGElementTagNameMap>(
 }
 
 const points = (polygon: Point[]) => polygon.map((p) => `${p.x},${p.y}`).join(" ");
+
+/** The unit normal of a flat polygon in 3D, pointing up (Newell's method). */
+function faceNormal(polygon: Vec3[]): Vec3 {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  polygon.forEach((p, i) => {
+    const q = polygon[(i + 1) % polygon.length];
+    x += (p.y - q.y) * (p.z + q.z);
+    y += (p.z - q.z) * (p.x + q.x);
+    z += (p.x - q.x) * (p.y + q.y);
+  });
+  const length = Math.hypot(x, y, z) || 1;
+  const sign = z < 0 ? -1 : 1;
+  return { x: (sign * x) / length, y: (sign * y) / length, z: (sign * z) / length };
+}
 
 const sameItem = (a: Item, b: Item) => a.kind === b.kind && a.id === b.id;
 
@@ -354,6 +371,24 @@ export class Editor2D {
   dispose(): void {
     for (const dispose of this.disposers.splice(0)) dispose();
     this.element.remove();
+  }
+
+  /**
+   * True for the roof level: the view from above with the roofs of all stories, where a click
+   * selects a roof and a drag moves it. The plan of the active story does not show.
+   */
+  private roofView = false;
+
+  get roofLevel(): boolean {
+    return this.roofView;
+  }
+
+  set roofLevel(on: boolean) {
+    if (this.roofView === on) return;
+    this.roofView = on;
+    this.measure = [];
+    this.ruler = [];
+    this.render();
   }
 
   get tool(): Tool {
@@ -595,6 +630,15 @@ export class Editor2D {
   nudge(delta: Point): void {
     if (this.items.length === 0) return;
     const items = this.items;
+    const roofs = items.filter((i) => i.kind === "roof").map((i) => i.id);
+    if (roofs.length > 0) {
+      this.doc.editBuilding((building) => {
+        for (const roof of building.roofs) {
+          if (roofs.includes(roof.id)) roof.outline = roof.outline.map((p) => add(p, delta));
+        }
+      });
+      return;
+    }
     this.doc.edit((plan) => {
       const origin = moveOrigin(plan, items);
       moveFromOrigin(plan, origin, delta);
@@ -669,6 +713,7 @@ export class Editor2D {
     const plan = this.doc.plan;
     const b = plan.background;
     const box =
+      (this.roofView ? roofBounds(this.doc.building) : null) ??
       withFurniture(planBounds(plan), plan) ??
       (b && {
         minX: b.x,
@@ -980,6 +1025,12 @@ export class Editor2D {
       return;
     }
     const hit = this.hitNear(e);
+    // The roof level has no objects of a story: a press on the empty view pans it.
+    if (this.roofView && (!hit || (hit.kind !== "roof" && hit.kind !== "roof-corner"))) {
+      if (!e.shiftKey) this.select(null);
+      this.startPan(e);
+      return;
+    }
     if (!hit) {
       if (e.pointerType === "touch") {
         // A finger on the empty plan pans. A tap without a move selects the room under it, or
@@ -1004,6 +1055,16 @@ export class Editor2D {
     if (this.doc.readOnly) return;
 
     this.doc.begin();
+    if (this.items.length === 1 && hit.kind === "roof") {
+      const roof = this.doc.building.roofs.find((r) => r.id === hit.id)!;
+      this.drag = {
+        kind: "roof",
+        id: hit.id,
+        startWorld: world,
+        origin: roof.outline.map((p) => ({ ...p })),
+      };
+      return;
+    }
     if (this.items.length === 1 && hit.kind === "fixture") {
       const fixture = findFixture(this.doc.plan, hit.id)!;
       this.drag = { kind: "fixture", id: hit.id, grab: sub(world, fixture) };
@@ -1158,6 +1219,21 @@ export class Editor2D {
         this.doc.updateBuilding((building) => {
           const roof = building.roofs.find((r) => r.id === drag.roofId);
           if (roof) roof.outline[drag.index] = { x: target.x, y: target.y };
+        });
+        break;
+      }
+      case "roof": {
+        // The whole roof moves, in steps of the grid. Alt: free.
+        let delta = sub(world, drag.startWorld);
+        if (!e.altKey) {
+          delta = {
+            x: Math.round(delta.x / GRID_STEP) * GRID_STEP,
+            y: Math.round(delta.y / GRID_STEP) * GRID_STEP,
+          };
+        }
+        this.doc.updateBuilding((building) => {
+          const roof = building.roofs.find((r) => r.id === drag.id);
+          if (roof) roof.outline = drag.origin.map((p) => add(p, delta));
         });
         break;
       }
@@ -1660,6 +1736,15 @@ export class Editor2D {
     this.renderBackground(plan);
     this.content.replaceChildren();
     this.renderGrid();
+    if (this.roofView) {
+      this.renderRoofLevel();
+      for (const draw of this.overlays.values()) {
+        draw(svg("g", { class: "extra" }, this.content), this.zoom);
+      }
+      this.renderOverlay(plan);
+      this.onRender();
+      return;
+    }
     this.renderRooms(plan);
     this.renderClearHeight();
     this.renderStoryBelow();
@@ -1739,7 +1824,8 @@ export class Editor2D {
   private renderBackground(plan: Plan): void {
     const image = this.backgroundImage;
     const background = plan.background;
-    if (!background || !this.layers.background) {
+    // The scan belongs to a story, so the roof level does not show it.
+    if (!background || !this.layers.background || this.roofView) {
       image.setAttribute("visibility", "hidden");
       return;
     }
@@ -1908,53 +1994,127 @@ export class Editor2D {
           (i.kind === "roof" && i.id === roof.id) ||
           (i.kind === "roof-corner" && i.id.startsWith(`${roof.id}:`)),
       );
-      if (!selected) continue;
-      const handles = svg("g", { class: "roof-outline" }, this.content);
-      svg("polygon", { points: points(roof.outline), class: "outline" }, handles);
-      const n = roof.outline.length;
-      roof.outline.forEach((p, i) => {
-        const q = roof.outline[(i + 1) % n];
-        const mid = scale(add(p, q), 0.5);
-        // The number of the side, outside the outline, so that the user finds the side of a row
-        // of the panel. The outline can go either way round, so the label goes to the side of
-        // the normal that points away from the center of the outline.
-        const center = scale(roof.outline.reduce(add, { x: 0, y: 0 }), 1 / n);
-        const length = distance(p, q) || 1;
-        let normal = perpendicular(scale(sub(q, p), 1 / length));
-        if (dot(normal, sub(mid, center)) < 0) normal = scale(normal, -1);
-        const at = add(mid, scale(normal, 16 / this.zoom));
-        this.label(handles, at, String(i + 1), "side-number");
-        svg(
-          "circle",
-          {
-            cx: mid.x,
-            cy: mid.y,
-            r: 4 / this.zoom,
-            class: "insert",
-            "data-kind": "roof-insert",
-            "data-id": `${roof.id}:${i}`,
-          },
-          handles,
-        );
-      });
-      roof.outline.forEach((p, i) => {
-        const id = `${roof.id}:${i}`;
-        const active = this.isSelected("roof-corner", id);
-        svg(
-          "rect",
-          {
-            x: p.x - 5 / this.zoom,
-            y: p.y - 5 / this.zoom,
-            width: 10 / this.zoom,
-            height: 10 / this.zoom,
-            class: active ? "corner selected" : "corner",
-            "data-kind": "roof-corner",
-            "data-id": id,
-          },
-          handles,
-        );
-      });
+      if (selected) this.renderRoofHandles(roof);
     }
+  }
+
+  /**
+   * The roof level: the walls of all stories as thin lines, and on them the roofs of all stories
+   * from above, a higher roof over a lower one. Each face has the color of the roof and a shade
+   * of its slope, so that the ridges and the valleys show. A selected roof shows its handles.
+   */
+  private renderRoofLevel(): void {
+    const building = this.doc.building;
+    // The light comes from the top left, and from above.
+    const light = { x: -0.45, y: -0.55, z: 0.7 };
+    const norm = Math.hypot(light.x, light.y, light.z);
+    const shade = (n: { x: number; y: number; z: number }) =>
+      0.3 * (1 - Math.max(0, (n.x * light.x + n.y * light.y + n.z * light.z) / norm));
+    const selectedRoofs: Roof[] = [];
+    for (const { roof, geometry } of roofsFromAbove(building)) {
+      const selected = this.items.some(
+        (i) =>
+          (i.kind === "roof" && i.id === roof.id) ||
+          (i.kind === "roof-corner" && i.id.startsWith(`${roof.id}:`)),
+      );
+      if (selected) selectedRoofs.push(roof);
+      const group = svg(
+        "g",
+        {
+          class: selected ? "roof-top selected" : "roof-top",
+          "data-kind": "roof",
+          "data-id": roof.id,
+        },
+        this.content,
+      );
+      const face = (polygon: Vec3[], dark: number) => {
+        svg("polygon", { points: points(polygon), fill: roof.color, class: "face" }, group);
+        if (dark > 0.01)
+          svg("polygon", { points: points(polygon), "fill-opacity": dark, class: "shade" }, group);
+      };
+      for (const f of geometry.faces) face(f.polygon, shade(f.normal));
+      for (const dormer of geometry.dormers) {
+        for (const polygon of dormer.faces) face(polygon, shade(faceNormal(polygon)));
+      }
+      for (const { quad } of geometry.windows) {
+        svg("polygon", { points: points(quad), class: "roof-window" }, group);
+      }
+      for (const [a, b] of geometry.edges) {
+        if (Math.hypot(a.x - b.x, a.y - b.y) < 1e-6) continue;
+        svg("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "edge" }, group);
+      }
+    }
+    // The walls of all stories as thin lines over the roofs, so that a roof shows the walls
+    // that it covers, also a roof of a lower story next to the stories above.
+    const walls = svg("g", { class: "below roof-walls" }, this.content);
+    for (const story of building.stories) {
+      for (const wall of story.walls) {
+        const outline = wallOutline(story, wall);
+        if (outline.length > 0) svg("polygon", { points: points(outline) }, walls);
+      }
+    }
+    // The chimneys go through the roofs.
+    const chimneys = svg("g", { class: "chimneys" }, this.content);
+    for (const story of building.stories) {
+      for (const chimney of story.chimneys) {
+        const element = svg("g", { class: "chimney on-roof" }, chimneys);
+        const symbol = chimneySymbol(chimney);
+        svg("polygon", { points: points(symbol.outline), class: "outline" }, element);
+      }
+    }
+    for (const roof of selectedRoofs) this.renderRoofHandles(roof);
+  }
+
+  /**
+   * The outline of a selected roof, with a handle at each corner, and a "+" handle in the middle
+   * of each side that adds a corner when the user drags it.
+   */
+  private renderRoofHandles(roof: Roof): void {
+    const handles = svg("g", { class: "roof-outline" }, this.content);
+    svg("polygon", { points: points(roof.outline), class: "outline" }, handles);
+    const n = roof.outline.length;
+    roof.outline.forEach((p, i) => {
+      const q = roof.outline[(i + 1) % n];
+      const mid = scale(add(p, q), 0.5);
+      // The number of the side, outside the outline, so that the user finds the side of a row
+      // of the panel. The outline can go either way round, so the label goes to the side of
+      // the normal that points away from the center of the outline.
+      const center = scale(roof.outline.reduce(add, { x: 0, y: 0 }), 1 / n);
+      const length = distance(p, q) || 1;
+      let normal = perpendicular(scale(sub(q, p), 1 / length));
+      if (dot(normal, sub(mid, center)) < 0) normal = scale(normal, -1);
+      const at = add(mid, scale(normal, 16 / this.zoom));
+      this.label(handles, at, String(i + 1), "side-number");
+      svg(
+        "circle",
+        {
+          cx: mid.x,
+          cy: mid.y,
+          r: 4 / this.zoom,
+          class: "insert",
+          "data-kind": "roof-insert",
+          "data-id": `${roof.id}:${i}`,
+        },
+        handles,
+      );
+    });
+    roof.outline.forEach((p, i) => {
+      const id = `${roof.id}:${i}`;
+      const active = this.isSelected("roof-corner", id);
+      svg(
+        "rect",
+        {
+          x: p.x - 5 / this.zoom,
+          y: p.y - 5 / this.zoom,
+          width: 10 / this.zoom,
+          height: 10 / this.zoom,
+          class: active ? "corner selected" : "corner",
+          "data-kind": "roof-corner",
+          "data-id": id,
+        },
+        handles,
+      );
+    });
   }
 
   private renderStairs(plan: Plan): void {

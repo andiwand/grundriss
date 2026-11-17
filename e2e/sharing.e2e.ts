@@ -190,7 +190,7 @@ test("lets two people edit at once, see each other, and follow", async ({
   await ben.locator("#people .person").click();
   await expect(ben.locator("body")).toHaveClass(/following/);
   await expect(ben.locator("#follow-band")).toContainText("You follow");
-  const other = page.locator("#stories .story:not(.active)").first();
+  const other = page.locator("#stories .story:not(.active):not(.roof)").first();
   const name = (await other.locator("span").first().textContent())!;
   await other.click();
   await expect(ben.locator("#stories .story.active")).toContainText(name);

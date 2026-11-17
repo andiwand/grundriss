@@ -4,6 +4,13 @@ The changes that a user notices.
 
 ## Unreleased
 
+- 2D: **Roof** at the top of the list of the stories shows the roofs of all stories from above,
+  with their faces, ridges, dormers, roof windows, and chimneys, and the walls of all stories as
+  thin lines. A click selects a roof, and a drag or the arrow keys move it. A roof of a lower
+  story, for example over a part of the ground floor, shows too, and a higher roof covers it. The
+  panel lists the roofs of all stories, and adds a roof on the story that you choose. The 3D
+  view shows the whole building. Before, a roof was only a row in the panel and dashed lines on
+  its story.
 - Server: accounts with a name and a password replace the links of the users and the root link.
   At the first start, the log shows a setup link for the admin, which works once. The admin
   invites people with invite links, which work once and end after 72 hours, and chooses their

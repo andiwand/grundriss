@@ -83,7 +83,12 @@ import {
   textField,
 } from "./panel";
 import { renderRenovationTopic } from "./renovation";
-import { renderLivingArea, renderRoofPanel, renderStructurePanel } from "./structure";
+import {
+  renderLivingArea,
+  renderRoofLevelPanel,
+  renderRoofPanel,
+  renderStructurePanel,
+} from "./structure";
 import { renderTracing } from "./tracing";
 import { renderInteriorPanel, renderUtilitiesPanel, SYSTEM_ICONS } from "./utilities";
 import { selectInput } from "./controls";
@@ -204,6 +209,8 @@ export function renderPanel(): void {
   if (items.length > 1) return renderMany(items);
   const selection = items[0];
   if (selection) return PANELS[selection.kind]?.(plan, selection.id);
+  // The roof level shows the roofs of all stories in each topic but the overview.
+  if (editor.roofLevel && app.topic !== "overview") return renderRoofLevelPanel();
 
   switch (app.topic) {
     case "overview":

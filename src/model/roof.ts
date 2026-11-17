@@ -91,6 +91,29 @@ export function roofGeometries(building: Building): { roof: Roof; geometry: Roof
     .map((roof) => ({ roof, geometry: roofGeometryOf(building, roof) }));
 }
 
+/**
+ * The roofs of all stories as the view from above shows them: the lowest top first, so that a
+ * higher roof covers a lower one where they overlap. A roof on a lower story, for example over a
+ * part of the ground floor without a story above, is there too.
+ */
+export function roofsFromAbove(building: Building): { roof: Roof; geometry: RoofGeometry }[] {
+  return roofGeometries(building).sort((a, b) => a.geometry.top - b.geometry.top);
+}
+
+/** The box of the eaves of all roofs on the plan, or null without roofs. */
+export function roofBounds(
+  building: Building,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const points = roofGeometries(building).flatMap(({ geometry }) => geometry.eaves);
+  if (points.length === 0) return null;
+  return {
+    minX: Math.min(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  };
+}
+
 export const findRoof = (building: Building, id: Id): Roof | undefined =>
   building.roofs.find((r) => r.id === id);
 

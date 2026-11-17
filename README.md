@@ -377,8 +377,13 @@ or the facade.
 
 ### Roofs
 
-Without a selection, the panel lists the roofs. **Gable**, **Half hip**, **Hip**, **Shed**, and **Flat** add a
-roof on the outline of the walls of the active story. Click a roof to change it:
+**Roof** at the top of the list of the stories shows the roofs of all stories from above: each
+face in the color of its roof, with a shade of its slope, and the walls of all stories as thin
+lines over them. A roof can sit on any story, for example on the ground floor over a part
+without a story above; a higher roof covers a lower one. Click a roof to select it, and drag it
+or use the arrow keys to move it. Without a selection, the panel lists the roofs of all stories.
+**Gable**, **Half hip**, **Hip**, **Shed**, and **Flat** add a roof on the outline of the walls of
+the story that you choose. A story shows its roofs as dashed lines. Click a roof to change it:
 
 - **Sides**: each side of the outline is an **eave** (a face rises from it with its pitch), a
   **gable** (a vertical wall), or a **half hip**: a gable wall up to the height of its **gable
