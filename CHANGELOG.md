@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Phone: the mark of the server in the top bar shows only the cloud again, as before 0.5.2.
+
 ## 0.5.2 – 2026-11-17
 
 - Server: on a phone, the mark of the server in the top bar shows the name of the server when the
