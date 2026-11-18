@@ -4,6 +4,9 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: on the page of the account, the fields and the buttons of each card end at the right
+  edge of the card, like Log out. Before, they ended at a line in the middle of the card.
+
 ## 0.7.0 – 2026-11-18
 
 - The tools and the stories are a rail at the left of the views. The rail serves the 2D and the

@@ -2815,7 +2815,7 @@ body.overview #layers-button {
 }
 
 /* The facts and the forms of the account have one column of labels, so their values start at one
-   line. The fields have the width of a dialog field, and the buttons end at the end of the fields. */
+   line. */
 .account-card,
 .app-dialog:has(.account-form) {
   --account-label: 140px;
@@ -2846,11 +2846,12 @@ body.overview #layers-button {
   color: var(--ink);
 }
 
+/* A form uses the full width of its card, so that its fields and its buttons end at the right
+   edge of the card, like the buttons in the head of the card. */
 .account-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 460px;
   --field-label: var(--account-label);
   --field-control: minmax(0, 1fr);
 }
