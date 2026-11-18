@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.6.1 – 2026-11-18
+
 - Server: in the app of a server, all plans are on the server. **New plan**, **Open a file**, and
   **Example house** make a plan on the server and open it, and the home page shows only the
   plans of the server. Plans that are still in the browser show as a link at the end, to move
