@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.6.3 – 2026-11-18
+
 - Outdoor is a topic of its own, after Structure. It has the tools **Area** (A), **Fence** (G),
   and **Tree** (T) in place of the menu Outdoor, and its panel lists the areas, the fences, and
   the trees of the story. The overview opens them in this topic.
