@@ -4,6 +4,16 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: a new layout of the page of the account. The cards are in one column in the middle.
+  Each form has short fields and its button at the end of the fields, and the facts of the
+  account and of the server are a list. **Log out** is at the top of the card of the account.
+  The rights of an invite are one group, and the space is a short field in MB.
+- Server: a click on an account opens its dialog: the rights, the limits, **Link for a new
+  password**, and **Remove the account**. Before, these were icons in the row.
+- The lists of links and versions have a line only between the rows, and the buttons of a row
+  are together at its end.
+- On the page of the account, **‹ Grundriss** shows on hover that it leads back to the plans.
+
 ## 0.6.3 – 2026-11-18
 
 - Outdoor is a topic of its own, after Structure. It has the tools **Area** (A), **Fence** (G),

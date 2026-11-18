@@ -194,10 +194,12 @@ export function radioGroup<T extends string>(
 export function fieldRow(
   text: string,
   element: HTMLElement,
-  options: { stacked?: boolean } = {},
-): HTMLLabelElement {
-  const row = document.createElement("label");
-  row.className = options.stacked ? "field stacked" : "field";
+  options: { stacked?: boolean; top?: boolean } = {},
+): HTMLElement {
+  // A group of controls, for example check boxes, has its label at the top of the group. It is
+  // no label element, because each check box has its own label.
+  const row = document.createElement(options.top ? "div" : "label");
+  row.className = options.stacked ? "field stacked" : options.top ? "field top" : "field";
   const label = document.createElement("span");
   label.className = "field-label";
   label.textContent = text;

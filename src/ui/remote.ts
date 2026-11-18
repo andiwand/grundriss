@@ -52,12 +52,14 @@ import {
 import {
   button,
   checkbox,
+  fieldRow,
   iconButton,
   numberInput,
   pair,
   radioGroup,
   selectInput,
   textInput,
+  withUnit,
 } from "./controls";
 import {
   ago,
@@ -1236,22 +1238,25 @@ function renderAccountPage(): void {
   updateAccountButton();
   if (!state || !me) return void shell.showHome();
   $("#account-title").textContent = me.name;
-  $("#account-note").textContent = t("Your account on {server}: {usage}.", {
-    server: state.name,
-    usage: usageText(me),
-  });
-  accountCard(card(sections, t("Your account")));
-  if (me.admin || me.makeAccounts) void serverCards(sections);
+  $("#account-note").textContent = t("Your account on {server}.", { server: state.name });
+  accountCard(me);
+  if (me.admin || me.makeAccounts) void serverCards();
 }
 
-/** A card of the page of the account, with its heading. It gives the card. */
-function card(parent: HTMLElement, title: string): HTMLElement {
+/**
+ * A card of the page of the account: a head with the title and the buttons of the card on the
+ * right, and the body. It gives the body.
+ */
+function card(title: string, ...buttons: HTMLElement[]): HTMLElement {
   const element = document.createElement("section");
   element.className = "account-card";
+  const head = document.createElement("div");
+  head.className = "account-card-head";
   const heading = document.createElement("h3");
   heading.textContent = title;
-  element.append(heading);
-  parent.append(element);
+  head.append(heading, ...buttons);
+  element.append(head);
+  $("#account-sections").append(element);
   return element;
 }
 
@@ -1262,19 +1267,86 @@ function subheading(parent: HTMLElement, text: string): void {
   parent.append(heading);
 }
 
-/** The card of the own account: the password and the logout. */
-function accountCard(body: HTMLElement): void {
-  const state = server!;
-  subheading(body, t("Change the password"));
-  const old = textInput("", { type: "password", autocomplete: "current-password" });
-  row(body, t("Old password"), old);
-  const next = textInput("", { type: "password", autocomplete: "new-password" });
-  row(body, t("New password"), next);
-  const message = note(body, "", "dialog-note warning");
+/** The facts of a card: a label and a value on each line. */
+function facts(parent: HTMLElement, items: [label: string, value: string][]): void {
+  const list = document.createElement("dl");
+  list.className = "account-facts";
+  for (const [label, value] of items) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    list.append(term, detail);
+  }
+  parent.append(list);
+}
+
+/**
+ * A form of a card: the fields in two columns of a fixed width, and its buttons at the end of the
+ * fields, on the right. It gives the form and the row of the buttons.
+ */
+function cardForm(parent: HTMLElement): { form: HTMLElement; actions: HTMLElement } {
+  const form = document.createElement("div");
+  form.className = "account-form";
   const actions = document.createElement("div");
-  actions.className = "dialog-actions";
+  actions.className = "account-form-actions";
+  parent.append(form);
+  return { form, actions };
+}
+
+/** The space and the plans of an account for its facts, and with `rights` its rights. */
+function usageFacts(a: Account, rights = true): [string, string][] {
+  const items: [string, string][] = [
+    [
+      t("Space"),
+      a.limit > 0
+        ? t("{used} of {limit}", { used: megabytes(a.used), limit: megabytes(a.limit) })
+        : megabytes(a.used),
+    ],
+    [
+      t("Plans"),
+      a.planLimit > 0
+        ? t("{count} of {limit}", { count: a.plans, limit: a.planLimit })
+        : String(a.plans),
+    ],
+  ];
+  if (rights) items.push([t("Rights"), rightsText(a)]);
+  return items;
+}
+
+/** The card of the own account: the facts, the password, and the logout. */
+function accountCard(me: Account): void {
+  const state = server!;
+  const logout = button(t("Log out"), async () => {
+    try {
+      const copies = await listRemoteCopies(state.client.base).catch(() => []);
+      if (
+        copies.some((copy) => copy.edited) &&
+        !confirm(t("Some changes did not go to the server yet. Log out and discard them?"))
+      )
+        return;
+      endSession();
+      // On a computer of others, the plans of the account do not stay in the browser.
+      load();
+      setSession(await state.client.logout());
+      await shell.showHome();
+      await removeRemoteCopies(state.client.base).catch(() => undefined);
+      showStatus(t("Logged out."));
+    } catch (error) {
+      showStatus(errorText(error), true);
+    }
+  });
+  const body = card(t("Your account"), logout);
+  facts(body, usageFacts(me));
+  subheading(body, t("Change the password"));
+  const { form, actions } = cardForm(body);
+  const old = textInput("", { type: "password", autocomplete: "current-password" });
+  row(form, t("Old password"), old);
+  const next = textInput("", { type: "password", autocomplete: "new-password" });
+  row(form, t("New password"), next);
+  const message = note(form, "", "dialog-note warning");
   actions.append(
-    actionButton(t("Change the password"), async () => {
+    button(t("Change the password"), async () => {
       message.textContent = "";
       if (next.value.length < 8) {
         message.textContent = t("The password needs at least 8 characters.");
@@ -1288,27 +1360,8 @@ function accountCard(body: HTMLElement): void {
         message.textContent = errorText(error);
       }
     }),
-    actionButton(t("Log out"), async () => {
-      try {
-        const copies = await listRemoteCopies(state.client.base).catch(() => []);
-        if (
-          copies.some((copy) => copy.edited) &&
-          !confirm(t("Some changes did not go to the server yet. Log out and discard them?"))
-        )
-          return;
-        endSession();
-        // On a computer of others, the plans of the account do not stay in the browser.
-        load();
-        setSession(await state.client.logout());
-        await shell.showHome();
-        await removeRemoteCopies(state.client.base).catch(() => undefined);
-        showStatus(t("Logged out."));
-      } catch (error) {
-        message.textContent = errorText(error);
-      }
-    }),
   );
-  body.append(actions);
+  form.append(actions);
 }
 
 /** The dialog of the open plan of the server: its state and its actions. */
@@ -1506,11 +1559,13 @@ function shareRow(share: Share, refresh: () => Promise<void>, withPlan = false):
   );
 }
 
-/** The checkboxes of the rights of an account. */
+/** The check boxes of the rights of an account, in one row of a form under the label "Rights". */
 function rightsFields(parent: HTMLElement, value: Partial<Account>, admin: boolean) {
+  const group = document.createElement("span");
+  group.className = "check-group";
   const check = (text: string, checked: boolean) => {
     const { element, input } = checkbox(text, checked);
-    parent.append(element);
+    group.append(element);
     return input;
   };
   const me = account();
@@ -1523,6 +1578,7 @@ function rightsFields(parent: HTMLElement, value: Partial<Account>, admin: boole
   for (const key of ["createPlans", "seeAll", "makeAccounts"] as const) {
     if (!admin && !me?.[key]) fields[key].disabled = true;
   }
+  parent.append(fieldRow(t("Rights"), group, { top: true }));
   return () => ({
     createPlans: fields.createPlans.checked,
     seeAll: fields.seeAll.checked,
@@ -1530,161 +1586,43 @@ function rightsFields(parent: HTMLElement, value: Partial<Account>, admin: boole
   });
 }
 
-/** A field in MB for the space of an account. Empty is the default of the server. */
+/** A short field in MB for the space of an account. Empty is the default of the server. */
 function quotaField(parent: HTMLElement, value: number | null, fallback: string) {
   const input = numberInput(value === null ? null : Math.round(value / 1_048_576), {
     min: 0,
     step: 1,
   });
   input.placeholder = fallback;
-  row(parent, t("Space in MB"), input);
+  row(parent, t("Space"), short(withUnit(input, "MB")));
   return () => (input.value === "" ? null : Math.max(0, Number(input.value)) * 1_048_576);
 }
 
-/**
- * The accounts of the server: for the admin the settings, the accounts, the invites, and all
- * share links; for an account that invites, its invites.
- */
+/** A control of a form that needs only a short width, for example a number. */
+function short(element: HTMLElement): HTMLElement {
+  element.classList.add("short");
+  return element;
+}
+
 /**
  * The cards of the server on the page of the account: for the admin, the settings and the
  * accounts; for each account that may invite, the invites and the open links; and for the admin,
  * all share links.
  */
-async function serverCards(parent: HTMLElement): Promise<void> {
+async function serverCards(): Promise<void> {
   const state = server;
   const me = account();
   if (!state || !me) return;
   const admin = me.admin;
   const client = state.client;
   // The cards come in their order at once; their content follows from the server.
-  const settingsCard = admin ? card(parent, t("Server")) : null;
-  const accountsCard = admin ? card(parent, t("Accounts")) : null;
-  const body = card(parent, t("Invite"));
-  const sharesCard = admin ? card(parent, t("Share links")) : null;
+  const settingsCard = admin ? card(t("Server")) : null;
+  const accountsCard = admin ? card(t("Accounts")) : null;
+  const body = card(t("Invite"));
+  const sharesCard = admin ? card(t("Share links")) : null;
 
-  let defaults = "";
-  if (admin) {
-    try {
-      const settings = await client.settings();
-      const name = textInput(settings.name);
-      row(settingsCard!, t("Name of the server"), name);
-      name.addEventListener("change", async () => {
-        try {
-          await client.saveSettings({ name: name.value });
-          setSession(await client.session());
-        } catch (error) {
-          showStatus(errorText(error), true);
-        }
-      });
-      defaults =
-        settings.quota > 0 ? String(Math.round(settings.quota / 1_048_576)) : t("no limit");
-      note(
-        settingsCard!,
-        t(
-          "Version {version}, {plans} plans, {accounts} accounts, {shares} share links. A new account gets {quota} for at most {count} plans; a link for one use works {hours} hours.",
-          {
-            version: settings.version,
-            plans: settings.plans,
-            accounts: settings.accounts,
-            shares: settings.shares,
-            quota: settings.quota > 0 ? megabytes(settings.quota) : t("no limit"),
-            count: settings.maxPlans > 0 ? settings.maxPlans : "∞",
-            hours: settings.linkHours,
-          },
-        ),
-      );
-    } catch (error) {
-      note(settingsCard!, errorText(error), "dialog-note warning");
-    }
-    const accounts = document.createElement("div");
-    accounts.className = "token-list";
-    accountsCard!.append(accounts);
-    const refreshAccounts = () =>
-      fill(accounts, client.accounts, (a) =>
-        listRow(
-          a.admin ? `${a.name} · ${t("admin")}` : a.name,
-          `${rightsText(a)} · ${usageText(a)}`,
-          iconButton("settings", t("Change {name}", { name: a.name }), () =>
-            editAccountDialog(a, defaults, refreshAccounts),
-          ),
-          iconButton("rename", t("A new password for {name}", { name: a.name }), async () => {
-            try {
-              const { path } = await client.resetLink(a.id);
-              showNewLink(
-                accountsCard!,
-                client.address(path),
-                t("The link for a new password of {name}, shown only now:", { name: a.name }),
-              );
-              await refreshLinks();
-            } catch (error) {
-              showStatus(errorText(error), true);
-            }
-          }),
-          ...(a.id === me.id
-            ? []
-            : [
-                iconButton(
-                  "trash",
-                  t("Remove {name}", { name: a.name }),
-                  async () => {
-                    if (
-                      !confirm(
-                        t("Remove the account {name}? Its plans become yours.", { name: a.name }),
-                      )
-                    )
-                      return;
-                    try {
-                      await client.deleteAccount(a.id);
-                      await refreshAccounts();
-                    } catch (error) {
-                      showStatus(errorText(error), true);
-                    }
-                  },
-                  { danger: true },
-                ),
-              ]),
-        ),
-      );
-    await refreshAccounts();
-  }
-
-  // The invites.
-  note(
-    body,
-    t(
-      "An invite link is for one person. It works once, and ends after some days. The person chooses a name and a password.",
-    ),
-  );
-  const form = document.createElement("div");
-  form.className = "dialog-form";
-  const rights = rightsFields(form, {}, admin);
-  const quota = admin ? quotaField(form, null, defaults) : () => null;
-  const message = note(form, "", "dialog-note warning");
-  form.append(
-    actionButton(
-      t("Make an invite link"),
-      async () => {
-        message.textContent = "";
-        try {
-          const { path } = await client.createInvite({ ...rights(), quota: quota() });
-          showNewLink(
-            body,
-            client.address(path),
-            t("The invite link, shown only now. Copy it and send it on a safe way:"),
-          );
-          await refreshLinks();
-        } catch (error) {
-          message.textContent = errorText(error);
-        }
-      },
-      true,
-    ),
-  );
-  body.append(form);
-  subheading(body, t("Open links"));
+  // The links for one use: the invites, and the links for a new password.
   const links = document.createElement("div");
   links.className = "token-list";
-  body.append(links);
   const refreshLinks = () =>
     fill(links, client.invites, (invite: Invite) =>
       listRow(
@@ -1710,6 +1648,95 @@ async function serverCards(parent: HTMLElement): Promise<void> {
         ),
       ),
     );
+
+  let defaults = "";
+  if (admin) {
+    const { form } = cardForm(settingsCard!);
+    try {
+      const settings = await client.settings();
+      const name = textInput(settings.name);
+      row(form, t("Name"), name);
+      name.addEventListener("change", async () => {
+        try {
+          await client.saveSettings({ name: name.value });
+          setSession(await client.session());
+        } catch (error) {
+          showStatus(errorText(error), true);
+        }
+      });
+      defaults =
+        settings.quota > 0 ? String(Math.round(settings.quota / 1_048_576)) : t("no limit");
+      facts(settingsCard!, [
+        [t("Version"), settings.version],
+        [
+          t("Contents"),
+          t("{plans} plans, {accounts} accounts, {shares} share links", {
+            plans: settings.plans,
+            accounts: settings.accounts,
+            shares: settings.shares,
+          }),
+        ],
+        [
+          t("A new account"),
+          t("{quota} for at most {count} plans", {
+            quota: settings.quota > 0 ? megabytes(settings.quota) : t("no limit"),
+            count: settings.maxPlans > 0 ? settings.maxPlans : "∞",
+          }),
+        ],
+        [t("A link for one use"), t("{hours} hours", { hours: settings.linkHours })],
+      ]);
+    } catch (error) {
+      note(settingsCard!, errorText(error), "dialog-note warning");
+    }
+    // Each account is a row; a click opens its rights, its limits, and its actions.
+    const accounts = document.createElement("div");
+    accounts.className = "account-rows";
+    accountsCard!.append(accounts);
+    const refreshAccounts = () =>
+      fill(accounts, client.accounts, (a) =>
+        objectRow(
+          a.admin ? `${a.name} · ${t("admin")}` : a.name,
+          `${rightsText(a)} · ${usageText(a)}`,
+          () => editAccountDialog(a, defaults, refreshAccounts, refreshLinks),
+        ),
+      );
+    await refreshAccounts();
+  }
+
+  // The invites.
+  note(
+    body,
+    t(
+      "An invite link is for one person. It works once, and ends after some days. The person chooses a name and a password.",
+    ),
+  );
+  const { form, actions } = cardForm(body);
+  const rights = rightsFields(form, {}, admin);
+  const quota = admin ? quotaField(form, null, defaults) : () => null;
+  const message = note(form, "", "dialog-note warning");
+  actions.append(
+    actionButton(
+      t("Make an invite link"),
+      async () => {
+        message.textContent = "";
+        try {
+          const { path } = await client.createInvite({ ...rights(), quota: quota() });
+          showNewLink(
+            form,
+            client.address(path),
+            t("The invite link, shown only now. Copy it and send it on a safe way:"),
+          );
+          await refreshLinks();
+        } catch (error) {
+          message.textContent = errorText(error);
+        }
+      },
+      true,
+    ),
+  );
+  form.append(actions);
+  subheading(body, t("Open links"));
+  body.append(links);
   await refreshLinks();
 
   if (sharesCard) {
@@ -1726,32 +1753,95 @@ async function serverCards(parent: HTMLElement): Promise<void> {
   }
 }
 
-/** The rights and the limits of an account, for the admin. */
-function editAccountDialog(a: Account, defaults: string, done: () => Promise<void>): void {
+/** A row of a list that opens an object: a name, a detail, and an arrow at the end. */
+function objectRow(name: string, detail: string, open: () => void): HTMLElement {
+  const element = button("", open, {});
+  element.classList.add("object-row");
+  const lines = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = name;
+  const small = document.createElement("small");
+  small.textContent = detail;
+  lines.append(strong, small);
+  element.append(lines);
+  return element;
+}
+
+/**
+ * The dialog of an account, for the admin: its rights and its limits, a link for a new password,
+ * and the removal.
+ */
+function editAccountDialog(
+  a: Account,
+  defaults: string,
+  done: () => Promise<void>,
+  linksChanged: () => Promise<void>,
+): void {
   const state = server;
   if (!state) return;
+  const client = state.client;
+  const own = a.id === account()?.id;
   const { element, body } = dialog(a.name);
-  note(body, usageText(a));
+  // The check boxes show the rights, so the facts have only the space and the plans.
+  facts(body, usageFacts(a, false));
   const form = document.createElement("div");
-  form.className = "dialog-form";
+  form.className = "account-form";
   const rights = rightsFields(form, a, true);
   const { element: adminBox, input: adminInput } = checkbox(t("Admin"), a.admin);
-  adminInput.disabled = a.id === account()?.id;
-  form.append(adminBox);
+  adminInput.disabled = own;
+  form.append(fieldRow("", adminBox));
   const quota = quotaField(form, a.quota, defaults);
   const plans = numberInput(a.maxPlans, { min: 0, step: 1 });
   plans.placeholder = t("default");
-  row(form, t("Most plans"), plans);
+  row(form, t("Most plans"), short(plans));
   note(form, t("Empty is the default of the server, 0 is no limit."));
   const message = note(form, "", "dialog-note warning");
   body.append(form);
+  // The actions on the account: a link for a new password, and the removal.
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  actions.append(
+    button(t("Link for a new password"), async () => {
+      try {
+        const { path } = await client.resetLink(a.id);
+        showNewLink(
+          body,
+          client.address(path),
+          t("The link for a new password of {name}, shown only now:", { name: a.name }),
+        );
+        await linksChanged();
+      } catch (error) {
+        message.textContent = errorText(error);
+      }
+    }),
+  );
+  if (!own) {
+    actions.append(
+      button(
+        t("Remove the account"),
+        async () => {
+          if (!confirm(t("Remove the account {name}? Its plans become yours.", { name: a.name })))
+            return;
+          try {
+            await client.deleteAccount(a.id);
+            element.close();
+            await done();
+          } catch (error) {
+            message.textContent = errorText(error);
+          }
+        },
+        { kind: "danger" },
+      ),
+    );
+  }
+  body.append(actions);
   footer(
     element,
     actionButton(
       t("Save"),
       async () => {
         try {
-          await state.client.updateAccount(a.id, {
+          await client.updateAccount(a.id, {
             ...rights(),
             admin: adminInput.checked,
             quota: quota(),

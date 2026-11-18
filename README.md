@@ -141,17 +141,18 @@ that are still in the browser from before show as a link at the end, to move the
 The name of the account in the top bar opens the page of the account: the password, the logout,
 and for the admin the server, the accounts, the invites, and the share links.
 
-- **Accounts.** The admin invites a person with an **invite link** (the settings icon on the
-  page of the account, **Invite**): it works once, for a set time, and the person chooses
+- **Accounts.** The admin invites a person with an **invite link** (the card **Invite** on the
+  page of the account): it works once, for a set time, and the person chooses
   a name and a password. The admin chooses the rights of the new account: make plans, see and
   edit all plans, and invite others. An account that can invite gives at most its own rights.
   The server keeps only a salted scrypt hash of each password, and stops the logins of a name
   after 10 wrong passwords for 15 minutes.
 - **Space.** Each account has a space for its plans (500 MB) and a number of plans (100). The
   revisions count, and each image once. A save over the space fails with a message, also if
-  another person edits the plan. The admin changes both for each account.
+  another person edits the plan. The admin changes both for each account: a click on an account in **Accounts** opens its rights
+  and its limits.
 - **Forgotten passwords.** The server sends no emails. The admin makes a link for a new password
-  and sends it on a safe way. A new password ends all other logins of the account, and the page of
+  (**Link for a new password** in the dialog of the account) and sends it on a safe way. A new password ends all other logins of the account, and the page of
   the account changes the own password. If the admin forgets the own password, start the server once
   with `GRUNDRISS_ADMIN_RESET=true`: the log shows a link for a new password.
 - **Share links.** The owner of a plan (and the admin, and an account that sees all plans) shares

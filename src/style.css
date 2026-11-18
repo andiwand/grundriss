@@ -2632,25 +2632,35 @@ body.overview #layers-button {
   padding: 40px 16px 32px;
 }
 
-/* The page of the account: each part is a card, as wide as a dialog. */
+/* The page of the account: one column of cards in the middle, as wide as a dialog. */
+.home.account-page {
+  max-width: 640px;
+}
+
 .account-sections {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 640px;
 }
 
 .account-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px 20px;
+  gap: 12px;
+  padding: 18px 20px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
-  --field-label: 124px;
-  --field-control: minmax(0, 1fr);
+}
+
+/* The head of a card: the title on the left, and the buttons of the card on the right. */
+.account-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
 }
 
 .account-card h3 {
@@ -2666,9 +2676,156 @@ body.overview #layers-button {
   letter-spacing: 0.04em;
 }
 
+/* The facts and the forms of the account have one column of labels, so their values start at one
+   line. The fields have the width of a dialog field, and the buttons end at the end of the fields. */
+.account-card,
+.app-dialog:has(.account-form) {
+  --account-label: 140px;
+}
+
+/* A phone has less room: a narrower column of labels. */
+@media (max-width: 560px) {
+  .account-card,
+  .app-dialog:has(.account-form) {
+    --account-label: 104px;
+  }
+}
+
+.account-facts {
+  display: grid;
+  grid-template-columns: var(--account-label) minmax(0, 1fr);
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.account-facts dt {
+  color: var(--ink-3);
+}
+
+.account-facts dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 460px;
+  --field-label: var(--account-label);
+  --field-control: minmax(0, 1fr);
+}
+
+.account-form .field {
+  font-size: 13px;
+}
+
+/* A new link in a card or in the dialog of an account: its box has a padding of 12 px and a
+   border, so its label column is 13 px narrower, and its field starts at the line of the others. */
+.account-card .new-link,
+.app-dialog:has(.account-form) .new-link {
+  --field-label: calc(var(--account-label) - 13px);
+  --field-control: minmax(0, 1fr);
+}
+
+.account-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* A field with a short value, for example a number of MB, does not take the full column. */
+.field > .short {
+  justify-self: start;
+  width: 140px;
+}
+
+/* A group of controls, for example check boxes: the label is at the line of the first one. */
+.field.top {
+  align-items: start;
+}
+
+.field.top > .field-label {
+  padding-top: 2px;
+}
+
+.check-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The accounts: each one is a row that opens the account, with an arrow at the end. */
+.account-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The row reaches 8 px over the edges of the list, so its text starts at the line of the card. */
+.account-rows .object-row {
+  justify-content: flex-start;
+  gap: 10px;
+  height: auto;
+  min-height: 48px;
+  margin: 0 -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.account-rows .object-row + .object-row {
+  border-top: 1px solid var(--line);
+}
+
+.account-rows .object-row:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.account-rows .object-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-rows .object-row small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.account-rows .object-row::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 0 auto;
+  border-top: 1.5px solid var(--ink-3);
+  border-right: 1.5px solid var(--ink-3);
+  transform: rotate(45deg);
+}
+
 /* On the page of the account, the brand leads back to the plans, like from a plan. */
 body.account-page .brand-back {
   display: flex;
+}
+
+body.account-page .brand {
+  cursor: pointer;
+}
+
+body.account-page .brand:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+body.account-page .brand:hover .brand-back {
+  color: var(--accent);
 }
 
 /* With an open plan, the account shows only its icon; its title names the account. */
@@ -4076,18 +4233,23 @@ body.compact #share {
   flex-direction: column;
 }
 
+/* A row of a list: the text, and its buttons together at the end. A line is only between rows. */
 .token-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
+  gap: 4px;
+  padding: 8px 0;
 }
 
-.token-row span {
+.token-row + .token-row {
+  border-top: 1px solid var(--line);
+}
+
+.token-row > span:first-child {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 

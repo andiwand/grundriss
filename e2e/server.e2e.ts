@@ -37,6 +37,10 @@ test("sets up the admin, invites an account, and logs in", async ({ browser }, t
       "Invite",
       "Share links",
     ]);
+    // A click on an account opens its rights, its limits, and its actions.
+    await admin.locator(".account-rows .object-row").first().click();
+    await expect(admin.locator(".app-dialog")).toContainText("Link for a new password");
+    await admin.keyboard.press("Escape");
     await admin.getByRole("button", { name: "Make an invite link" }).click();
     const invite = await admin.locator(".new-link input").inputValue();
     expect(invite).toMatch(new RegExp(`^${base}/invite/`));
