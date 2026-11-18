@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.7.1 – 2026-11-18
+
 - Server: on the page of the account, the fields and the buttons of each card end at the right
   edge of the card, like Log out. Before, they ended at a line in the middle of the card.
 
