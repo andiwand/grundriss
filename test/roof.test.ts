@@ -8,8 +8,10 @@ import {
   roofBounds,
   roofLines,
   roofsFromAbove,
+  roofsInView,
   type Vec3,
 } from "../src/model/roof";
+import { addVertex, addWall } from "../src/model/plan";
 import { FLAT_THICKNESS } from "../src/model/roofshape";
 import { boxHouse, wallsAround } from "./houses";
 
@@ -47,6 +49,42 @@ describe("roofs of a building", () => {
     expect(box.minX).toBeLessThan(0);
     expect(box.maxX).toBeGreaterThan(16);
     expect(roofBounds(boxHouse(4, 4, null))).toBeNull();
+  });
+
+  it("shows the roof of a low wing with the story above, and not the roof over that story", () => {
+    const building = boxHouse(16, 6, null);
+    const ground = building.stories[0];
+    const upper = addStoryOnTop(building);
+    upper.walls = [];
+    upper.vertices = [];
+    wallsAround(upper, [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 6 },
+      { x: 0, y: 6 },
+    ]);
+    const main = { ...newRoof(building, upper, "hip")!, id: "main" };
+    const wing = { ...newRoof(building, ground, "hip")!, id: "wing" };
+    wing.outline = [
+      { x: 10, y: 0 },
+      { x: 16, y: 0 },
+      { x: 16, y: 6 },
+      { x: 10, y: 6 },
+    ];
+    wing.sides = wing.sides.slice(0, 4);
+    // A roof of the ground floor over the rooms of the upper story, for example in an attic.
+    const over = { ...newRoof(building, ground, "hip")!, id: "over" };
+    building.roofs.push(main, wing, over);
+    const ids = (activeId: string, all = false) =>
+      roofsInView(building, activeId, all).map((r) => r.id);
+    expect(ids(upper.id)).toEqual(["wing"]);
+    expect(ids(ground.id)).toEqual([]);
+    expect(ids(upper.id, true)).toEqual(["main", "wing", "over"]);
+    // A wall of the upper story over the wing, which closes no room yet, hides the wing roof.
+    const a = addVertex(upper, { x: 12, y: 1 });
+    const b = addVertex(upper, { x: 14, y: 1 });
+    addWall(upper, a.id, b.id);
+    expect(ids(upper.id)).toEqual([]);
   });
 
   it("puts a gable roof on the walls, with the ridge in the middle", () => {

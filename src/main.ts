@@ -47,6 +47,7 @@ import { renderVariantSwitch } from "./ui/renovation";
 import { renderPanel } from "./ui/selection";
 import { showShortcuts } from "./ui/shortcuts";
 import { backgroundElement, replaceBackground, tracing, work } from "./ui/tracing";
+import { openOutdoorMenu } from "./ui/structure";
 import { drawInsulation, openServicesMenu } from "./ui/utilities";
 
 import { fillIcons, icon } from "./icons";
@@ -275,6 +276,7 @@ function markTool(tool: Tool): void {
     button.classList.toggle("active", button.dataset.tool === tool);
   }
   $("#furniture").classList.toggle("active", tool === "furniture" || catalog.isOpen);
+  $("#outdoor").classList.toggle("active", tool === "area" || tool === "fence" || tool === "tree");
   toolChanged(tool);
 }
 
@@ -984,6 +986,8 @@ $("#undo").addEventListener("click", () => doc.undo());
 $("#redo").addEventListener("click", () => doc.redo());
 
 $("#background").addEventListener("click", () => void loadBackground());
+
+$("#outdoor").addEventListener("click", () => openOutdoorMenu($("#outdoor")));
 
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-system]")) {
   element.addEventListener("click", () =>

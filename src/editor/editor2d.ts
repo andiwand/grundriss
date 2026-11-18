@@ -536,6 +536,14 @@ export class Editor2D {
     return true;
   }
 
+  /** True if a click at `world` (snapped to `point`) is on the first point of a path to close. */
+  private closesPath(world: Point, point: Point): boolean {
+    const first = this.pathPoints[0];
+    if (!first || this.pathPoints.length < 3) return false;
+    const near = (p: Point) => distance(first, p) * this.zoom < this.snapPixels;
+    return near(world) || near(point);
+  }
+
   /** Ends the line of the run tool, if it has at least two points. */
   finishRun(to: Id | null = null): void {
     const points = this.runPoints;
@@ -1080,18 +1088,13 @@ export class Editor2D {
       }
       case "area":
       case "fence": {
-        const point = this.snap(world, e).point;
+        const point = this.pathSnap(world, e).point;
         // A double click adds the same point twice. The second one does not count.
         const last = this.pathPoints[this.pathPoints.length - 1];
         if (last && distance(last, point) < 1e-6) break;
-        // A click on the first point closes the outline of an area.
-        const first = this.pathPoints[0];
-        if (
-          this.currentTool === "area" &&
-          first &&
-          this.pathPoints.length >= 3 &&
-          distance(first, point) * this.zoom < this.snapPixels
-        ) {
+        // A click on the first point closes the outline of an area, or a fence into a ring.
+        if (this.closesPath(world, point)) {
+          if (this.currentTool === "fence") this.pathPoints.push({ ...this.pathPoints[0] });
           this.finishPath();
           break;
         }
@@ -1285,11 +1288,13 @@ export class Editor2D {
       this.cursor =
         this.currentTool === "measure" || ends
           ? this.measureSnap(world, e)
-          : this.currentTool === "dimension"
-            ? { point: world }
-            : snapping
-              ? this.snap(world, e)
-              : { point: world };
+          : this.currentTool === "area" || this.currentTool === "fence"
+            ? this.pathSnap(world, e)
+            : this.currentTool === "dimension"
+              ? { point: world }
+              : snapping
+                ? this.snap(world, e)
+                : { point: world };
       this.render();
       return;
     }
@@ -1765,6 +1770,82 @@ export class Editor2D {
     if (start && keys.shiftKey)
       return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, step) };
     if (keys.altKey) return { point: world };
+    const targets = this.wallTargets();
+    const best = this.nearestTarget(world, targets.points, targets.lines);
+    if (best) return best;
+    if (start) {
+      const along = this.nearAngle(start, world, free);
+      if (along) return { point: along };
+    }
+    return { point: dimension ? snapToGrid(world, GRID_STEP) : world };
+  }
+
+  /**
+   * Snaps a point of the area tool or the fence tool: to a corner or a face of a wall, to a corner
+   * or a side of an area or a fence, to the first point of the line (to close it), then to a
+   * direction of 15° from the last point, then to the grid. Shift: 45° steps. Alt: free.
+   */
+  private pathSnap(world: Point, keys: { altKey: boolean; shiftKey: boolean }): Snap {
+    const step = (value: number) => Math.round(value / GRID_STEP) * GRID_STEP;
+    const start = this.pathPoints[this.pathPoints.length - 1];
+    if (start && keys.shiftKey) {
+      return { point: this.alongAngle(start, world, SHIFT_ANGLE_STEP, step) };
+    }
+    if (keys.altKey) return { point: world };
+    const plan = this.doc.plan;
+    const walls = this.wallTargets();
+    const points = [...walls.points, ...this.pathPoints];
+    const lines = [...walls.lines];
+    const ring = (outline: Point[], closed: boolean) => {
+      points.push(...outline);
+      const n = closed ? outline.length : outline.length - 1;
+      for (let i = 0; i < n; i++) lines.push([outline[i], outline[(i + 1) % outline.length]]);
+    };
+    for (const area of plan.areas) ring(area.points, true);
+    for (const fence of plan.fences) ring(fence.points, false);
+    const best = this.nearestTarget(world, points, lines);
+    if (best) return best;
+    if (start) {
+      const along = this.nearAngle(start, world, step);
+      if (along) return { point: along };
+    }
+    return { point: snapToGrid(world, GRID_STEP) };
+  }
+
+  /** The point in the direction of a multiple of 15° from `start`, if the pointer is near one. */
+  private nearAngle(start: Point, world: Point, step: (value: number) => number): Point | null {
+    const along = this.alongAngle(start, world, ANGLE_STEP, step);
+    const angle = (p: Point) => Math.atan2(p.y - start.y, p.x - start.x);
+    const difference = Math.abs(angle(world) - angle(along)) % (2 * Math.PI);
+    const degrees = (Math.min(difference, 2 * Math.PI - difference) * 180) / Math.PI;
+    return degrees < ANGLE_TOLERANCE ? along : null;
+  }
+
+  /** The nearest point in the snap distance, or else the nearest point on a line, or null. */
+  private nearestTarget(world: Point, points: Point[], lines: [Point, Point][]): Snap | null {
+    const tolerance = this.snapPixels / this.zoom;
+    let best: Snap | null = null;
+    let bestDistance = tolerance;
+    for (const point of points) {
+      const d = distance(world, point);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = { point: { x: point.x, y: point.y }, on: "point" };
+      }
+    }
+    if (best) return best;
+    for (const [a, b] of lines) {
+      const hit = closestOnSegment(world, a, b);
+      if (hit.distance < bestDistance) {
+        bestDistance = hit.distance;
+        best = { point: hit.point, on: "line" };
+      }
+    }
+    return best;
+  }
+
+  /** The corners and the lines of the walls: the center lines and both faces. */
+  private wallTargets(): { points: Point[]; lines: [Point, Point][] } {
     const plan = this.doc.plan;
     if (this.rulerTargets?.plan !== plan) {
       const points: Point[] = [];
@@ -1789,33 +1870,7 @@ export class Editor2D {
       }
       this.rulerTargets = { plan, points, lines };
     }
-    const tolerance = this.snapPixels / this.zoom;
-    let best: Snap | null = null;
-    let bestDistance = tolerance;
-    for (const point of this.rulerTargets.points) {
-      const d = distance(world, point);
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = { point, on: "point" };
-      }
-    }
-    if (best) return best;
-    for (const [a, b] of this.rulerTargets.lines) {
-      const hit = closestOnSegment(world, a, b);
-      if (hit.distance < bestDistance) {
-        bestDistance = hit.distance;
-        best = { point: hit.point, on: "line" };
-      }
-    }
-    if (best) return best;
-    if (start) {
-      const along = this.alongAngle(start, world, ANGLE_STEP, free);
-      const angle = (p: Point) => Math.atan2(p.y - start.y, p.x - start.x);
-      const difference = Math.abs(angle(world) - angle(along)) % (2 * Math.PI);
-      const degrees = (Math.min(difference, 2 * Math.PI - difference) * 180) / Math.PI;
-      if (degrees < ANGLE_TOLERANCE) return { point: along };
-    }
-    return { point: dimension ? snapToGrid(world, GRID_STEP) : world };
+    return this.rulerTargets;
   }
 
   /** The offset of a dimension line from `a` to `b` that goes through the point `p`. */
@@ -2764,13 +2819,19 @@ export class Editor2D {
     }
     if (this.currentTool === "area" || this.currentTool === "fence") {
       // The outline or the line so far, to the cursor. An area shows its closing side dashed.
+      // The first point grows when a click on it closes the path.
       const line = [...this.pathPoints];
-      if (this.cursor) {
-        const target = this.snap(this.cursor.point, { altKey: false, shiftKey: false }).point;
-        marker(target);
+      const cursor = this.cursor;
+      const closes = !!cursor && this.closesPath(cursor.point, cursor.point);
+      if (cursor) {
+        const target = closes ? this.pathPoints[0] : cursor.point;
+        if (!closes)
+          marker(target, cursor.on === "point" ? "on-vertex" : cursor.on ? "on-wall" : "");
         if (line.length > 0) line.push(target);
       }
-      this.pathPoints.forEach((p, i) => marker(p, i === 0 ? "on-vertex" : ""));
+      this.pathPoints.forEach((p, i) =>
+        marker(p, i === 0 ? (closes ? "on-vertex closes" : "on-vertex") : ""),
+      );
       if (line.length > 1) svg("polyline", { points: points(line), class: "path-preview" }, group);
       if (this.currentTool === "area" && line.length > 2) {
         const [first, last] = [line[0], line[line.length - 1]];

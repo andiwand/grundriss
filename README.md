@@ -411,8 +411,11 @@ the story that you choose. A story shows its roofs as dashed lines. Click a roof
 
 ### Outdoor
 
-**Outdoor** (A) in Structure draws an outdoor area: click its corners, and a click on the first
-corner, a double click, or Enter ends it. The panel chooses the kind: a **terrace**, a
+The menu **Outdoor** in Structure has the kinds of areas, of fences, and the tree. An area (A)
+has corners: click them, and a click on the first corner, a double click, or Enter ends it. The
+corners snap to the corners and the faces of the walls, and to the corners and the sides of other
+areas and fences. Shift keeps the direction at steps of 45°, and Alt turns the snap off. The
+menu or the panel chooses the kind: a **terrace**, a
 **balcony**, a **roof terrace**, a **path**, a **driveway**, a **lawn**, a **pool**, the
 **plot**, or a **neighbor building**. An area belongs to its story, so a balcony goes on the floor
 above, and a roof terrace on its story or on a flat roof. Each area has a height of its top
@@ -421,8 +424,9 @@ like the corners of a roof, and a terrace or a balcony has a railing on each sid
 choose. A terrace, a balcony, and a roof terrace count with a quarter of their area as living
 area (WoFlV).
 
-**Fence** (G) draws a fence, a hedge, or a garden wall with a height, and **Tree** (T) puts a tree
-with its crown and its height. Only the edge of a crown takes a click, so the walls under it stay
+A fence (G) is a fence, a hedge, or a garden wall with a height. Its points snap like the corners
+of an area, and a click on the first point closes it into a ring. A tree (T) has a
+crown and a height. Only the edge of a crown takes a click, so the walls under it stay
 easy to select. Trees, neighbor buildings, hedges, fences, and garden walls shade the PV
 fields; a tree that loses its leaves shades only from May to October. The 3D view, the exports,
 and the report show all of it.

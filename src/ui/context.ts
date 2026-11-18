@@ -51,10 +51,10 @@ export const HINTS: Record<Tool, string> = {
   ),
   chimney: t("Click where the chimney goes. It goes up through the stories above and the roof."),
   area: t(
-    "Click the corners of the area. A click on the first corner, a double click, or Enter ends it. The panel chooses the kind. Esc: stop.",
+    "Click the corners of the area. A click on the first corner, a double click, or Enter ends it. It snaps to walls, areas, and fences. Shift: 45° steps. Alt: free. Esc: stop.",
   ),
   fence: t(
-    "Click the points of the fence. A double click or Enter ends it. The panel chooses a fence, a hedge, or a garden wall. Esc: stop.",
+    "Click the points of the fence. A click on the first point closes it, and a double click or Enter ends it. It snaps to walls, areas, and fences. Shift: 45° steps. Alt: free. Esc: stop.",
   ),
   tree: t("Click where the tree stands. The panel sets its crown and its height."),
   calibrate: t("Click two points on the background with a known distance between them."),

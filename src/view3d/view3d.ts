@@ -23,7 +23,7 @@ import { openingShape } from "../model/drawing";
 import { distance, perpendicular } from "../model/geometry";
 import { wallEnds } from "../model/plan";
 import { pvPanels } from "../model/pv";
-import { roofCeiling, roofGeometries, type Vec3 } from "../model/roof";
+import { roofCeiling, roofGeometries, roofsInView, type Vec3 } from "../model/roof";
 import { WINDOW_LIFT } from "../model/roofshape";
 import { findRooms, pointInPolygon, type Room } from "../model/rooms";
 import { wallFaces } from "../model/walljoin";
@@ -567,16 +567,9 @@ export class View3D {
     const visible = building.stories.filter(
       (s) => view.showAbove || !active || s.elevation <= active.elevation + 1e-6,
     );
-    // A roof shows if its story shows, and if all stories show or its story is the active one.
-    // With one story, a roof of the active story shows only if no story is above it. Else, for
-    // example, the roof of a low wing hides the rooms of the story next to the higher part.
-    const visibleIds = new Set(visible.map((s) => s.id));
-    const roofs = building.roofs.filter(
-      (roof) =>
-        visibleIds.has(roof.storyId) &&
-        (view.showAbove ||
-          (roof.storyId === view.activeStoryId && !(active && storyAbove(building, active)))),
-    );
+    // Without the stories above, the roof of the active story does not show, and the roofs of
+    // lower stories show where they are not over the active story, for example over a low wing.
+    const roofs = roofsInView(building, view.activeStoryId, view.showAbove || !active);
     const layers = view.layers ?? ALL_LAYERS;
     const group = buildGroup(building, visible, roofs, layers, () => this.modelLoaded());
     group.traverse((object) => {

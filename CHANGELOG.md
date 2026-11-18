@@ -4,6 +4,21 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Structure: the tools of the outdoor parts are one menu **Outdoor**, like Water and Heating. It
+  has the kinds of areas, the kinds of fences, and the tree, so the palette fits in one row
+  again. The keys A, G, and T still start the tools.
+- 2D: the corners of an area and the points of a fence snap to the corners and the faces of the
+  walls, and to the corners and the sides of the other areas and fences. Shift keeps steps of
+  45°, and Alt turns the snap off, also in the preview. Before, the preview ignored Shift and Alt.
+- 2D: a click on the first point closes an area also when the snap moves the click, and a ring
+  around the point shows it. A click on the first point of a fence closes it into a ring.
+- 2D: the area, fence, tree, and measure tools have the cross cursor, and the cursor of a tool
+  stays over the objects. Before, it changed to the cursor of a move over a selected area.
+- 3D: without "All stories", the roof of the active story does not show, and the roofs of the
+  lower stories show where they are not over the active story. Before, the upper story of a house
+  with a low wing showed its own roof, and the roof of the wing was missing.
+- Server: "Edit" and "View only" in the top bar are the same quiet button.
+
 ## 0.6.1 – 2026-11-18
 
 - Server: in the app of a server, all plans are on the server. **New plan**, **Open a file**, and

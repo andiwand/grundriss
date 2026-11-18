@@ -1242,8 +1242,19 @@ body.wide:not(.compact) #panel > section .field.stacked {
 .editor2d[data-tool="fixture"],
 .editor2d[data-tool="run"],
 .editor2d[data-tool="rectify"],
-.editor2d[data-tool="calibrate"] {
+.editor2d[data-tool="calibrate"],
+.editor2d[data-tool="measure"],
+.editor2d[data-tool="area"],
+.editor2d[data-tool="fence"],
+.editor2d[data-tool="tree"] {
   cursor: crosshair;
+}
+
+/* A tool other than select does not move the objects, so the cursor of the tool stays over them.
+   Space pans in each tool. */
+.editor2d:not([data-tool="select"]) *,
+.editor2d.space * {
+  cursor: inherit !important;
 }
 
 .editor2d line,
@@ -1471,6 +1482,14 @@ body.wide:not(.compact) #panel > section .field.stacked {
 .overlay .cursor.on-vertex,
 .overlay .cursor.on-wall {
   fill: var(--accent);
+}
+
+/* A click on the first point of an area or a fence closes it: a ring shows around the point. */
+.overlay .cursor.closes {
+  stroke: color-mix(in srgb, var(--accent) 35%, transparent);
+  stroke-width: 8;
+  paint-order: stroke;
+  vector-effect: non-scaling-stroke;
 }
 
 /* Dimension lines that the user puts on the plan. */
@@ -2369,6 +2388,20 @@ body.roof-level #tools .divider {
   height: 3px;
   flex: none;
   border-radius: 2px;
+}
+
+/* An area of the outdoor menu is a small surface, and a tree is a crown. */
+.services-menu .swatch.area {
+  height: 14px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.services-menu .swatch.tree {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px;
+  border-radius: 50%;
 }
 
 .menu .check {

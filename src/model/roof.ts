@@ -7,9 +7,9 @@
 
 import { findStory, storyAbove, wallTop } from "./building";
 import { DEFAULT_COLORS } from "./colors";
-import { signedArea } from "./geometry";
-import { newId } from "./plan";
-import { planOutline, pointInPolygon } from "./rooms";
+import { closestOnSegment, intersectionArea, signedArea } from "./geometry";
+import { newId, wallEnds } from "./plan";
+import { findRooms, planOutline, pointInPolygon } from "./rooms";
 import {
   presetSides,
   roofGeometry,
@@ -98,6 +98,38 @@ export function roofGeometries(building: Building): { roof: Roof; geometry: Roof
  */
 export function roofsFromAbove(building: Building): { roof: Roof; geometry: RoofGeometry }[] {
   return roofGeometries(building).sort((a, b) => a.geometry.top - b.geometry.top);
+}
+
+/**
+ * The roofs that the 3D view shows with the active story and the stories below it. The roof of
+ * the active story does not show, so that the view goes into its rooms. A roof of a lower story
+ * shows if it is not over a room of the active story, for example the roof of a low wing next to
+ * the higher part. With `all`, all roofs show.
+ */
+export function roofsInView(building: Building, activeId: Id, all: boolean): Roof[] {
+  if (all) return building.roofs;
+  const active = findStory(building, activeId);
+  if (!active) return building.roofs;
+  const rooms = findRooms(active).map((r) => r.polygon);
+  // The middle of each wall, also of a wall that closes no room yet.
+  const middles = active.walls.map((wall) => {
+    const [a, b] = wallEnds(active, wall);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  });
+  return building.roofs.filter((roof) => {
+    const story = findStory(building, roof.storyId);
+    if (!story || story.elevation >= active.elevation - 1e-6) return false;
+    // A shared side or a small overlap at the walls does not count.
+    if (rooms.some((room) => Math.abs(intersectionArea(roof.outline, room)) >= 0.5)) return false;
+    // A wall on the outline of the roof is next to it, not under it.
+    const n = roof.outline.length;
+    const under = (p: Point) =>
+      pointInPolygon(p, roof.outline) &&
+      roof.outline.every(
+        (a, i) => closestOnSegment(p, a, roof.outline[(i + 1) % n]).distance > 0.05,
+      );
+    return !middles.some(under);
+  });
 }
 
 /** The box of the eaves of all roofs on the plan, or null without roofs. */

@@ -424,10 +424,7 @@ export const PANELS: Record<string, string> = {
   "Outdoor areas": "Außenflächen",
   "Fences and hedges": "Zäune und Hecken",
   Trees: "Bäume",
-  "Draw an outdoor area: a terrace, a balcony, a path, a lawn, or the plot (A)":
-    "Außenfläche zeichnen: Terrasse, Balkon, Weg, Rasen oder Grundstück (A)",
-  "Draw a fence, a hedge, or a garden wall (G)": "Zaun, Hecke oder Gartenmauer zeichnen (G)",
-  "Put a tree (T)": "Baum setzen (T)",
+  "Outdoor areas, fences, and trees (A, G, T)": "Außenflächen, Zäune und Bäume (A, G, T)",
   "A balcony or a roof terrace goes on its story, for example on the floor above or on a flat roof. The plot, the lawn, and the neighbors go on the ground floor.":
     "Ein Balkon oder eine Dachterrasse gehört zu ihrem Geschoss, zum Beispiel zum Geschoss darüber oder auf ein Flachdach. Grundstück, Rasen und Nachbarn gehören ins Erdgeschoss.",
   "living area (WoFlV, a quarter)": "Wohnfläche (WoFlV, ein Viertel)",
@@ -447,10 +444,10 @@ export const PANELS: Record<string, string> = {
     "Ein Baum verschattet die PV-Felder. Ein Baum, der seine Blätter verliert, verschattet nur von Mai bis Oktober.",
   "living area (WoFlV) with {outdoor} m² of terraces and balconies":
     "Wohnfläche (WoFlV) mit {outdoor} m² aus Terrassen und Balkonen",
-  "Click the corners of the area. A click on the first corner, a double click, or Enter ends it. The panel chooses the kind. Esc: stop.":
-    "Klicken Sie die Ecken der Fläche. Ein Klick auf die erste Ecke, ein Doppelklick oder Enter beendet sie. Das Panel wählt die Art. Esc: Ende.",
-  "Click the points of the fence. A double click or Enter ends it. The panel chooses a fence, a hedge, or a garden wall. Esc: stop.":
-    "Klicken Sie die Punkte des Zauns. Ein Doppelklick oder Enter beendet ihn. Das Panel wählt Zaun, Hecke oder Gartenmauer. Esc: Ende.",
+  "Click the corners of the area. A click on the first corner, a double click, or Enter ends it. It snaps to walls, areas, and fences. Shift: 45° steps. Alt: free. Esc: stop.":
+    "Klicken Sie die Ecken der Fläche. Ein Klick auf die erste Ecke, ein Doppelklick oder Enter beendet sie. Sie rastet an Wänden, Flächen und Zäunen ein. Umschalt: 45°-Schritte. Alt: frei. Esc: Ende.",
+  "Click the points of the fence. A click on the first point closes it, and a double click or Enter ends it. It snaps to walls, areas, and fences. Shift: 45° steps. Alt: free. Esc: stop.":
+    "Klicken Sie die Punkte des Zauns. Ein Klick auf den ersten Punkt schließt ihn, ein Doppelklick oder Enter beendet ihn. Er rastet an Wänden, Flächen und Zäunen ein. Umschalt: 45°-Schritte. Alt: frei. Esc: Ende.",
   "Click where the tree stands. The panel sets its crown and its height.":
     "Klicken Sie, wo der Baum steht. Das Panel setzt seine Krone und seine Höhe.",
   "Terraces and balconies, a quarter (WoFlV)": "Terrassen und Balkone, ein Viertel (WoFlV)",

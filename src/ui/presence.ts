@@ -377,9 +377,10 @@ function renderPeople(): void {
   }
   if (current.write) {
     const viewing = current.viewOnly();
-    // The button names the other mode; the mark of the server shows the mode now.
+    // The button names the other mode; the mark of the server shows the mode now. Both modes
+    // have the same quiet button, like the other buttons of the top bar.
     const mode = document.createElement("button");
-    mode.className = viewing ? "mode" : "quiet mode";
+    mode.className = "quiet mode";
     mode.innerHTML = icon(viewing ? "rename" : "eye");
     mode.append(viewing ? t("Edit") : t("View only"));
     mode.title = viewing

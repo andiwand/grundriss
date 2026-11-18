@@ -133,15 +133,31 @@ test("draws a terrace, a hedge, and a tree outside the house", async ({ page }, 
   await page.locator("#panel select").first().selectOption("balcony");
   await expect(page.locator("#plan-2d .area .railing")).toHaveCount(4);
 
-  // A hedge with two points, ended with Enter.
+  // A hedge from the menu "Outdoor" with two points, ended with Enter.
   await page.keyboard.press("Escape");
-  await page.keyboard.press("g");
-  await page.locator("#panel select").first().selectOption("hedge");
-  await page.locator("#panel select").first().blur();
+  await page.locator("#outdoor").click();
+  await page.locator("#outdoor-menu button", { hasText: "Hedge" }).click();
+  await expect(page.locator("#outdoor")).toHaveClass(/active/);
   await at(x0 - 40, y0 - 40);
   await at(x0 + 160, y0 - 40);
   await page.keyboard.press("Enter");
   await expect(page.locator("#plan-2d .fence.hedge")).toHaveCount(1);
+
+  // A fence around a part of the garden: a click on the first point closes it into a ring.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("g");
+  await page.locator("#panel select").first().selectOption("fence");
+  await page.locator("#panel select").first().blur();
+  for (const [x, y] of [
+    [x0 + 220, y0 - 40],
+    [x0 + 300, y0 - 40],
+    [x0 + 300, y0 + 40],
+    [x0 + 220, y0 - 40],
+  ]) {
+    await at(x, y);
+  }
+  await expect(page.locator("#plan-2d .fence:not(.hedge, .wall)")).toHaveCount(1);
+  await page.keyboard.press("ControlOrMeta+z");
 
   // A tree, and an undo removes it again.
   await page.keyboard.press("t");

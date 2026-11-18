@@ -269,22 +269,12 @@
           </button>
           <button
             data-topic="structure"
-            data-tool="area"
+            id="outdoor"
             data-icon="terrace"
-            title="Draw an outdoor area: a terrace, a balcony, a path, a lawn, or the plot (A)"
+            data-menu
+            title="Outdoor areas, fences, and trees (A, G, T)"
           >
-            Outdoor<kbd>A</kbd>
-          </button>
-          <button
-            data-topic="structure"
-            data-tool="fence"
-            data-icon="fence"
-            title="Draw a fence, a hedge, or a garden wall (G)"
-          >
-            Fence<kbd>G</kbd>
-          </button>
-          <button data-topic="structure" data-tool="tree" data-icon="tree" title="Put a tree (T)">
-            Tree<kbd>T</kbd>
+            Outdoor
           </button>
           <button
             data-topic="utilities"
@@ -426,6 +416,7 @@
       </button>
     </div>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
+    <div class="menu services-menu" id="outdoor-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>
       <div class="menu-label">This topic</div>
       <label class="check"><input type="checkbox" data-layer="water" checked /> Water</label>
