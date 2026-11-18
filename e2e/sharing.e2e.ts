@@ -75,10 +75,7 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await viewer.locator('#tools [data-tool="select"]').click();
 
   // The editor deletes all walls; the viewer sees it at once.
-  await page
-    .locator("#plan-2d svg")
-    .first()
-    .click({ position: { x: 5, y: 5 } });
+  await page.locator("#plan-2d svg.editor2d").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
   await expect(walls).toHaveCount(0);
@@ -86,15 +83,13 @@ test("shares a plan of a server, updates a viewer, and restores a revision", asy
   await expect(viewerWalls).toHaveCount(0);
 
   // The viewer only views: its undo changes nothing.
-  await viewer
-    .locator("#plan-2d svg")
-    .first()
-    .click({ position: { x: 5, y: 5 } });
+  await viewer.locator("#plan-2d svg.editor2d").click({ position: { x: 5, y: 5 } });
   await viewer.keyboard.press("ControlOrMeta+z");
   await expect(viewerWalls).toHaveCount(0);
 
   // The editor restores revision 1; the server gets revision 3, and the viewer sees it.
   await page.locator("#file-name").click();
+  await page.locator("#versions").click();
   const versions = page.locator(".app-dialog .token-row");
   await expect(versions).toHaveCount(2);
   await versions.nth(1).getByRole("button", { name: "Restore" }).click();

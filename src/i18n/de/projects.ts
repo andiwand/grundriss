@@ -162,8 +162,8 @@ export const PROJECTS: Record<string, string> = {
   "Versions…": "Versionen…",
   "{name} changed on the disk since you opened it ({time}). OK saves your plan as a new file, and the other version stays. Cancel does not save.":
     "{name} wurde auf dem Datenträger geändert, seit Sie die Datei geöffnet haben ({time}). OK speichert Ihren Plan als neue Datei, und die andere Version bleibt. Abbrechen speichert nicht.",
-  "The name of the plan file. Click for its versions.":
-    "Der Name der Plandatei. Klicken für ihre Versionen.",
+  "The plan file: new, open, save, and versions":
+    "Die Plandatei: neu, öffnen, speichern und Versionen",
   // remote.ts: the copies without the network, and the list of the share links.
   "plan {name}": "Plan {name}",
   "No connection to {server}. You see the copy of this browser from {time}, only to view.":

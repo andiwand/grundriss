@@ -1,4 +1,4 @@
-import { currentLanguage, t } from "../i18n";
+import { t } from "../i18n";
 import { type IconName } from "../icons";
 import { defaultWallHeight } from "../model/building";
 import { isOuterWall, roomHeatLoss, uValue, wallLayers } from "../model/energy";
@@ -6,7 +6,7 @@ import { fmt } from "../model/format";
 import { wallEnds } from "../model/plan";
 import { defaultRack, faceInfo, FLAT_TILT, newPvField, pvLayout, pvSummary } from "../model/pv";
 import { buildingQuantities, circuitQuantities } from "../model/quantities";
-import { findRooms } from "../model/rooms";
+import { findRooms, netRoomArea } from "../model/rooms";
 import {
   FIXTURE_TYPES,
   fixtureSymbol,
@@ -20,7 +20,7 @@ import {
 import type { PvArray, ServiceSystem } from "../model/types";
 import { renderConflicts } from "./conflicts";
 import { $, cached, doc, editor, HINTS, shell, showStatus } from "./context";
-import { pvSourceNote, renderHeatingSystem } from "./energy";
+import { pvSourceNote } from "./energy";
 import {
   button,
   compassName,
@@ -71,13 +71,7 @@ export function renderUtilitiesPanel(): void {
         }
       });
     }
-    // English writes the system in lower case after "Add". German keeps the capital of a noun.
-    const word = currentLanguage() === "de" ? t(name) : name.toLowerCase();
-    const add = button(t("Add {system}", { system: word }), () => openServicesMenu(system, add), {
-      icon: "plus",
-    });
-    add.dataset.menu = "";
-    if (system === "heating") renderHeatingSystem();
+    // The rail has the menus of the devices and the lines, and Energy has the heat source.
     if (system === "electric") {
       renderCircuits();
       renderPvPanel();
@@ -134,7 +128,8 @@ export function renderInteriorPanel(): void {
   for (const room of rooms) {
     button(room.info?.name || t("Room"), () => editor.select({ kind: "room", id: room.key }), {
       icon: "view2d",
-      detail: `${fmt(room.area)} m²`,
+      // The area inside the walls, as on the plan and in the panel of the room.
+      detail: `${fmt(netRoomArea(plan, room))} m²`,
     });
   }
   paragraph(t("Click a room to change its name, its height, and the color of its walls."), "note");

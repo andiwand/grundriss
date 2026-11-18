@@ -602,13 +602,14 @@ function renderEnvelopeInputs(): void {
   });
 }
 
-/** The heat source of the building and its efficiency, in the topic of the utilities. */
-export function renderHeatingSystem(): void {
+/** The heat source of the building and its efficiency. */
+function renderHeatingSystem(): void {
   const heating = doc.building.envelope.heating;
   const setHeating = (edit: (h: typeof heating) => void) =>
     doc.editBuilding((b) => edit(b.envelope.heating));
+  // The heading names the heating, so the field is its kind.
   selectField(
-    t("Heating"),
+    t("Kind"),
     heating.kind,
     Object.entries(HEATING_KINDS).map(([kind, k]) => [kind as typeof heating.kind, t(k.name)]),
     (kind) => doc.editBuilding((b) => (b.envelope.heating = defaultHeating(kind))),
@@ -686,26 +687,15 @@ export function renderHeatingSystem(): void {
   }
 }
 
-/** The heat source of the building, from Utilities, and the price of its energy. */
+/** The heat source of the building and the price of its energy. */
 function renderHeatingInputs(): void {
   const heating = doc.building.envelope.heating;
   const info = HEATING_KINDS[heating.kind];
   heading(t("Heating"), "flame");
   const setHeating = (edit: (h: typeof heating) => void) =>
     doc.editBuilding((b) => edit(b.envelope.heating));
-  const pump = heating.kind === "heat-pump";
-  const detail = pump
-    ? heating.fixedEfficiency
-      ? t("Performance factor {value}", { value: fmt(heating.efficiency) })
-      : heating.source === "ground"
-        ? t("Ground source, calculated performance")
-        : t("Air source, calculated performance")
-    : t("Efficiency {value}", { value: fmt(heating.efficiency) });
-  button(t(info.name), () => shell.setTopic("utilities"), {
-    icon: "flame",
-    detail: t("{detail} · change it in Utilities", { detail }),
-    view: true,
-  });
+  // The heat source is here, where the calculation uses it.
+  renderHeatingSystem();
   if (info.energy === "electricity") {
     paragraph(t("The heating uses the price of electricity of the Electricity group."), "note");
   } else {

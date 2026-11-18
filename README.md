@@ -70,8 +70,16 @@ shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top 
 - **Renovation**: variants of the building with measures or another floor plan, their cost, and
   their payback.
 
-Select, Pan, and Measure are in all topics. The shortcut of a tool opens its topic. **?** shows
-all keyboard shortcuts.
+The rail at the left of the views has the tools of the topic, and the stories below them. It
+serves the 2D and the 3D view: in the 3D view, a tool that draws opens the 2D view next to it.
+Select, Pan, and Measure are in all topics. The title of each tool names its key, and the
+shortcut of a tool opens its topic. **?** shows all keyboard shortcuts. The name of the plan in
+the top bar opens the menu of the file: New plan, Open a plan, Save, Save as, and Versions.
+
+The panel shows the selected object, or the topic without a selection. The data of other topics
+is in closed groups, for example the heating of a room in Structure. The panel of Structure has
+two parts: **This story** (the story, its plan, its collisions, its background) and **Whole
+building** (north, the facade, and the roofs).
 
 The app is in English and in German, with the decimal comma in German. It follows the language
 of the browser; the language button in the top bar switches it.
@@ -221,7 +229,7 @@ browser, also if many revisions use it.
 
 ### Versions
 
-A click on the name of the plan in the top bar shows its versions, and the clock on a plan of
+**Versions** in the menu of the name of the plan shows its versions, and the clock on a plan of
 the Projects page too. A plan in the browser keeps a version at each save to a file and one every
 5 minutes while you edit, the newest 20. A plan on a server shows all its revisions. **Restore**
 gives the plan the state of a version, and undo takes it back; before a restore, the browser keeps
@@ -279,8 +287,9 @@ internet.
    corner stays in its place.
    **Split into two walls** cuts a selected wall in the middle, or beside a door or a window
    there, and selects the two parts, so that you can type their lengths.
-8. Use the list at the bottom left to add a story, an attic, or a cellar, and to switch between
-   the stories. The walls of the story below show as dashed lines, so you can draw on top of
+8. Use the stories at the bottom of the rail to add a story, an attic, or a cellar, and to switch
+   between them: 0 is the ground floor, 1 the floor above, and −1 the cellar. The chip at the top
+   left of each view names the active story. The walls of the story below show as dashed lines, so you can draw on top of
    them. Each story has its own background.
 9. Select **Stair** and click the bottom and the top of the run. The stair goes up to the next
    story. The panel changes it to an L stair or a U stair with a landing. Select **Chimney**
@@ -392,7 +401,7 @@ or the facade.
 
 ### Roofs
 
-**Roof** at the top of the list of the stories shows the roofs of all stories from above: each
+**Roof** at the top of the stories in the rail shows the roofs of all stories from above: each
 face in the color of its roof, with a shade of its slope, and the walls of all stories as thin
 lines over them. A roof can sit on any story, for example on the ground floor over a part
 without a story above; a higher roof covers a lower one. Click a roof to select it, and drag it

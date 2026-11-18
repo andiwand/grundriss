@@ -255,6 +255,11 @@ button.quiet:hover:not(:disabled) {
   font-variant-numeric: tabular-nums;
 }
 
+/* A list with a long value cuts it at the end; its title shows the full value. */
+select.control {
+  text-overflow: ellipsis;
+}
+
 textarea.control {
   height: auto;
   padding: 6px 8px;
@@ -391,6 +396,18 @@ textarea.control {
   color: var(--ink-3);
   font-weight: 400;
   font-size: 12px;
+}
+
+/* The menu of the file name: an icon and the name of each action in one row, at the left. */
+#file-menu {
+  min-width: 200px;
+}
+
+#file-menu button {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
 }
 
 /* ----- The top bar ----- */
@@ -631,36 +648,43 @@ body:not(.no-plan) #language {
 #area {
   /* The width of the panel: medium for the renovation, which has more to show. */
   --panel-width: 272px;
+  --rail-width: 52px;
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   padding: 10px;
   min-height: 0;
   transition: grid-template-columns 200ms ease;
 }
 
-/* Each child has a fixed cell, so that the start card can lie over the panes. */
-#plan-2d {
+/* Each child has a fixed cell, so that the start card can lie over the panes: the rail, the 2D
+   view, the 3D view, and the panel. */
+#rail {
   grid-area: 1 / 1;
 }
-#plan-3d {
+#plan-2d {
   grid-area: 1 / 2;
 }
-#panel {
+#plan-3d {
   grid-area: 1 / 3;
+}
+#panel {
+  grid-area: 1 / 4;
 }
 
 #area.view-split {
-  grid-template-columns: 1fr 1fr var(--panel-width);
+  grid-template-columns: var(--rail-width) 1fr 1fr var(--panel-width);
 }
 
 #area.view-2d {
-  grid-template-columns: 1fr 0 var(--panel-width);
+  grid-template-columns: var(--rail-width) 1fr 0 var(--panel-width);
 }
 
 #area.view-3d {
-  grid-template-columns: 0 1fr var(--panel-width);
+  grid-template-columns: var(--rail-width) 0 1fr var(--panel-width);
 }
 
+/* One view has no width: its two gaps become one. */
 #area.view-2d,
 #area.view-3d {
   column-gap: 0;
@@ -668,7 +692,12 @@ body:not(.no-plan) #language {
 
 #area.view-2d #panel,
 #area.view-3d #panel {
-  margin-left: 8px;
+  margin-left: 10px;
+}
+
+#area.view-2d #rail,
+#area.view-3d #rail {
+  margin-right: 10px;
 }
 
 body.medium #area {
@@ -680,12 +709,17 @@ body.medium #area {
    view and the panel is where the edge between the two views is. */
 body.wide #area.view-2d,
 body.wide #area.view-3d {
-  grid-template-columns: 1fr 1fr 272px;
-  column-gap: 8px;
+  grid-template-columns: var(--rail-width) 1fr 1fr 272px;
+  column-gap: 10px;
+}
+
+body.wide #area.view-2d #rail,
+body.wide #area.view-3d #rail {
+  margin-right: 0;
 }
 
 body.wide #area #panel {
-  grid-area: 1 / 2 / 2 / 4;
+  grid-area: 1 / 3 / 2 / 5;
   margin-left: 0;
 }
 
@@ -695,11 +729,11 @@ body.wide #area.view-3d #plan-2d {
 }
 
 body.wide #area.view-3d #plan-3d {
-  grid-area: 1 / 1;
+  grid-area: 1 / 2;
 }
 
 body.wide .empty-state {
-  grid-column: 1;
+  grid-column: 2;
 }
 
 .pane {
@@ -752,38 +786,48 @@ body.wide .empty-state {
   box-shadow: var(--shadow-sm);
 }
 
-/* The floating tool palette over the 2D editor. */
+/* The rail at the left of the views: the tools of the topic at the top, and the stories at the
+   bottom. Each tool is an icon; its title names it and its key. */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
 
 .palette {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 2px;
+  min-height: 0;
   padding: 4px;
-  /* With "left: 50%", the width of the content is at most half the pane. The palette can use
-     the full pane. */
-  width: max-content;
-  /* The compass is at the top right, so the palette keeps the same space free at each side. */
-  max-width: calc(100% - 152px);
-  overflow-x: auto;
+  overflow-y: auto;
   scrollbar-width: none;
   border: 1px solid var(--glass-edge);
   border-radius: 14px;
   background: var(--surface-glass);
   backdrop-filter: blur(10px);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .palette button {
-  height: 34px;
-  padding: 0 10px;
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 36px;
+  padding: 0;
+  gap: 0;
+  font-size: 0;
   border-color: transparent;
   background: transparent;
   color: var(--ink-2);
+}
+
+/* The keys are in the titles and in the help of the shortcuts (?), not on the buttons. */
+.palette button kbd {
+  display: none;
 }
 
 .palette button:hover:not(:disabled) {
@@ -799,39 +843,68 @@ body.wide .empty-state {
   box-shadow: var(--brand-glow);
 }
 
-.palette button.active kbd {
-  background: rgb(255 255 255 / 0.2);
-  color: var(--accent-ink);
-}
-
 .palette .divider {
   flex: none;
+  width: 24px;
+  height: 1px;
+  margin: 3px 0;
+  background: var(--line);
+}
+
+/* The scale and the straightening need a background: without one, they take no room. */
+.palette [data-tool="calibrate"]:disabled,
+.palette [data-tool="rectify"]:disabled {
+  display: none;
+}
+
+/* In the 3D view, the tools that draw work in the 2D view. A click on one opens the 2D view. */
+#area.view-3d .palette button:not([data-tool="select"], [data-tool="pan"]) {
+  opacity: 0.55;
 }
 
 #plan-2d {
   container-type: inline-size;
 }
 
-/* In a narrow 2D pane, the palette hides the keys, then shows only the icons (`fitBar`). */
-.palette.fit-keys kbd {
-  display: none;
+/* On a phone, the rail lies over the view: the tools in a row at the top, which scrolls with the
+   finger, and the active story below it. The palette hides the labels if they do not fit
+   (`fitBar`). */
+body.compact #rail {
+  display: contents;
 }
 
-.palette.fit-icons button {
+body.compact .palette {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  flex-direction: row;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: var(--shadow);
+}
+
+body.compact .palette button {
+  width: auto;
+  height: 34px;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: inherit;
+}
+
+body.compact .palette .divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+}
+
+body.compact .palette.fit-icons button {
   padding: 0 8px;
   font-size: 0;
   gap: 0;
-}
-
-/* If the icons do not fit either, the palette gets a second row, so that each tool stays
-   visible. On a phone, the palette scrolls with the finger. */
-body:not(.compact) .palette.fit-none {
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-body:not(.compact) .palette.fit-none .divider {
-  display: none;
 }
 
 /* The start card lies in the first row of the grid of the area, over the columns of the 2D and
@@ -839,7 +912,7 @@ body:not(.compact) .palette.fit-none .divider {
    in the middle of the visible pane. */
 .empty-state {
   grid-row: 1;
-  grid-column: 1 / 3;
+  grid-column: 2 / 4;
   align-self: center;
   justify-self: center;
   z-index: 3;
@@ -942,6 +1015,25 @@ body:not(.compact) .palette.fit-none .divider {
 #panel section + section {
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+
+/* The label of a scope of the panel, for example "This story" and "Whole building". */
+#panel .panel-scope {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+#panel section + .panel-scope {
+  margin-top: 8px;
+}
+
+#panel .panel-scope + section {
+  padding-top: 0;
+  border-top: 0;
 }
 
 #panel h2 {
@@ -1784,38 +1876,43 @@ body.roof-level #tools .divider {
   opacity: 0.7;
 }
 
-/* The list of stories, at the bottom left of the 2D editor. */
+/* The stories at the bottom of the rail, from the roof level down to the cellars. Each one shows
+   its number; its title names it. On a phone, the list lies over the view with the names. */
 
 .stories {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: 2;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
-  width: 168px;
+  margin-top: auto;
   padding: 4px;
   border: 1px solid var(--glass-edge);
-  border-radius: var(--radius);
+  border-radius: 14px;
   background: var(--surface-glass);
   backdrop-filter: blur(10px);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .stories .story {
-  justify-content: space-between;
+  flex: none;
+  width: 42px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0;
   border-color: transparent;
   background: transparent;
   color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
-.stories .story small {
-  color: var(--ink-3);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
+.stories .story .name,
+.stories .story small,
+.stories .add span {
+  display: none;
+}
+
+.stories .story .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .stories .story.active {
@@ -1824,22 +1921,78 @@ body.roof-level #tools .divider {
   box-shadow: var(--brand-glow);
 }
 
-.stories .story.active small {
-  color: rgb(255 255 255 / 0.85);
-}
-
 .stories .ground {
+  width: 24px;
   height: 1px;
-  margin: 2px 6px;
+  margin: 2px 0;
   background: var(--line-strong);
 }
 
 .stories .add {
+  flex: none;
+  width: 42px;
   height: 28px;
+  padding: 0;
   border-style: dashed;
   border-color: var(--line-strong);
   background: transparent;
   color: var(--ink-3);
+}
+
+body.compact .stories {
+  position: absolute;
+  top: 60px;
+  left: 8px;
+  z-index: 2;
+  align-items: stretch;
+  min-width: 132px;
+  margin: 0;
+  box-shadow: var(--shadow);
+}
+
+body.compact .stories .story {
+  width: auto;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+body.compact .stories .story .number {
+  display: none;
+}
+
+body.compact .stories .story .name,
+body.compact .stories .story small,
+body.compact .stories .add span {
+  display: inline;
+}
+
+body.compact .stories .story small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+body.compact .stories .story.active small {
+  color: rgb(255 255 255 / 0.85);
+}
+
+body.compact .stories .add {
+  width: auto;
+  gap: 6px;
+}
+
+body.compact .stories .ground {
+  width: auto;
+  margin: 2px 6px;
+}
+
+body.compact .stories:not(.open) > :not(.active) {
+  display: none;
+}
+
+/* On a phone, the list of the stories names the active story, so the chips do not show. */
+body.compact .story-chip {
+  display: none !important;
 }
 
 /* The compass at the top right of the 2D editor. A drag turns it. */
@@ -1883,21 +2036,6 @@ body.roof-level #tools .divider {
   font-weight: 700;
   text-anchor: middle;
   fill: var(--ink);
-}
-
-/* In a narrow 2D pane, the compass goes below the palette. */
-@container (max-width: 640px) {
-  .compass {
-    top: 60px;
-  }
-
-  body:not(.compact) #plan-2d:has(.palette.fit-none) .compass {
-    top: 102px;
-  }
-
-  .palette {
-    max-width: calc(100% - 24px);
-  }
 }
 
 /* A toggle at the top right of the 3D view. */
@@ -3929,24 +4067,6 @@ body.compact #status.gone {
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
-}
-
-/* The palette stays at the top of the view, and the stories below it, collapsed. */
-body.compact .palette {
-  top: 8px;
-  max-width: calc(100% - 16px);
-}
-
-body.compact .stories {
-  top: 60px;
-  bottom: auto;
-  left: 8px;
-  width: auto;
-  min-width: 132px;
-}
-
-body.compact .stories:not(.open) > :not(.active) {
-  display: none;
 }
 
 body.compact .compass {

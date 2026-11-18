@@ -4,6 +4,29 @@ The changes that a user notices.
 
 ## Unreleased
 
+- The tools and the stories are a rail at the left of the views. The rail serves the 2D and the
+  3D view, so the 3D view alone has tools and stories too. In the 3D view, a tool that draws
+  opens the 2D view next to it. The stories show their number (0 is the ground floor), and a chip
+  at the top left of each view names the active story. Nothing floats over the plan but the
+  compass. The tools show no keys; their titles name them.
+- The name of the plan opens the menu of the file: New plan, Open a plan, Save, Save as, and
+  Versions. The top bar has room again, so the topics keep their names.
+- The area of the rooms is the area inside the walls everywhere: in the list of the rooms of
+  Interior and in the Plan of Structure. Before, both used the center lines of the walls, so the
+  kitchen of the example house had 16.00 m² in the list and 14.36 m² on the plan.
+- Structure: the panel has two parts, This story and Whole building. Delete story is at the end
+  of This story.
+- Utilities: the buttons "Add water", "Add heating", and so on are gone, because the rail has
+  the same menus. The heat source (kind, source, flow temperature) is in Energy, where the
+  calculation uses it.
+- A selected room shows its name first, and a selected wall shows Split after its height. The
+  heating of a room and the insulation of a wall are groups, open in Energy and Renovation and
+  closed in the other topics. An inner wall shows no empty insulation values.
+- A list in the panel is always beside its label. A long value ends with "…", and its title shows
+  the full value.
+- Website: the chapters Stories and Roof are one chapter, and the texts name the outdoor parts
+  and the shade of trees and neighbors.
+
 ## 0.6.4 – 2026-11-18
 
 - Server: a new layout of the page of the account. The cards are in one column in the middle.

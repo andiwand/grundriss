@@ -14,7 +14,6 @@ export const CHAPTERS: [ChapterId, string][] = [
   ["scan", "image"],
   ["plan", "wall"],
   ["walls", "split"],
-  ["stories", "stair"],
   ["roof", "roof"],
   ["furnish", "sofa"],
   ["services", "plug"],

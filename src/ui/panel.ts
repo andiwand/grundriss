@@ -4,7 +4,7 @@ import { uValue } from "../model/energy";
 import { fmt } from "../model/format";
 import { layersThickness, MATERIALS } from "../model/insulation";
 import type { Layer } from "../model/types";
-import { panel } from "./context";
+import { app, panel, type Topic } from "./context";
 import {
   button as makeButton,
   type ButtonKind,
@@ -18,9 +18,6 @@ import {
 } from "./controls";
 
 export { iconButton };
-
-/** A list with a value longer than this many characters goes under its label in the panel. */
-const LONG_CHOICE = 12;
 
 /** The section of the panel that the helpers below append to. */
 export let section: HTMLElement = panel;
@@ -44,6 +41,23 @@ export function heading(text: string, iconName?: IconName): void {
   if (iconName) element.innerHTML = icon(iconName);
   element.append(text);
   section.append(element);
+  column.append(section);
+}
+
+/**
+ * A label over the sections of one scope of the panel, for example "This story" and "Whole
+ * building", so that the user sees what a change applies to.
+ */
+export function scope(text: string): void {
+  const element = document.createElement("div");
+  element.className = "panel-scope";
+  element.textContent = text;
+  column.append(element);
+}
+
+/** A section without a heading, for example for the danger action at the end of a scope. */
+export function plainSection(): void {
+  section = document.createElement("section");
   column.append(section);
 }
 
@@ -99,14 +113,17 @@ export function button(
 
 /**
  * A row of the panel: a label on the left and a control in a box on the right. All controls have
- * one width, so they start at one line. A list with a long value goes under its label, so that
- * the list does not cut its value.
+ * one width, so they start at one line. A list cuts a long value with an ellipsis, and its title
+ * shows the full value.
  */
 export function field(text: string, control: HTMLElement, unit?: string): void {
-  const stacked =
-    control instanceof HTMLSelectElement &&
-    [...control.options].some((option) => option.text.length > LONG_CHOICE);
-  section.append(fieldRow(text, withUnit(control, unit), { stacked }));
+  if (control instanceof HTMLSelectElement) {
+    const select = control;
+    const title = () => (select.title = select.selectedOptions[0]?.text ?? "");
+    title();
+    select.addEventListener("change", title);
+  }
+  section.append(fieldRow(text, withUnit(control, unit)));
 }
 
 /**
@@ -261,6 +278,14 @@ export function group(title: string, open: boolean, fill: () => void): void {
   section = details;
   fill();
   section = outer;
+}
+
+/**
+ * A group of the data of some topics, for example the heating of a room. It is open in these
+ * topics and closed in the others, so that the panel shows first what the topic is about.
+ */
+export function topicGroup(title: string, topics: Topic[], fill: () => void): void {
+  group(title, topics.includes(app.topic), fill);
 }
 
 /**

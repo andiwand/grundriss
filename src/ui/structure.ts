@@ -7,7 +7,7 @@ import { outdoorLivingArea } from "../model/outdoor";
 import { newRoof, roofBase, roofGeometryOf } from "../model/roof";
 import { halfHipHeight, presetSides } from "../model/roofshape";
 import type { Room } from "../model/rooms";
-import { findRooms, planOutline } from "../model/rooms";
+import { findRooms, netRoomArea, planOutline } from "../model/rooms";
 import type { Dormer, Roof, RoofKind, RoofSide, RoofWindow, Story } from "../model/types";
 import { renderConflicts } from "./conflicts";
 import { doc, editor, shell, showStatus } from "./context";
@@ -20,7 +20,9 @@ import {
   heading,
   numberField,
   paragraph,
+  plainSection,
   rangeField,
+  scope,
   section,
   selectField,
   stats,
@@ -66,29 +68,50 @@ function renderBackgroundPanel(): void {
   }
 }
 
-/** The story, the walls and the rooms of the plan, the orientation, and the roofs. */
+/**
+ * The panel of Structure in two scopes: this story (its values, its plan, its collisions, its
+ * background, and its removal), and the whole building (the orientation, the facade, the roofs).
+ */
 export function renderStructurePanel(): void {
   const plan = doc.plan;
+  scope(t("This story"));
   renderStoryPanel();
   heading(t("Plan"), "view2d");
   const rooms = findRooms(plan);
-  const area = rooms.reduce((sum, room) => sum + room.area, 0);
+  // The area inside the walls, as the labels of the rooms on the plan show it.
+  const area = rooms.reduce((sum, room) => sum + netRoomArea(plan, room), 0);
   stats([
     [String(plan.walls.length), t("walls")],
     [String(plan.openings.length), t("openings")],
     [String(rooms.length), t("rooms")],
     [`${fmt(area, 1)} m²`, t("area")],
   ]);
-  paragraph(t("The area is inside the center lines of the walls."), "note");
+  paragraph(t("The area is inside the walls, as on the plan."), "note");
   renderConflicts();
-  // Before the first wall, the background comes first, because the tracing starts with it.
-  if (plan.walls.length === 0) {
-    renderBackgroundPanel();
-    renderBuildingPanel();
-  } else {
-    renderBuildingPanel();
-    renderBackgroundPanel();
-  }
+  renderBackgroundPanel();
+  renderDeleteStory();
+  scope(t("Whole building"));
+  renderBuildingPanel();
+}
+
+/** The removal of the active story, at the end of its scope. A building keeps one story. */
+function renderDeleteStory(): void {
+  const id = doc.plan.id;
+  if (doc.building.stories.length < 2) return;
+  plainSection();
+  button(
+    t("Delete story {name}", { name: t(doc.plan.name) }),
+    () => {
+      doc.editBuilding((b) => {
+        b.stories = b.stories.filter((s) => s.id !== id);
+        // A roof on the deleted story goes away with its PV fields.
+        const gone = new Set(b.roofs.filter((r) => r.storyId === id).map((r) => r.id));
+        b.roofs = b.roofs.filter((r) => !gone.has(r.id));
+        b.pv = b.pv.filter((a) => !gone.has(a.roofId));
+      });
+    },
+    { kind: "danger", icon: "trash" },
+  );
 }
 
 /**
@@ -180,21 +203,6 @@ function renderStoryPanel(): void {
     doc.editBuilding((b) => (findStory(b, id)!.heated = value)),
   );
   renderStoryLivingArea(story);
-  if (doc.building.stories.length > 1) {
-    button(
-      t("Delete story"),
-      () => {
-        doc.editBuilding((b) => {
-          b.stories = b.stories.filter((s) => s.id !== id);
-          // A roof on the deleted story goes away with its PV fields.
-          const gone = new Set(b.roofs.filter((r) => r.storyId === id).map((r) => r.id));
-          b.roofs = b.roofs.filter((r) => !gone.has(r.id));
-          b.pv = b.pv.filter((a) => !gone.has(a.roofId));
-        });
-      },
-      { kind: "danger", icon: "trash" },
-    );
-  }
 }
 
 /** The orientation and the roofs of the building. */

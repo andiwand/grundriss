@@ -28,6 +28,13 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   interior, energy, and renovation. Energy and renovation have a wide panel (`body.wide`). A topic selects the tools of the palette (`data-topic`), the panel without a
   selection, and the layers. The overview (`#overview`) shows the contents in place of the 2D
   and the 3D view. The topic is not in the plan file.
+- The work area (`#area`) is a grid: the rail (`#rail`: the palette `#tools` and the stories
+  `#stories`), the 2D view, the 3D view, and the panel. The rail serves both views. In the 3D
+  view, a tool that draws switches to the split view (`showDrawingView` in `main.ts`). On a
+  phone, the rail has `display: contents`, and the palette and the stories lie over the view.
+- The panel of a selection shows the data of other topics in closed groups (`topicGroup` in
+  `panel.ts`). A list in the panel stays beside its label and cuts a long value; its title shows
+  the full value.
 - `src/main.ts` is the shell: the topics, the tools, the views, the files, the menus, the
   keyboard, and the wiring. The panel of each topic is a module in `src/ui/`. They share
   `src/ui/context.ts`: `doc`, `editor`, `view3d`, the state of the app (`app`), and `shell`, the

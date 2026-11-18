@@ -39,9 +39,10 @@
       <div
         class="file-name plan-tools"
         id="file-name"
-        title="The name of the plan file. Click for its versions."
+        title="The plan file: new, open, save, and versions"
         role="button"
         tabindex="0"
+        data-menu
       >
         <span id="file-title">plan.grundriss</span>
         <span class="dirty-dot" title="Unsaved changes"></span>
@@ -106,22 +107,6 @@
         </button>
       </nav>
       <div class="spacer"></div>
-      <div class="group plan-tools">
-        <button class="icon-button" id="new" data-icon="new" title="New plan"></button>
-        <button
-          class="icon-button"
-          id="open"
-          data-icon="open"
-          title="Open a plan (Ctrl+O)"
-        ></button>
-        <button class="icon-button" id="save" data-icon="save" title="Save (Ctrl+S)"></button>
-        <button
-          class="icon-button"
-          id="save-as"
-          data-icon="saveAs"
-          title="Save as (Ctrl+Shift+S)"
-        ></button>
-      </div>
       <button
         id="install"
         class="quiet home-only"
@@ -190,7 +175,9 @@
       ></button>
     </header>
     <main id="area" class="view-split">
-      <section id="plan-2d" class="pane">
+      <!-- The rail at the left of the views: the tools of the topic, and the stories below them.
+           It serves the 2D and the 3D view. On a phone, it lies over the view (style.css). -->
+      <nav class="rail" id="rail" aria-label="Tools and stories">
         <div class="palette" id="tools" role="toolbar" aria-label="Tools">
           <button data-tool="select" data-icon="select" title="Select and move (V)">
             Select<kbd>V</kbd>
@@ -339,6 +326,9 @@
           </button>
         </div>
         <div class="stories" id="stories" aria-label="Stories"></div>
+      </nav>
+      <section id="plan-2d" class="pane">
+        <span class="pane-label story-chip" data-no-translate></span>
         <!-- A finger has no Esc and no Enter: this button ends the drawing tool. -->
         <button class="tool-done primary" id="tool-done" data-icon="check" hidden>Done</button>
         <div class="catalog" id="catalog" hidden></div>
@@ -361,7 +351,7 @@
         <a class="map-credit" id="map-credit" target="_blank" rel="noopener" hidden></a>
       </section>
       <section id="plan-3d" class="pane">
-        <span class="pane-label">3D · drag to orbit, scroll to zoom, double-click to fit</span>
+        <span class="pane-label story-chip" data-no-translate></span>
         <button class="pill-toggle" id="show-above" title="Show the stories above the active story">
           All stories
         </button>
@@ -431,6 +421,16 @@
       <button data-more="help" role="menuitem" data-icon="help">
         <span>Keyboard shortcuts</span>
       </button>
+    </div>
+    <!-- The menu of the file name: the files and the versions of the plan. -->
+    <div class="menu" id="file-menu" role="menu" hidden>
+      <button id="new" role="menuitem" data-icon="new"><span>New plan</span></button>
+      <button id="open" role="menuitem" data-icon="open">
+        <span>Open a plan</span>
+      </button>
+      <button id="save" role="menuitem" data-icon="save"><span>Save</span></button>
+      <button id="save-as" role="menuitem" data-icon="saveAs"><span>Save as</span></button>
+      <button id="versions" role="menuitem" data-icon="history"><span>Versions</span></button>
     </div>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>

@@ -98,7 +98,7 @@ test("shows two people who edit through share links, and their changes", async (
     expect(one.url()).toBe(`${base}/app/plans/${plan.id}`);
     await one.reload();
     await expect(one.locator("#remote-state")).toHaveText("Grundriss");
-    await expect(one.locator("#plan-2d svg").first()).toBeVisible();
+    await expect(one.locator("#plan-2d svg.editor2d")).toBeVisible();
     await openServerApp(two, base, `/s/${second.token}`);
     // Both edit at once; each sees the other, by the label of the link.
     await expect(two.locator("#remote-state")).toHaveText("Grundriss");

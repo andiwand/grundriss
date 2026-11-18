@@ -24,7 +24,7 @@ export const isPhone = (page: Page) =>
 
 /** Clicks a point of the 2D plan, in pixels from the top left corner of the 2D pane. */
 export async function clickPlan(page: Page, x: number, y: number): Promise<void> {
-  const box = (await page.locator("#plan-2d svg").first().boundingBox())!;
+  const box = (await page.locator("#plan-2d svg.editor2d").boundingBox())!;
   await page.mouse.click(box.x + x, box.y + y);
 }
 

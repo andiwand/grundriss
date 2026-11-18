@@ -82,6 +82,7 @@ import {
   setSection,
   stats,
   textField,
+  topicGroup,
 } from "./panel";
 import { renderRenovationTopic } from "./renovation";
 import {
@@ -452,15 +453,15 @@ function renderRoom(plan: Story, id: Id): void {
     });
   heading(t("Room"), "view2d");
   const height = room.info?.height ?? defaultWallHeight(plan);
+  textField(t("Name"), room.info?.name ?? "", (value) => change((info) => (info.name = value)), {
+    placeholder: t("For example Kitchen"),
+    allowEmpty: true,
+  });
   stats([
     [`${fmt(netRoomArea(plan, room))} m²`, t("area inside the walls")],
     [`${fmt(height)} m`, t("clear height")],
   ]);
   renderLivingArea(plan, room);
-  textField(t("Name"), room.info?.name ?? "", (value) => change((info) => (info.name = value)), {
-    placeholder: t("For example Kitchen"),
-    allowEmpty: true,
-  });
   numberField(t("Height"), height, (value) => change((info) => (info.height = value)), {
     min: 0.5,
   });
@@ -486,8 +487,9 @@ function renderRoom(plan: Story, id: Id): void {
       ? { title: t("Default color"), action: () => change((info) => (info.wallColor = null)) }
       : undefined,
   );
+  // The heating is open in Energy and Renovation, and closed in the topics that draw.
+  topicGroup(t("Heating"), ["energy", "renovation"], () => renderRoomHeating(plan, room, change));
   renderNotes(room.info?.note, (edit) => change((info) => (info.note = edit(info.note))));
-  renderRoomHeating(plan, room, change);
 }
 
 /** The heating of a room: its heat loss, its heating, the heat pump, and the summer. */
@@ -496,7 +498,6 @@ function renderRoomHeating(
   room: Room,
   change: (edit: (info: RoomInfo) => void) => void,
 ): void {
-  heading(t("Heating"), "flame");
   if (!story.heated) {
     paragraph(
       t(
@@ -1014,6 +1015,8 @@ function renderWall(plan: Story, id: Id): void {
   const rooms = findRooms(plan);
   lengthFields(plan, [id], rooms);
   directionFields(plan, [id]);
+  numberOf(t("Thickness"), wall, "thickness", edit);
+  numberOf(t("Height"), wall, "height", edit);
   // The two parts stay selected, so that the panel shows the length of each part.
   button(
     t("Split into two walls"),
@@ -1024,8 +1027,6 @@ function renderWall(plan: Story, id: Id): void {
     },
     { icon: "wall" },
   );
-  numberOf(t("Thickness"), wall, "thickness", edit);
-  numberOf(t("Height"), wall, "height", edit);
   // The color of each side: its own color, or the color of the room or the facade there.
   for (const side of [1, -1] as const) {
     const key = side === 1 ? "right" : "left";
@@ -1046,24 +1047,27 @@ function renderWall(plan: Story, id: Id): void {
         : undefined,
     );
   }
-  const outer = isOuterWall(plan, wall);
-  heading(t("Insulation"), "layers");
-  stats([
-    [outer ? t("Outer") : t("Inner"), t("wall")],
-    [outer ? fmt(uValue(wallLayers(doc.building, wall), "wall")) : "–", t("U-value W/(m²K)")],
-  ]);
-  if (!outer) {
-    paragraph(t("An inner wall between two rooms does not lose heat."), "note");
-  } else if (wall.layers === null) {
-    paragraph(t("The wall has the layers of the outer walls of the building."), "note");
-    button(
-      t("Own layers"),
-      () => edit((w) => (w.layers = structuredClone(doc.building.envelope.wall))),
-      { icon: "layers" },
-    );
+  // An inner wall loses no heat, so it has no insulation. The insulation of an outer wall is
+  // open in Energy and Renovation.
+  if (isOuterWall(plan, wall)) {
+    const u = fmt(uValue(wallLayers(doc.building, wall), "wall"));
+    topicGroup(t("Insulation · U {value}", { value: u }), ["energy", "renovation"], () => {
+      if (wall.layers === null) {
+        paragraph(t("The wall has the layers of the outer walls of the building."), "note");
+        button(
+          t("Own layers"),
+          () => edit((w) => (w.layers = structuredClone(doc.building.envelope.wall))),
+          { icon: "layers" },
+        );
+      } else {
+        layerEditor(wall.layers, "wall", (change) => edit((w) => change(w.layers!)));
+        button(t("Layers of the building"), () => edit((w) => (w.layers = null)), {
+          icon: "layers",
+        });
+      }
+    });
   } else {
-    layerEditor(wall.layers, "wall", (change) => edit((w) => change(w.layers!)));
-    button(t("Layers of the building"), () => edit((w) => (w.layers = null)), { icon: "layers" });
+    paragraph(t("An inner wall between two rooms does not lose heat."), "note");
   }
   itemActions(wall, edit, {
     remove: () => doc.edit((plan) => removeWall(plan, id)),

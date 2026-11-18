@@ -248,6 +248,7 @@ test("keeps versions of a project and restores one", async ({ page }) => {
   // The autosave runs after a short wait.
   await page.waitForTimeout(1500);
   await page.locator("#file-name").click();
+  await page.locator("#versions").click();
   const dialog = page.locator(".app-dialog");
   await expect(dialog.locator(".token-row")).toHaveCount(1);
   await dialog.getByRole("button", { name: "Restore" }).click();

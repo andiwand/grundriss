@@ -15,7 +15,6 @@ export type ChapterId =
   | "scan"
   | "plan"
   | "walls"
-  | "stories"
   | "roof"
   | "furnish"
   | "services"
@@ -103,22 +102,17 @@ const en = {
     plan: {
       kicker: "Draw",
       title: "Walls, doors, and rooms",
-      text: "Draw walls with snapping and angles, then add doors, windows, and dimensions. Each door and window shows which way it opens. Rooms close by themselves and get a name and an area. Type the length of each wall side from wall to wall, and pin the corners that must stay. If a cupboard stands in the way of a door, the app marks it.",
+      text: "Draw walls with snapping and angles, then add doors, windows, and dimensions. Rooms close by themselves and get a name and an area. Type the length of each wall side, and pin the corners that must stay. If a cupboard blocks a door, the app marks it.",
     },
     walls: {
       kicker: "3D",
       title: "The house in 3D",
-      text: "The 3D view next to the plan shows each wall with its thickness, its height, and the openings for doors and windows. Turn the house while you draw, or drag furniture, doors, and windows in 3D.",
-    },
-    stories: {
-      kicker: "Stories",
-      title: "Cellar to attic",
-      text: "Add a cellar, more floors, and an attic, and connect them with straight, L, or U stairs. You can mark a cellar or an attic as unheated.",
+      text: "The 3D view next to the plan shows each wall with its thickness, its height, and its openings. Turn the house while you draw, or drag furniture, doors, and windows in 3D. Terraces, balconies, paths, the garden, fences, and trees show around the house.",
     },
     roof: {
-      kicker: "Roof",
-      title: "Any roof shape",
-      text: "Gable, hip, half hip, shed, or flat on any outline, or set each side on its own. Add dormers and roof windows. Each attic room shows its living area by the German WoFlV.",
+      kicker: "Stories and roof",
+      title: "Cellar to roof",
+      text: "Add a cellar, more floors, and an attic, and connect them with straight, L, or U stairs. Put a gable, hip, half hip, shed, or flat roof on any outline, with dormers and roof windows. Each attic room shows its living area by the German WoFlV.",
     },
     furnish: {
       kicker: "Furniture",
@@ -139,12 +133,12 @@ const en = {
     sun: {
       kicker: "Solar",
       title: "Solar panels and battery",
-      text: "Panels go on roof faces, or on racks on a flat roof. Grundriss accounts for the shade of chimneys, dormers, and other roofs. An hourly balance over one year shows what the house uses itself, what goes into the battery, and what goes to the grid.",
+      text: "Panels go on roof faces, or on racks on a flat roof. Grundriss counts the shade of chimneys, dormers, other roofs, trees, and the neighbors. An hourly balance over one year shows what the house uses itself, what goes into the battery, and what goes to the grid.",
     },
     renovate: {
       kicker: "Renovation",
       title: "Compare before you spend",
-      text: "Build variants from measures such as insulation, triple glazing, a heat pump, PV, or a battery, or try a floor plan without that one wall. Each variant gets a cost estimate with Austrian or German prices, a subsidy estimate for Germany (BEG), the energy cost per year, and the payback time with interest and rising prices. Once the installer sends a quote, put in the real price. A table compares all variants.",
+      text: "Build variants from measures such as insulation, triple glazing, a heat pump, PV, or a battery, or try a floor plan without that one wall. Each variant gets a cost estimate with Austrian or German prices, a subsidy estimate for Germany (BEG), the energy cost per year, and the payback time. Put in the real price when the quote comes. A table compares all variants.",
       note: "Rough estimates. A real quote and an energy advisor have the final say.",
     },
     visit: {
@@ -343,22 +337,17 @@ const de: Texts = {
     plan: {
       kicker: "Zeichnen",
       title: "Wände, Türen und Räume",
-      text: "Zeichnen Sie Wände mit Fang und Winkeln, dann Türen, Fenster und Bemaßungen. Jede Tür und jedes Fenster zeigt, wohin es aufgeht. Räume schließen sich von selbst und bekommen Namen und Fläche. Tippen Sie die Länge jeder Wandseite von Wand zu Wand ein, und pinnen Sie die Ecken, die bleiben sollen. Steht ein Schrank vor einer Tür, markiert die App das.",
+      text: "Zeichnen Sie Wände mit Fang und Winkeln, dann Türen, Fenster und Bemaßungen. Räume schließen sich von selbst und bekommen Namen und Fläche. Tippen Sie die Länge jeder Wandseite ein, und pinnen Sie die Ecken, die bleiben sollen. Steht ein Schrank vor einer Tür, markiert die App das.",
     },
     walls: {
       kicker: "3D",
       title: "Das Haus in 3D",
-      text: "Die 3D-Ansicht neben dem Plan zeigt jede Wand mit Stärke, Höhe und den Öffnungen für Türen und Fenster. Drehen Sie das Haus, während Sie zeichnen, oder verschieben Sie Möbel, Türen und Fenster direkt in 3D.",
-    },
-    stories: {
-      kicker: "Geschosse",
-      title: "Vom Keller bis zum Dach",
-      text: "Fügen Sie Keller, weitere Geschosse und ein Dachgeschoss hinzu, und verbinden Sie sie mit geraden, L- oder U-Treppen. Keller und Dachboden lassen sich als unbeheizt markieren.",
+      text: "Die 3D-Ansicht neben dem Plan zeigt jede Wand mit Stärke, Höhe und Öffnungen. Drehen Sie das Haus, während Sie zeichnen, oder verschieben Sie Möbel, Türen und Fenster direkt in 3D. Terrassen, Balkone, Wege, der Garten, Zäune und Bäume zeigen sich rund um das Haus.",
     },
     roof: {
-      kicker: "Dach",
-      title: "Jede Dachform",
-      text: "Sattel-, Walm-, Krüppelwalm-, Pult- oder Flachdach auf jedem Umriss, oder jede Seite für sich. Dazu Dachgauben und Dachfenster. Jeder Raum im Dachgeschoss zeigt seine Wohnfläche nach WoFlV.",
+      kicker: "Geschosse und Dach",
+      title: "Vom Keller bis zum Dach",
+      text: "Fügen Sie Keller, weitere Geschosse und ein Dachgeschoss hinzu, und verbinden Sie sie mit geraden, L- oder U-Treppen. Setzen Sie ein Sattel-, Walm-, Krüppelwalm-, Pult- oder Flachdach auf jeden Umriss, mit Gauben und Dachfenstern. Jeder Raum im Dachgeschoss zeigt seine Wohnfläche nach WoFlV.",
     },
     furnish: {
       kicker: "Möbel",
@@ -379,12 +368,12 @@ const de: Texts = {
     sun: {
       kicker: "Sonne",
       title: "Photovoltaik",
-      text: "Belegen Sie Dachflächen mit Modulen, oder stellen Sie sie auf dem Flachdach auf Gestelle. Grundriss berücksichtigt den Schatten von Schornsteinen, Gauben und anderen Dächern und rechnet jede Stunde eines Jahres durch: Eigenverbrauch, Speicher und Netz.",
+      text: "Belegen Sie Dachflächen mit Modulen, oder stellen Sie sie auf dem Flachdach auf Gestelle. Grundriss berücksichtigt den Schatten von Schornsteinen, Gauben, anderen Dächern, Bäumen und Nachbarn und rechnet jede Stunde eines Jahres durch: Eigenverbrauch, Speicher und Netz.",
     },
     renovate: {
       kicker: "Sanierung",
       title: "Erst vergleichen, dann investieren",
-      text: "Stellen Sie Varianten aus Maßnahmen zusammen, etwa Dämmung, Dreifachverglasung, Wärmepumpe, Photovoltaik oder Speicher, oder probieren Sie einen Grundriss ohne die eine Wand. Jede Variante bekommt eine Kostenschätzung mit Preisen aus Österreich oder Deutschland, eine Förderschätzung für Deutschland (BEG), die Energiekosten pro Jahr und die Amortisationszeit mit Zinsen und Preissteigerung. Liegt das Angebot vom Installateur vor, tragen Sie den echten Preis ein. Eine Tabelle vergleicht alle Varianten.",
+      text: "Stellen Sie Varianten aus Maßnahmen zusammen, etwa Dämmung, Dreifachverglasung, Wärmepumpe, Photovoltaik oder Speicher, oder probieren Sie einen Grundriss ohne die eine Wand. Jede Variante bekommt eine Kostenschätzung mit Preisen aus Österreich oder Deutschland, eine Förderschätzung für Deutschland (BEG), die Energiekosten pro Jahr und die Amortisationszeit. Kommt das Angebot, tragen Sie den echten Preis ein. Eine Tabelle vergleicht alle Varianten.",
       note: "Grobe Schätzungen. Das letzte Wort haben ein echtes Angebot und die Energieberatung.",
     },
     visit: {

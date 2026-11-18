@@ -109,11 +109,6 @@ export const ENERGY: Record<string, string> = {
     "Die Wärmepumpe hat eine Jahresarbeitszahl (JAZ) von etwa {spf}, beim Auslegungs-Vorlauf von 45 °C, weil kein Raum einen Heizkörper mit Leistung hat ({flow} °C). Jede Stunde hat ihre eigene Leistungszahl aus dem Vorlauf und der Quellentemperatur.",
   "The heat pump has the fixed factor {factor}.":
     "Die Wärmepumpe hat die feste Leistungszahl {factor}.",
-  "Performance factor {value}": "Leistungszahl {value}",
-  "Ground source, calculated performance": "Erdreich als Quelle, berechnete Leistungszahl",
-  "Air source, calculated performance": "Luft als Quelle, berechnete Leistungszahl",
-  "Efficiency {value}": "Wirkungsgrad {value}",
-  "{detail} · change it in Utilities": "{detail} · in Haustechnik ändern",
   // The system name "Electricity" is "Elektro" (glossary); the heading of the energy uses it too.
   Electricity: "Elektro",
   "The heating uses the price of electricity of the Electricity group.":
@@ -329,7 +324,6 @@ export const ENERGY: Record<string, string> = {
   "Quantities of the building": "Mengen des Gebäudes",
   "The lengths include the drops to the devices.":
     "Die Längen enthalten die Fallleitungen zu den Geräten.",
-  "Add {system}": "{system} hinzufügen",
   "The pipes of cold water, hot water, and waste water, with the outlets, the drains, and the hot water tank.":
     "Die Leitungen für Kaltwasser, Warmwasser und Abwasser, mit den Entnahmestellen, den Abläufen und dem Warmwasserspeicher.",
   "The pipes of the heating, the radiators, the manifolds, and the heat source.":

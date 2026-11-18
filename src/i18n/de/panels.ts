@@ -262,8 +262,8 @@ export const PANELS: Record<string, string> = {
   // structure.ts: the plan, the living area, and the story.
   Plan: "Plan",
   area: "Fläche",
-  "The area is inside the center lines of the walls.":
-    "Die Fläche liegt innerhalb der Mittellinien der Wände.",
+  "The area is inside the walls, as on the plan.":
+    "Die Fläche liegt innerhalb der Wände, wie auf dem Plan.",
   "{living} m² of {floor} m²": "{living} m² von {floor} m²",
   "living area (WoFlV)": "Wohnfläche (WoFlV)",
   "The roof is over the room. {full} m² have a clear height of 2 m or more and count fully. {half} m² have 1 m to 2 m and count half. The area under 1 m does not count. The 2D editor shows the lines of 1 m and 2 m.":
@@ -272,7 +272,11 @@ export const PANELS: Record<string, string> = {
   "Floor level": "Fußbodenhöhe",
   "Story height": "Geschosshöhe",
   Heated: "Beheizt",
-  "Delete story": "Geschoss löschen",
+  "Delete story {name}": "Geschoss {name} löschen",
+  "This story": "Dieses Geschoss",
+  "Insulation · U {value}": "Dämmung · U {value}",
+  "Whole building": "Ganzes Gebäude",
+  "This tool draws in the 2D view.": "Dieses Werkzeug zeichnet in der 2D-Ansicht.",
 
   // structure.ts: the building and the roofs.
   Building: "Gebäude",

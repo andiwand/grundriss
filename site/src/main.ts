@@ -43,11 +43,9 @@ const MOODS: Record<string, Mood> = {
   dusk: { sun: 1.9, sunColor: "#ff9a66", sky: "#b9b7e8", ground: "#5b5462", sunAzimuth: -80 },
 };
 
-// Each part is a part of the house, and whether its roofs show. The attic without its roof keeps
-// the roof in the building, so that its walls stop at the slope like in the finished house.
+// Each part is a part of the house, and whether its roofs show.
 const parts = {
   shell: { building: partOf(house, {}), roofs: false },
-  attic: { building: partOf(house, { attic: true, roof: true }), roofs: false },
   roofed: { building: partOf(house, { attic: true, roof: true }), roofs: true },
   furnished: { building: partOf(house, { furniture: true }), roofs: false },
   solar: { building: partOf(house, { attic: true, roof: true, pv: true }), roofs: true },
@@ -62,7 +60,6 @@ const SHOTS: Record<string, Shot> = {
   hero: shot("full", null, 0, 0, 32, 15, 50, center(7.4), "golden"),
   uses: shot("full", null, 0, 0, 32, 15, 50, center(7.4), "golden"),
   walls: shot(null, "shell", -0.1, 2.9, 28, 40, 31, center(1), "morning"),
-  stories: shot(null, "attic", 2.6, 5.7, 40, 27, 33, center(2.6), "morning"),
   roof: shot(null, "roofed", 2.75, 10.5, -32, 22, 35, center(3.4), "day"),
   furnish: shot("shell", "furnished", -0.05, 2.4, 18, 56, 30, center(0), "day"),
   sun: shot("roofed", "solar", 6, 10.5, -8, 30, 31, center(3.6), "golden"),
@@ -264,14 +261,10 @@ const READOUTS: Record<string, (p: number) => string> = {
       [r.openings, String(ground.openings.length)],
       [r.height, `${number(2.5 * Math.min(1, p * 1.3), 2)} m`],
     ]),
-  stories: () =>
-    rows([
-      [ground.name, `±${number(0, 2)} m`],
-      [attic.name, `+${number(attic.elevation, 2)} m`],
-      [r.stair, fill(r.stairValue, { kind: r.stairKinds[stair.kind], n: steps })],
-    ]),
   roof: (p) =>
     rows([
+      [attic.name, `+${number(attic.elevation, 2)} m`],
+      [r.stair, fill(r.stairValue, { kind: r.stairKinds[stair.kind], n: steps })],
       [r.pitch, `${roof.sides[0].pitch}°`],
       [r.ridge, `${number(roofGeometry.top * Math.min(1, 0.4 + p), 2)} m`],
       [r.dormerWindows, `${roof.dormers.length} · ${roof.windows.length}`],

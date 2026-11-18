@@ -270,8 +270,23 @@ function setTool(tool: Tool): void {
   renderPanel();
 }
 
+/**
+ * The tools that draw or place work in the 2D view. In the 3D view, such a tool opens the 2D view
+ * next to it, or in place of it on a phone, so that the tool does not do nothing.
+ */
+function showDrawingView(): void {
+  if (currentView !== "3d") return;
+  setView(isCompact() ? "2d" : "split");
+  showStatus(t("This tool draws in the 2D view."));
+}
+
+/** The tool that the palette marks, so that only a new tool opens the 2D view. */
+let markedTool: Tool = "select";
+
 /** Marks the button of the tool in the palette. The furniture button shows the open catalog. */
 function markTool(tool: Tool): void {
+  if (tool !== markedTool && tool !== "select" && tool !== "pan") showDrawingView();
+  markedTool = tool;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
     button.classList.toggle("active", button.dataset.tool === tool);
   }
@@ -337,48 +352,88 @@ function setRoofLevel(on: boolean, fit = true): void {
   if (on && fit) requestAnimationFrame(() => editor.fit());
 }
 
+/**
+ * The short names of the stories in the rail: 0 is the lowest story above the ground, the stories
+ * above it count up, and the cellars count down from −1.
+ */
+function storyNumbers(): Map<string, string> {
+  const stories = doc.building.stories;
+  const above = stories.filter((s) => s.elevation >= 0);
+  const below = stories.filter((s) => s.elevation < 0).reverse();
+  // A building with only cellars, for example a new plan with negative floors, counts from 0.
+  const numbers = new Map<string, string>();
+  if (above.length === 0) stories.forEach((s, i) => numbers.set(s.id, String(i)));
+  else {
+    above.forEach((s, i) => numbers.set(s.id, String(i)));
+    below.forEach((s, i) => numbers.set(s.id, `−${i + 1}`));
+  }
+  return numbers;
+}
+
+/** The level of a story as a text: +2,75, ±0,00, or −1,70. */
+function levelText(elevation: number): string {
+  const sign = elevation > 0 ? "+" : elevation < 0 ? "−" : "±";
+  return `${sign}${fmt(Math.abs(elevation), 2)}`;
+}
+
+/**
+ * The stories in the rail, from the roof level at the top to the lowest cellar, and the button
+ * to add a story. Each story shows its number in the rail, and its name and level on a phone.
+ * The chip at the top left of each view names the active story.
+ */
 function renderStories(): void {
   const list = $("#stories");
   list.replaceChildren();
   const active = editor.roofLevel ? null : doc.activeStoryId;
+  const numbers = storyNumbers();
+  const entry = (name: string, short: string | null, level: string, title: string) => {
+    const element = document.createElement("button");
+    element.className = "story";
+    element.title = title;
+    const label = document.createElement("span");
+    label.className = "name";
+    label.textContent = name;
+    const number = document.createElement("span");
+    number.className = "number";
+    if (short === null) number.innerHTML = icon("roof");
+    else number.textContent = short;
+    const small = document.createElement("small");
+    small.textContent = level;
+    element.append(number, label, small);
+    list.append(element);
+    return element;
+  };
   // The roofs of all stories, above the highest story.
-  const roofs = document.createElement("button");
-  roofs.className = editor.roofLevel ? "story roof active" : "story roof";
-  const roofName = document.createElement("span");
-  roofName.textContent = t("Roof");
-  roofs.append(roofName);
   const top = roofGeometries(doc.building).reduce(
     (m, { geometry }) => Math.max(m, geometry.top),
     0,
   );
-  if (top > 0) {
-    const level = document.createElement("small");
-    level.textContent = `+${fmt(top, 2)}`;
-    roofs.append(level);
-  }
-  roofs.title = t("The roofs of all stories, from above");
+  const roofs = entry(
+    t("Roof"),
+    null,
+    top > 0 ? `+${fmt(top, 2)}` : "",
+    t("The roofs of all stories, from above"),
+  );
+  roofs.classList.add("roof");
+  roofs.classList.toggle("active", editor.roofLevel);
   roofs.addEventListener("click", () => setRoofLevel(true));
-  list.append(roofs);
   const stories = [...doc.building.stories].reverse();
   for (const story of stories) {
-    const element = document.createElement("button");
-    element.className = story.id === active ? "story active" : "story";
-    const name = document.createElement("span");
-    name.textContent = t(story.name);
-    const level = document.createElement("small");
-    const sign = story.elevation > 0 ? "+" : story.elevation < 0 ? "−" : "±";
-    level.textContent = `${sign}${fmt(Math.abs(story.elevation), 2)}`;
-    element.append(name, level);
-    element.title = t("{name}: floor at {elevation} m", {
-      name: t(story.name),
-      elevation: fmt(story.elevation, 2),
-    });
+    const element = entry(
+      t(story.name),
+      numbers.get(story.id) ?? "",
+      levelText(story.elevation),
+      t("{name}: floor at {elevation} m", {
+        name: t(story.name),
+        elevation: fmt(story.elevation, 2),
+      }),
+    );
+    element.classList.toggle("active", story.id === active);
     element.addEventListener("click", () => {
       setRoofLevel(false);
       editor.select(null);
       doc.setActiveStory(story.id);
     });
-    list.append(element);
     // A line marks the ground between the lowest story above ground and the cellars.
     const next = stories[stories.indexOf(story) + 1];
     if (story.elevation >= 0 && next && next.elevation < 0) {
@@ -390,10 +445,26 @@ function renderStories(): void {
   const add = document.createElement("button");
   add.className = "add";
   add.dataset.menu = "";
+  add.title = t("Add story");
   add.innerHTML = icon("plus");
-  add.append(t("Add story"));
+  const addText = document.createElement("span");
+  addText.textContent = t("Add story");
+  add.append(addText);
   add.addEventListener("click", () => toggleMenu(add, $("#story-menu")));
   list.append(add);
+  // The chips of the views name the active story, or the roof level.
+  const story = findStory(doc.building, doc.activeStoryId);
+  const chip = editor.roofLevel
+    ? t("Roof")
+    : story
+      ? `${t(story.name)} · ${levelText(story.elevation)}`
+      : "";
+  for (const element of document.querySelectorAll<HTMLElement>(".story-chip")) {
+    element.textContent = chip;
+    element.hidden = !chip;
+  }
+  const hint = document.querySelector<HTMLElement>("#plan-3d .story-chip");
+  if (hint) hint.title = t("3D · drag to orbit, scroll to zoom, double-click to fit");
 }
 
 function addStory(kind: "top" | "attic" | "cellar"): void {
@@ -972,13 +1043,26 @@ editor.onCalibrate = (a, b) => {
   renderPanel();
 };
 
-$("#new").addEventListener("click", newPlan);
-
-$("#open").addEventListener("click", () => void openFile());
-
-$("#save").addEventListener("click", () => void saveFile(false));
-
-$("#save-as").addEventListener("click", () => void saveFile(true));
+// The menu of the file name: the files and the versions of the plan.
+$("#file-name").addEventListener("click", () => toggleMenu($("#file-name"), $("#file-menu")));
+$("#file-name").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  toggleMenu($("#file-name"), $("#file-menu"));
+});
+const FILE: Record<string, () => void> = {
+  new: newPlan,
+  open: () => void openFile(),
+  save: () => void saveFile(false),
+  "save-as": () => void saveFile(true),
+  versions: openVersions,
+};
+for (const [id, action] of Object.entries(FILE)) {
+  $(`#${id}`).addEventListener("click", () => {
+    closeMenus();
+    action();
+  });
+}
 
 $("#undo").addEventListener("click", () => doc.undo());
 
@@ -1025,7 +1109,10 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]
 
 editor.onRun = () => showStatus(t("Added the line. Draw the next line, or press Esc to stop."));
 
-$("#furniture").addEventListener("click", () => catalog.toggle());
+$("#furniture").addEventListener("click", () => {
+  if (!catalog.isOpen) showDrawingView();
+  catalog.toggle();
+});
 
 $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export-menu")));
 
@@ -1145,6 +1232,7 @@ window.addEventListener("keydown", (e) => {
     openServicesMenu("electric", $<HTMLButtonElement>('[data-system="electric"]'));
   } else if (key === "i") {
     if (!catalog.isOpen) setTopic("interior");
+    if (!catalog.isOpen) showDrawingView();
     catalog.toggle();
   } else if (key === "r") {
     editor.rotate(e.shiftKey ? 15 : 90);
@@ -1184,8 +1272,6 @@ document.addEventListener("visibilitychange", () => {
 doc.subscribe(scheduleAutosave);
 
 void startProjects();
-// A click on the name of the plan shows its versions.
-$("#file-name").addEventListener("click", openVersions);
 void setupRemote();
 setupPresence();
 
