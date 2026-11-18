@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.6.4 – 2026-11-18
+
 - Server: a new layout of the page of the account. The cards are in one column in the middle.
   Each form has short fields and its button at the end of the fields, and the facts of the
   account and of the server are a list. **Log out** is at the top of the card of the account.
