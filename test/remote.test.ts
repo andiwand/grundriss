@@ -125,7 +125,7 @@ beforeEach(async () => {
     addEventListener: vi.fn(),
   });
   vi.stubGlobal("document", {
-    body: { classList: { toggle: vi.fn() } },
+    body: { classList: { toggle: vi.fn(), contains: () => false } },
     baseURI: "https://server/app/",
   });
   vi.stubGlobal("location", {
@@ -319,6 +319,8 @@ describe("remote sessions", () => {
       keys: { north: { t: "set", v: 25 } },
     });
     expect(doc.building.north).toBe(25);
+    // The session of the server comes after the plan: it ends in this test.
+    await vi.advanceTimersByTimeAsync(0);
   });
 
   it("sends the changes of an earlier time without the network when the plan opens", async () => {
