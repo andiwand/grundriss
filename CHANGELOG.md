@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.7.0 – 2026-11-18
+
 - The tools and the stories are a rail at the left of the views. The rail serves the 2D and the
   3D view, so the 3D view alone has tools and stories too. In the 3D view, a tool that draws
   opens the 2D view next to it. The stories show their number (0 is the ground floor), and a chip
