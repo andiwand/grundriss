@@ -33,7 +33,15 @@ export function blobHash(text: string): string {
   return `${cyrb53(text, 1).toString(36)}-${cyrb53(text, 2).toString(36)}-${text.length.toString(36)}`;
 }
 
-const isBlob = (value: string) => value.startsWith("data:") && value.length >= BLOB_MIN;
+/**
+ * A large data URL goes to the store. A text of the plan that looks like a reference goes there
+ * too, so that `hydrate` gives it back as it was and never reads a reference that the user typed.
+ */
+const isBlob = (value: string) =>
+  (value.startsWith("data:") && value.length >= BLOB_MIN) || value.startsWith(BLOB_PREFIX);
+
+/** The form of a hash; a server uses the hash as a file name. */
+const HASH = /^[0-9a-z]+-[0-9a-z]+-[0-9a-z]+$/;
 
 /**
  * Replaces each large data URL in the JSON of a plan with a reference to its hash. It gives the
@@ -74,7 +82,7 @@ export function hydrate(json: string, get: (hash: string) => string | undefined)
     JSON.parse(json, (_key, value: unknown) => {
       if (typeof value !== "string" || !value.startsWith(BLOB_PREFIX)) return value;
       const hash = value.slice(BLOB_PREFIX.length);
-      const data = get(hash);
+      const data = HASH.test(hash) ? get(hash) : undefined;
       if (data === undefined) throw new Error("A stored image of the version is missing.");
       return data;
     }),

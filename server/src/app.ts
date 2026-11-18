@@ -29,6 +29,7 @@ import {
   type AccountRecord,
   type LinkRecord,
   type PlanRecord,
+  type RevisionRecord,
   type ShareRecord,
 } from "./store";
 
@@ -47,14 +48,21 @@ export const COOKIE = "grundriss_session";
 /** Failed logins: at most this many in the time below, for each name and each address. */
 const LOGIN_TRIES = 10;
 const LOGIN_WINDOW = 15 * 60_000;
+/** The largest body of a request without a plan, in bytes. */
+const SMALL_BODY = 64 * 1024;
 
 export interface Config {
   /** The folder of the build of the app. */
   appDir: string;
   /** The folder of the build of the website, or "". With it, the server serves it at `/`. */
   siteDir: string;
-  /** The largest body of a request, in bytes. */
+  /** The largest body of a request with a plan, in bytes. */
   maxBody: number;
+  /**
+   * True behind a proxy (Caddy, nginx): the address of a client for the limit of the logins is
+   * then the last entry of X-Forwarded-For. Without a proxy, a client can write that header.
+   */
+  trustProxy?: boolean;
   version: string;
 }
 
@@ -233,7 +241,13 @@ export function createHandler(store: Store, config: Config) {
 
   /** The file of a path in a folder, or the index.html of a folder, or null. */
   function findFile(dir: string, path: string): string | null {
-    let file = normalize(join(dir, decodeURIComponent(path)));
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(path);
+    } catch {
+      return null;
+    }
+    let file = normalize(join(dir, decoded));
     if (file !== normalize(dir) && !file.startsWith(normalize(dir) + sep)) return null;
     if (!existsSync(file)) return null;
     if (statSync(file).isDirectory()) file = join(file, "index.html");
@@ -280,9 +294,12 @@ export function createHandler(store: Store, config: Config) {
 
   /** The address of the client, for the limit of the logins. */
   function address(req: IncomingMessage): string {
-    const forwarded = String(req.headers["x-forwarded-for"] ?? "")
-      .split(",")[0]
-      .trim();
+    const forwarded = config.trustProxy
+      ? String(req.headers["x-forwarded-for"] ?? "")
+          .split(",")
+          .at(-1)!
+          .trim()
+      : "";
     return forwarded || req.socket.remoteAddress || "";
   }
 
@@ -295,11 +312,13 @@ export function createHandler(store: Store, config: Config) {
     }
   }
 
-  function failed(keys: string[], now = Date.now()): void {
+  /** Counts a try (`step` 1) before the check of the password, or gives it back (−1). */
+  function count(keys: string[], step: number, now = Date.now()): void {
     for (const key of keys) {
       const entry = failures.get(key);
-      if (!entry || entry.until <= now) failures.set(key, { count: 1, until: now + LOGIN_WINDOW });
-      else entry.count++;
+      if (!entry || entry.until <= now) {
+        if (step > 0) failures.set(key, { count: step, until: now + LOGIN_WINDOW });
+      } else entry.count += step;
     }
     // The map does not grow without an end.
     if (failures.size > 10_000) {
@@ -343,11 +362,11 @@ export function createHandler(store: Store, config: Config) {
         `ip:${address(req)}`,
       ];
       checkTries(keys);
+      // The try counts before the slow check, so that many tries at the same time also count.
+      count(keys, 1);
       const account = await store.login(value.name, value.password);
-      if (!account) {
-        failed(keys);
-        throw new StoreError(401, "The name or the password is wrong.");
-      }
+      if (!account) throw new StoreError(401, "The name or the password is wrong.");
+      count(keys, -1);
       startSession(account);
       return json(res, 200, sessionInfo(access));
     }
@@ -383,13 +402,16 @@ export function createHandler(store: Store, config: Config) {
 
     if (head === "password" && method === "POST") {
       const value = await body(req);
-      await store.changePassword(me, value.old, value.password);
+      await store.changePassword(fresh(), value.old, value.password);
       return json(res, 200, { ok: true });
     }
 
     if (head === "settings") {
       if (!me.account?.admin) throw new StoreError(403, "Only the admin can do this.");
-      if (method === "PUT") store.saveSettings(me, await body(req));
+      if (method === "PUT") {
+        const value = await body(req);
+        store.saveSettings(fresh(), value);
+      }
       return json(res, 200, {
         ...store.settings,
         ...store.counts(),
@@ -404,7 +426,8 @@ export function createHandler(store: Store, config: Config) {
     if (head === "accounts") {
       if (method === "GET" && !id) return json(res, 200, store.accounts(me).map(accountInfo));
       if (method === "PUT" && id && !sub) {
-        const account = store.updateAccount(me, id, await body(req));
+        const value = await body(req);
+        const account = store.updateAccount(fresh(), id, value);
         closeLost();
         return json(res, 200, accountInfo(account));
       }
@@ -422,7 +445,8 @@ export function createHandler(store: Store, config: Config) {
     if (head === "invites") {
       if (method === "GET" && !id) return json(res, 200, store.links(me).map(linkInfo));
       if (method === "POST" && !id) {
-        const code = store.makeInvite(me, await body(req));
+        const value = await body(req);
+        const code = store.makeInvite(fresh(), value);
         return json(res, 201, { path: `/invite/${code}` });
       }
       if (method === "DELETE" && id) {
@@ -469,17 +493,18 @@ export function createHandler(store: Store, config: Config) {
           const value = await input();
           // The plan and the access can change while the request body arrives.
           const latest = store.plan(plan.id);
-          if (!latest || !store.canSee(fresh(), latest))
+          const now = fresh();
+          if (!latest || !store.canSee(now, latest))
             throw new StoreError(404, "The plan does not exist.");
           const revision = store.saveRevision(
-            fresh(),
+            now,
             latest,
             value.parent ?? null,
             checkPlan(value.data),
             value.name,
           );
           buildings.delete(plan.id);
-          send(plan.id, "revision", { ...revision, name: latest.name, client });
+          send(plan.id, "revision", { ...revisionInfo(revision), name: latest.name, client });
           return json(res, 200, planInfo(latest));
         }
         if (method === "DELETE") {
@@ -497,17 +522,14 @@ export function createHandler(store: Store, config: Config) {
       }
 
       if (sub === "shares" && method === "POST") {
-        const { record, token } = store.makeShare(me, plan, await body(req));
+        const value = await body(req);
+        const { record, token } = store.makeShare(fresh(), plan, value);
         return json(res, 201, { ...shareInfo(record), path: `/s/${token}` });
       }
 
       if (sub === "revisions" && method === "GET") {
         if (subId) return json(res, 200, { data: store.revisionData(plan, subId) });
-        return json(
-          res,
-          200,
-          plan.revisions.map(({ id, parent, time, by, size }) => ({ id, parent, time, by, size })),
-        );
+        return json(res, 200, plan.revisions.map(revisionInfo));
       }
 
       if (sub === "changes" && method === "POST") {
@@ -539,11 +561,7 @@ export function createHandler(store: Store, config: Config) {
         const revision = store.saveRevision(now, latest, parent, data, value.name);
         buildings.set(latest.id, { revision: revision.id, building });
         send(plan.id, "revision", {
-          id: revision.id,
-          parent: revision.parent,
-          time: revision.time,
-          by: revision.by,
-          size: revision.size,
+          ...revisionInfo(revision),
           name: latest.name,
           client,
           base: value.parent ?? null,
@@ -555,21 +573,23 @@ export function createHandler(store: Store, config: Config) {
       if (sub === "presence" && method === "POST") {
         if (!client) throw new StoreError(400, "The request needs the header X-Client.");
         const value = (await body(req)) as { name?: string; state?: unknown };
+        const now = fresh();
+        if (!store.canSee(now, plan)) throw new StoreError(404, "The plan does not exist.");
         if (JSON.stringify(value.state ?? null).length > MAX_PRESENCE)
           throw new StoreError(413, "The state is too large.");
         // Old entries go first, so that ids without a stream do not stay.
         present(plan.id);
         const set = people.get(plan.id) ?? new Map<string, Presence>();
         // Each tab id belongs to the session that first used it: the ids are not secret.
-        if (set.get(client) && set.get(client)!.session !== me.session.id)
+        if (set.get(client) && set.get(client)!.session !== now.session.id)
           throw new StoreError(403, "Another person uses this id.");
         people.set(plan.id, set);
         const name = typeof value.name === "string" ? value.name.trim().slice(0, 40) : "";
         const person: Presence = {
           client,
-          session: me.session.id,
-          name: name || store.nameOf(me, plan.id),
-          write: store.canWrite(me, plan),
+          session: now.session.id,
+          name: name || store.nameOf(now, plan.id),
+          write: store.canWrite(now, plan),
           state: value.state ?? null,
           seen: Date.now(),
         };
@@ -632,7 +652,7 @@ export function createHandler(store: Store, config: Config) {
     }
 
     async function input(): Promise<{ name?: string; data?: unknown; parent?: string | null }> {
-      const value = await body(req);
+      const value = await body(req, config.maxBody);
       fresh();
       if (value.name !== undefined && typeof value.name !== "string")
         throw new StoreError(400, "The name must be text.");
@@ -700,6 +720,10 @@ export function createHandler(store: Store, config: Config) {
     };
   }
 
+  function revisionInfo({ id, parent, time, by, size }: RevisionRecord) {
+    return { id, parent, time, by, size };
+  }
+
   function shareInfo(s: ShareRecord) {
     return {
       id: s.id,
@@ -712,16 +736,23 @@ export function createHandler(store: Store, config: Config) {
     };
   }
 
-  /** Reads the body of a request as JSON, up to `maxBody` bytes. */
-  function body(req: IncomingMessage): Promise<Record<string, unknown>> {
+  /** Reads the body of a request as JSON, up to `limit` bytes. */
+  function body(req: IncomingMessage, limit = SMALL_BODY): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       let size = 0;
       req.on("data", (chunk: Buffer) => {
         size += chunk.length;
-        if (size > config.maxBody) {
+        if (size > limit) {
           chunks.length = 0;
-          reject(new StoreError(413, "The plan is too large for this server."));
+          reject(
+            new StoreError(
+              413,
+              limit === config.maxBody
+                ? "The plan is too large for this server."
+                : "The request is too large.",
+            ),
+          );
         } else chunks.push(chunk);
       });
       req.on("end", () => {

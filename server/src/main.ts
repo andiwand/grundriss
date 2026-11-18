@@ -35,6 +35,7 @@ const config: Config = {
   siteDir:
     env.GRUNDRISS_PUBLIC_SITE === "true" ? resolve(env.GRUNDRISS_SITE ?? join(here, "site")) : "",
   maxBody: number(env.GRUNDRISS_MAX_BODY, 100) * 1024 * 1024,
+  trustProxy: env.GRUNDRISS_TRUST_PROXY === "true",
   version,
 };
 const port = number(env.PORT, 8080);

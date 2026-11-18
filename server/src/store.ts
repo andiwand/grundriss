@@ -16,7 +16,18 @@
 // to edit, without an account.
 
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { blobRefs, dehydrate, hydrate } from "../../src/model/blobs";
@@ -231,7 +242,11 @@ export class Store {
       : fromJson
         ? JSON.parse(readFileSync(old, "utf8"))
         : null;
-    const migrated = loaded !== null && (loaded as { version?: number }).version !== 2;
+    const version = (loaded as { version?: number } | null)?.version ?? 1;
+    // A newer server wrote the data: an older one does not know it and must not change it.
+    if (version > 2)
+      throw new Error(`The data in ${dir} is of a newer version (${version}). Update the server.`);
+    const migrated = loaded !== null && version !== 2;
     this.data = loaded ? this.migrate(loaded as Data | OldData) : emptyData();
     this.persisted = JSON.stringify(this.data);
     if (fromJson || migrated) this.save();
@@ -259,7 +274,15 @@ export class Store {
   private save(): void {
     const file = join(this.dir, "data.yaml");
     try {
-      writeFileSync(`${file}.tmp`, stringify(this.data));
+      // The data is on the disk before the rename, so that a power loss keeps the old file or
+      // the new one.
+      const fd = openSync(`${file}.tmp`, "w");
+      try {
+        writeFileSync(fd, stringify(this.data));
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
       renameSync(`${file}.tmp`, file);
       this.persisted = JSON.stringify(this.data);
     } catch (error) {
@@ -824,13 +847,20 @@ export class Store {
     });
   }
 
-  /** Removes a plan and its share links. The files of its revisions stay on the disk. */
+  /**
+   * Removes a plan, its share links, the files of its revisions, and the images that no other
+   * plan has.
+   */
   removePlan(access: Access, plan: PlanRecord): void {
     if (!this.canDelete(access, plan))
       throw new StoreError(403, "Only the owner or the admin can delete the plan.");
     this.data.plans = this.data.plans.filter((p) => p.id !== plan.id);
     this.data.shares = this.data.shares.filter((s) => s.planId !== plan.id);
     this.save();
+    const kept = new Set(this.data.plans.flatMap((p) => p.revisions.flatMap((r) => r.blobs)));
+    rmSync(join(this.dir, "plans", plan.id), { recursive: true, force: true });
+    for (const hash of new Set(plan.revisions.flatMap((r) => r.blobs)))
+      if (!kept.has(hash)) rmSync(join(this.dir, "blobs", hash), { force: true });
   }
 
   // ----- Settings -----

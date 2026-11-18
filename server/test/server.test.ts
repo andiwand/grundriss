@@ -223,6 +223,23 @@ describe("accounts", () => {
     expect((await login(PASSWORD)).status).toBe(429);
   });
 
+  it("counts the tries that come at the same time", async () => {
+    const browser = new Browser();
+    const login = () =>
+      browser.call("login", { method: "POST", json: { name: "Admin", password: "wrong" } });
+    const answers = await Promise.all(Array.from({ length: 20 }, login));
+    expect(answers.filter((a) => a.status === 401)).toHaveLength(10);
+    expect(answers.filter((a) => a.status === 429)).toHaveLength(10);
+  });
+
+  it("refuses a large body without a plan", async () => {
+    const answer = await new Browser().call("login", {
+      method: "POST",
+      json: { name: "x".repeat(100_000), password: "x" },
+    });
+    expect(answer.status).toBe(413);
+  });
+
   it("makes an account with an invite link, which works once", async () => {
     const { body } = await admin.call("invites", {
       method: "POST",

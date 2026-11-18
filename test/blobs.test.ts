@@ -42,4 +42,14 @@ describe("blobs", () => {
     const { json } = dehydrate(JSON.stringify({ a: image("A") }));
     expect(() => hydrate(json, () => undefined)).toThrow();
   });
+
+  it("keeps a text that looks like a reference, and never reads it as a file", () => {
+    const json = JSON.stringify({ name: "grundriss-blob:../data.yaml" });
+    const read: string[] = [];
+    const { json: dry, blobs } = dehydrate(json);
+    expect(hydrate(dry, (hash) => (read.push(hash), blobs.get(hash)))).toBe(json);
+    expect(read.every((hash) => /^[0-9a-z]+-[0-9a-z]+-[0-9a-z]+$/.test(hash))).toBe(true);
+    // A reference of an old store with another form is missing.
+    expect(() => hydrate(json, () => "secret")).toThrow();
+  });
 });

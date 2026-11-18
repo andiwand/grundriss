@@ -17,6 +17,9 @@ services:
     environment:
       # The website at /, with "Log in". Leave it out, and / goes to the app at /app/.
       GRUNDRISS_PUBLIC_SITE: "true"
+      # The server is behind Caddy: the address of a client for the limit of the logins comes
+      # from the header X-Forwarded-For.
+      GRUNDRISS_TRUST_PROXY: "true"
       # The space and the number of plans of each account. 0 is no limit.
       # GRUNDRISS_QUOTA_MB: "500"
       # GRUNDRISS_MAX_PLANS: "100"

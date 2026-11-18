@@ -190,6 +190,7 @@ The settings are environment variables:
 | `GRUNDRISS_MAX_PLANS`    | `100`   | The number of plans of an account. `0` is no limit.                    |
 | `GRUNDRISS_ADMIN_RESET`  | –       | `true`: the log shows a link for a new password of the admin.          |
 | `GRUNDRISS_MAX_BODY`     | `100`   | The largest plan in MB.                                                |
+| `GRUNDRISS_TRUST_PROXY`  | –       | `true` behind a proxy: the limit of the logins uses `X-Forwarded-For`. |
 
 The addresses of the server:
 

@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -136,4 +137,34 @@ it("gives the plans of an old server to the admin at the setup", async () => {
   expect(moved.plan("p1")!.owner).toBe(account.id);
   expect(moved.setupLink()).toBeNull();
   rmSync(old, { recursive: true, force: true });
+});
+
+it("never reads a file of the server through a text of the plan that looks like an image", () => {
+  const plan = store.createPlan(
+    admin,
+    "Plan",
+    JSON.stringify({ name: "grundriss-blob:../data.yaml" }),
+  );
+  expect(store.revisionData(plan, "1")).toBe(
+    JSON.stringify({ name: "grundriss-blob:../data.yaml" }),
+  );
+});
+
+it("removes the files of a deleted plan, and keeps the images that another plan has", () => {
+  const image = (text: string) => `"data:image/png;base64,${text.repeat(5000)}"`;
+  const one = store.createPlan(admin, "One", `[${image("A")},${image("B")}]`);
+  const two = store.createPlan(admin, "Two", `[${image("A")}]`);
+  const blobs = () => readdirSync(join(dir, "blobs")).length;
+  expect(blobs()).toBe(2);
+  store.removePlan(admin, one);
+  expect(existsSync(join(dir, "plans", one.id))).toBe(false);
+  expect(blobs()).toBe(1);
+  expect(store.revisionData(store.plan(two.id)!, "1")).toBe(`[${image("A")}]`);
+});
+
+it("refuses the data of a newer server, and does not change it", () => {
+  const file = join(dir, "data.yaml");
+  writeFileSync(file, "version: 3\naccounts: []\n");
+  expect(() => new Store(dir)).toThrow(/newer version/);
+  expect(readFileSync(file, "utf8")).toBe("version: 3\naccounts: []\n");
 });
