@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.6.2 – 2026-11-18
+
 - Structure: the tools of the outdoor parts are one menu **Outdoor**, like Water and Heating. It
   has the kinds of areas, the kinds of fences, and the tree, so the palette fits in one row
   again. The keys A, G, and T still start the tools.
