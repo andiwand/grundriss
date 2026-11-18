@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.6.0 – 2026-11-18
+
 - Server: a text in a plan cannot read a file of the server any more. Before, a person who could
   edit a plan could read other files of the server through a text that looked like a stored
   image.
