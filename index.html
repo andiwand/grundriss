@@ -146,7 +146,7 @@
         id="share"
         class="quiet plan-tools"
         data-icon="share"
-        title="Share the plan with a link, or put it on a server"
+        title="Share the plan with a link"
         hidden
       >
         Share
@@ -170,6 +170,9 @@
         <button data-view="split" data-icon="split" title="2D and 3D">Split</button>
         <button data-view="3d" data-icon="view3d" title="3D only">3D</button>
       </div>
+      <!-- The account on the server of the app, or "Log in" (src/ui/remote.ts). It opens the page of
+           the account and of the server. -->
+      <button id="account-button" class="quiet" data-icon="users" hidden></button>
       <!-- The language is a setting of the app, so it is at the end of the bar. -->
       <button
         id="language"
@@ -389,6 +392,14 @@
         <h2 id="projects-title">Plan, check, and renovate your house</h2>
         <p class="home-note" id="projects-note"></p>
         <div class="project-list" id="project-list"></div>
+      </section>
+    </main>
+    <!-- The page of the account and of the server, in place of the home page (src/ui/remote.ts). -->
+    <main id="account" hidden>
+      <section class="home account-page" aria-labelledby="account-title">
+        <h2 id="account-title"></h2>
+        <p class="home-note" id="account-note"></p>
+        <div class="account-sections" id="account-sections"></div>
       </section>
     </main>
     <!-- The overview of the open plan. It takes the place of the work area. -->

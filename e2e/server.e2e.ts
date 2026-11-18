@@ -22,14 +22,27 @@ test("sets up the admin, invites an account, and logs in", async ({ browser }, t
     await login.getByLabel("Name").fill("Admin");
     await login.getByLabel("Password").fill(PASSWORD);
     await login.locator("button.primary").click();
-    await expect(admin.locator(".server-head")).toContainText("Admin");
+    await expect(admin.locator("#account-button")).toContainText("Admin");
+    // The browser has no plans of its own on a server: only the plans of the server show.
+    await expect(admin.locator(".server-section")).toContainText("No plans on this server yet.");
+    await expect(admin.locator(".project-section:not(.server-section)")).toHaveCount(0);
 
-    // An invite link for a new account.
-    await admin.getByRole("button", { name: "Server and accounts" }).click();
+    // An invite link for a new account, on the page of the account.
+    await admin.locator("#account-button").click();
+    await expect(admin.locator("#account")).toBeVisible();
+    await expect(admin.locator(".account-card h3")).toContainText([
+      "Your account",
+      "Server",
+      "Accounts",
+      "Invite",
+      "Share links",
+    ]);
     await admin.getByRole("button", { name: "Make an invite link" }).click();
     const invite = await admin.locator(".new-link input").inputValue();
     expect(invite).toMatch(new RegExp(`^${base}/invite/`));
-    await admin.keyboard.press("Escape");
+    // The brand leads back to the plans.
+    await admin.locator("#brand").click();
+    await expect(admin.locator("#home")).toBeVisible();
 
     // The invited person chooses a name and a password, and is logged in.
     const anna = await b.newPage();
@@ -41,8 +54,12 @@ test("sets up the admin, invites an account, and logs in", async ({ browser }, t
     await made.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await made.getByLabel("Password again").fill(PASSWORD);
     await made.locator("button.primary").click();
-    await expect(anna.locator(".server-head")).toContainText("Anna");
+    await expect(anna.locator("#account-button")).toContainText("Anna");
     await expect(anna.locator(".server-section")).toContainText("No plans on this server yet.");
+    // A new plan of the account goes to the server.
+    await anna.locator(".start-row .project-start", { hasText: "New plan" }).click();
+    await expect(anna.locator("#remote-state")).toBeVisible();
+    await expect.poll(() => store.counts().plans).toBe(1);
     // The address has no code any more.
     expect(anna.url()).not.toContain("invite");
     expect(store.counts().accounts).toBe(2);

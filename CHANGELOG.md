@@ -4,6 +4,15 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: in the app of a server, all plans are on the server. **New plan**, **Open a file**, and
+  **Example house** make a plan on the server and open it, and the home page shows only the
+  plans of the server. Plans that are still in the browser show as a link at the end, to move
+  them to the server. The **+** of the server is gone, and so is "Copy or move to this browser";
+  **Save as** still saves a file, and **Save a copy** makes a copy on the server.
+- Server: the name of the account in the top bar, or **Log in**, opens the page of the account in
+  place of the plans: the password and the logout, and for the admin the server, the accounts,
+  the invites, and the share links. Before, these were dialogs behind icons of the home page.
+
 - German: the error messages with a value, for example a status code or a file name, show in
   German too (Open-Meteo, Poly Haven, the import of a model, a package, the recognition).
 - 2D: a drag of one of some selected roofs moves all of them, like the arrow keys.

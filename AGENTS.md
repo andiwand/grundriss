@@ -43,7 +43,11 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   `compact` on the body, the topics in `#bottom-bar`, and the panel as a sheet.
 - A plan can also be on a Grundriss server (`server/`, `src/ui/remote.ts`). The server serves the
   app at `/app/` and the API at `/api/`; the app finds it at `../api/session`, so the app on
-  GitHub Pages has no server. People log in with an account (a name and a password, scrypt in
+  GitHub Pages has no server. In the app of a server, all plans are on the server
+  (`remoteHooks.serverName`): a new plan, a file, and the example go there
+  (`remoteHooks.create`), and the home page shows only its plans. The button of the account in
+  the top bar opens the page of the account (`#account`): the password, and for the admin the
+  server, the accounts, the invites, and the share links. People log in with an account (a name and a password, scrypt in
   `server/src/store.ts`). A login makes a session: a random string in an httpOnly cookie, and the
   store keeps only its hash. A session has an account or none, and the grants of the share links
   that the browser opened (`/s/<token>` adds the grant and goes on to `/app/plans/<id>`). The

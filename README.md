@@ -133,9 +133,14 @@ who can read the log can claim the server. Put the server behind a reverse proxy
 example Caddy or Traefik).
 
 The app of the server is at `/app/`. Without a login, it asks for the name and the password.
+In the app of a server, all plans are on the server: **New plan**, **Open a file**, and **Example
+house** make a plan on the server, and the home page shows only the plans of the server. Plans
+that are still in the browser from before show as a link at the end, to move them to the server.
+The name of the account in the top bar opens the page of the account: the password, the logout,
+and for the admin the server, the accounts, the invites, and the share links.
 
 - **Accounts.** The admin invites a person with an **invite link** (the settings icon on the
-  Projects page, **Server and accounts**): it works once, for a set time, and the person chooses
+  page of the account, **Invite**): it works once, for a set time, and the person chooses
   a name and a password. The admin chooses the rights of the new account: make plans, see and
   edit all plans, and invite others. An account that can invite gives at most its own rights.
   The server keeps only a salted scrypt hash of each password, and stops the logins of a name
@@ -144,8 +149,8 @@ The app of the server is at `/app/`. Without a login, it asks for the name and t
   revisions count, and each image once. A save over the space fails with a message, also if
   another person edits the plan. The admin changes both for each account.
 - **Forgotten passwords.** The server sends no emails. The admin makes a link for a new password
-  and sends it on a safe way. A new password ends all other logins of the account, and **Your
-  account** changes the own password. If the admin forgets the own password, start the server once
+  and sends it on a safe way. A new password ends all other logins of the account, and the page of
+  the account changes the own password. If the admin forgets the own password, start the server once
   with `GRUNDRISS_ADMIN_RESET=true`: the log shows a link for a new password.
 - **Share links.** The owner of a plan (and the admin, and an account that sees all plans) shares
   it with **Share** in the top bar: a link for this one plan, to view or to edit, with an end
@@ -217,7 +222,8 @@ A click on the name of the plan in the top bar shows its versions, and the clock
 the Projects page too. A plan in the browser keeps a version at each save to a file and one every
 5 minutes while you edit, the newest 20. A plan on a server shows all its revisions. **Restore**
 gives the plan the state of a version, and undo takes it back; before a restore, the browser keeps
-the state of now as a version too. **Open as a copy** makes a new plan in this browser.
+the state of now as a version too. **Open as a copy** makes a new plan in this browser, or on the
+server for a plan of a server.
 
 A saved file knows its revision. Before the app replaces a file (Chrome and Edge), it checks that
 nobody saved the file in the meantime, for example on another device of a shared folder. Then it

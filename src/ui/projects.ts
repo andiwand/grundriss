@@ -32,7 +32,8 @@ import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { $, app, doc, editor, shell, showStatus } from "./context";
 import { resetLocation } from "./energy";
-import { iconButton, textInput } from "./controls";
+import { button, iconButton, textInput } from "./controls";
+import { dialog, note } from "./dialog";
 import { setSuggestions } from "./tracing";
 import { localSource, showVersions } from "./versions";
 
@@ -69,6 +70,13 @@ export const remoteHooks = {
   canUpload: (): boolean => false,
   /** Opens the dialog that copies or moves a project of this browser to a server. */
   toServer: (_project: { id: string; name: string } | null): void => {},
+  /**
+   * The name of the server of the app, or null for the app without a server. With a server, all
+   * plans are on it: a new plan, a file, and the example go there.
+   */
+  serverName: (): string | null => null,
+  /** Makes a plan on the server of the app, and opens it. */
+  create: async (_building: Building, _name: string): Promise<void> => {},
 };
 
 /** The autosave keeps a revision in the history at most this often, in ms. */
@@ -379,13 +387,29 @@ export function load(
 export async function openFile(): Promise<void> {
   try {
     const file = await openPlanFile();
-    if (!file || !(await confirmDiscard())) return;
-    load(readBuildingFile(file.bytes), file.name, file.handle, "from-file");
-    showStatus(t("Opened {name}.", { name: file.name }));
-    shell.enterPlan("structure");
+    if (file) await openFileData(file.bytes, file.name, file.handle);
   } catch (error) {
     showStatus(errorText(error), true);
   }
+}
+
+/**
+ * Opens the bytes of a plan file. With a server, the plan goes to the server as a new plan, and
+ * the file stays as it is.
+ */
+export async function openFileData(
+  bytes: Uint8Array,
+  name: string,
+  handle: FileSystemFileHandle | null,
+): Promise<void> {
+  const building = readBuildingFile(bytes);
+  if (remoteHooks.serverName() !== null) {
+    return remoteHooks.create(building, name.replace(/\.(grundriss|json)$/i, ""));
+  }
+  if (!(await confirmDiscard())) return;
+  load(building, name, handle, "from-file");
+  showStatus(t("Opened {name}.", { name }));
+  shell.enterPlan("structure");
 }
 
 async function openProject(id: string): Promise<void> {
@@ -421,12 +445,18 @@ export function localize(building: Building): Building {
 }
 
 export async function newPlan(): Promise<void> {
+  if (remoteHooks.serverName() !== null) {
+    return remoteHooks.create(localize(emptyBuilding()), t("New plan"));
+  }
   if (!(await confirmDiscard())) return;
   load(localize(emptyBuilding()));
   shell.enterPlan("structure");
 }
 
 export async function openExample(): Promise<void> {
+  if (remoteHooks.serverName() !== null) {
+    return remoteHooks.create(localize(makeHouse()), t("Example house"));
+  }
   if (!(await confirmDiscard())) return;
   load(localize(makeHouse()), `${t("Example house")}.grundriss`);
   showStatus(t("Opened the example house. A change saves it as a project in the browser."));
@@ -457,6 +487,24 @@ let homeRequest = 0;
 /** The home page: the tiles to start a plan, the plans in the browser, and the examples. */
 export function renderHome(): void {
   const note = $("#projects-note");
+  const server = remoteHooks.serverName();
+  if (server !== null) {
+    // The plans are on the server. The plans of this browser only show as a way to move them.
+    note.classList.remove("warning");
+    note.textContent = t(
+      "Draw a house or trace a scan, see it in 3D, and check its energy and a renovation. Your plans are on {server} and save themselves after each change.",
+      { server },
+    );
+    const request = ++homeRequest;
+    fillProjects([], true);
+    if (storageOk) {
+      void listProjects().then(
+        (projects) => request === homeRequest && localPlansLink(projects),
+        () => undefined,
+      );
+    }
+    return;
+  }
   if (!storageOk && storageBlocked()) {
     note.textContent = t(
       "Another tab with an older version of Grundriss blocks the storage. Close it, and load this page again.",
@@ -601,11 +649,13 @@ async function storageShare(): Promise<number | null> {
  * the plans in the browser, and the links to the backup and the trash. Without the storage
  * (`projects` is null), only the tiles to start show.
  */
-function fillProjects(projects: ProjectInfo[] | null): void {
+function fillProjects(projects: ProjectInfo[] | null, onServer = false): void {
   const list = $("#project-list");
   list.replaceChildren();
   const start = document.createElement("div");
   start.className = "project-grid start-row";
+  // On a server, only an account that can make plans starts one.
+  if (!onServer || remoteHooks.canUpload()) list.append(start);
   start.append(
     actionTile("plus", t("New plan"), t("Draw the walls, or trace a scan or a photo."), newPlan),
     actionTile("open", t("Open a file"), t("A .grundriss or a .json file."), () => void openFile()),
@@ -616,7 +666,7 @@ function fillProjects(projects: ProjectInfo[] | null): void {
       openExample,
     ),
   );
-  list.append(start);
+  if (onServer) return remoteHooks.home(list);
   if (!projects) return;
 
   const mine = document.createElement("section");
@@ -649,7 +699,6 @@ function fillProjects(projects: ProjectInfo[] | null): void {
     mine.append(grid);
   }
   list.append(mine);
-  remoteHooks.home(list);
 
   // The backup and the trash are less frequent, so they are links at the end.
   const links = document.createElement("nav");
@@ -677,6 +726,49 @@ function fillProjects(projects: ProjectInfo[] | null): void {
     });
     links.after(trash);
   });
+}
+
+/**
+ * On a server, the plans that are only in this browser, for example from before the server: a
+ * link at the end of the home page opens their list, and each one moves to the server.
+ */
+function localPlansLink(projects: ProjectInfo[]): void {
+  const server = remoteHooks.serverName();
+  const list = $("#project-list");
+  if (projects.length === 0 || server === null || !remoteHooks.canUpload()) return;
+  const links = document.createElement("nav");
+  links.className = "home-links";
+  const open = button(
+    t("Plans only in this browser: {count}. Move them to {server}…", {
+      count: projects.length,
+      server,
+    }),
+    () => {
+      const { element, body } = dialog(t("Plans in this browser"));
+      note(
+        body,
+        t("These plans are not on {server}. Move each one to the server to keep it there.", {
+          server,
+        }),
+      );
+      for (const project of projects) {
+        const row = button(
+          project.name,
+          () => {
+            element.close();
+            remoteHooks.toServer({ id: project.id, name: project.name });
+          },
+          { icon: "cloud", title: t("Changed {time}", { time: ago(project.updated) }) },
+        );
+        body.append(row);
+      }
+    },
+    { icon: "upload" },
+  );
+  // Like the other links at the end of the home page.
+  open.className = "link";
+  links.append(open);
+  list.append(links);
 }
 
 /** The tile of a project in the browser: its picture, its name, its time, and its tools. */

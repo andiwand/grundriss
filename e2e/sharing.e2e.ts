@@ -8,15 +8,16 @@ import { openServerApp, startServer, stopServers } from "./server-helpers";
 
 test.afterEach(stopServers);
 
-/** Opens the app of the server as the admin, and puts the example house on the server. */
+/**
+ * Opens the app of the server as the admin, and starts the example house: on a server, it is a
+ * plan of the server at once.
+ */
 async function putExample(page: Page) {
   const server = await startServer();
   await server.login(page.context());
   await openServerApp(page, server.base);
-  await expect(page.locator(".server-head")).toContainText("Admin");
+  await expect(page.locator("#account-button")).toContainText("Admin");
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
-  await page.locator("#share").click();
-  await page.locator(".app-dialog button.primary").click();
   await expect(page.locator("#remote-state")).toBeVisible();
   return server;
 }

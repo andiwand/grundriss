@@ -33,7 +33,6 @@ import {
   type SessionInfo,
   type Share,
 } from "../io/server";
-import { emptyBuilding } from "../model/building";
 import { parseBuilding, serializeBuilding } from "../model/file";
 import { fmt } from "../model/format";
 import { diffBuildings, patchBuilding, type Patch } from "../model/patch";
@@ -51,6 +50,7 @@ import {
   startPresence,
 } from "./presence";
 import {
+  button,
   checkbox,
   iconButton,
   numberInput,
@@ -60,11 +60,9 @@ import {
   textInput,
 } from "./controls";
 import {
-  addProject,
   ago,
   confirmDiscard,
   load,
-  localize,
   projectBuilding,
   projectId,
   projectName,
@@ -88,6 +86,10 @@ interface ServerState {
 const KNOWN_KEY = "grundriss-server";
 
 let server: ServerState | null = null;
+/** The search for the server at the start (`start`). */
+let started: Promise<void> = Promise.resolve();
+/** True after the search: before it, the server of an earlier visit counts. */
+let searched = false;
 
 const account = (): Account | null => server?.info?.account ?? null;
 const canCreate = () => {
@@ -132,13 +134,8 @@ const dateText = (time: number) => new Date(time).toLocaleDateString(locale());
  */
 async function findServer(): Promise<ServerState | null> {
   if (!/^https?:$/.test(location.protocol)) return null;
-  const base = new URL("../", document.baseURI).href.replace(/\/+$/, "");
-  let known: { base: string; name: string } | null = null;
-  try {
-    known = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? "null");
-  } catch {
-    // Without the storage, there are no copies to show either.
-  }
+  const base = serverBase();
+  const known = knownServer();
   let response: Response;
   try {
     response = await fetch(`${base}/api/session`, {
@@ -146,9 +143,7 @@ async function findServer(): Promise<ServerState | null> {
       credentials: "same-origin",
     });
   } catch {
-    return known?.base === base
-      ? { client: new ServerClient(base), info: null, name: known.name }
-      : null;
+    return known ? { client: new ServerClient(base), info: null, name: known.name } : null;
   }
   if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return null;
   const info = (await response.json()) as SessionInfo;
@@ -164,6 +159,20 @@ async function findServer(): Promise<ServerState | null> {
   }
   remember(base, info.server);
   return { client: new ServerClient(base), info, name: info.server };
+}
+
+/** The address of the server of the app: the folder above the app. */
+const serverBase = () => new URL("../", document.baseURI).href.replace(/\/+$/, "");
+
+/** The server of the app from an earlier visit, which the browser remembers, or null. */
+function knownServer(): { base: string; name: string } | null {
+  try {
+    const known = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? "null");
+    return known?.base === serverBase() ? known : null;
+  } catch {
+    // Without the storage, there are no copies to show either.
+    return null;
+  }
 }
 
 function remember(base: string, name: string): void {
@@ -187,7 +196,8 @@ function setSession(info: SessionInfo): void {
   server.info = info;
   server.name = info.server;
   remember(server.client.base, info.server);
-  if (!app.planOpen) renderHome();
+  if (accountPageOpen()) renderAccountPage();
+  else if (!app.planOpen) renderHome();
   updateRemoteState();
 }
 
@@ -888,18 +898,30 @@ async function save(): Promise<void> {
   return current.saving;
 }
 
-/** Ends the session and keeps the open plan as a new project in this browser. */
+/**
+ * Keeps the open plan as a copy: a new plan on the server, if the account can make one and the
+ * server answers, or else a file.
+ */
 async function keepCopy(): Promise<void> {
   const current = session;
-  const building = doc.building;
-  const name = `${projectName()} (${t("copy")})`;
-  const created = Date.now();
+  if (current && !current.offline && canCreate()) {
+    await createOnServer(doc.building, `${projectName()} (${t("copy")})`);
+  } else await shell.saveAsFile();
+}
+
+/** Makes a plan on the server of the app, and opens it. */
+async function createOnServer(building: Building, name: string): Promise<void> {
+  await started;
+  const state = server;
+  if (!state) return;
+  if (!canCreate()) {
+    if (account()) showStatus(t("Your account cannot make plans on this server."), true);
+    else loginDialog();
+    return;
+  }
   try {
-    const id = await addProject(building, name);
-    if (session !== current || doc.building !== building) return;
-    endSession();
-    load(building, `${name}.grundriss`, null, { id, created });
-    showStatus(t("The plan is now a copy in this browser, without the server."));
+    const plan = await state.client.createPlan(name, serializeBuilding(building));
+    await openRemote(plan.id);
   } catch (error) {
     showStatus(errorText(error), true);
   }
@@ -931,10 +953,11 @@ function updateRemoteState(): void {
   const state = $<HTMLButtonElement>("#remote-state");
   const share = $<HTMLButtonElement>("#share");
   const current = session;
-  // Share: the share links of a plan of the server; else the plan of the browser to the server.
-  // The class plan-tools hides it on the Projects page.
-  share.hidden = current ? !(current.share && !current.offline) : !canCreate();
+  // Share: the share links of a plan of the server. The class plan-tools hides it on the home
+  // page.
+  share.hidden = !(current?.share && !current.offline);
   state.hidden = !current;
+  updateAccountButton();
   document.body.classList.toggle("remote-plan", !!current);
   if (!current) return;
   const [iconName, text, tone]: [IconName, string, string] = current.offline
@@ -1167,15 +1190,82 @@ async function linkDialog(code: string): Promise<void> {
 }
 
 /** The own account: the space, the password, and the logout. */
-function accountDialog(): void {
+// ----- The page of the account -----
+
+/** True while the page of the account shows. */
+const accountPageOpen = () => document.body.classList.contains("account-page");
+
+/** The button of the account in the top bar: the name of the account, or "Log in". */
+function updateAccountButton(): void {
+  const element = $<HTMLButtonElement>("#account-button");
+  const state = server;
+  element.hidden = !state?.info;
+  const me = account();
+  element.innerHTML = icon("users");
+  element.append(me ? me.name : t("Log in"));
+  element.title = me
+    ? t("Your account and the server: {name} on {server}", { name: me.name, server: state!.name })
+    : t("Log in to {server}", { server: state?.name ?? "" });
+}
+
+/** Opens the page of the account in place of the plans, or the login without an account. */
+async function showAccountPage(): Promise<void> {
+  if (!account()) return loginDialog();
+  // The page takes the place of the open plan, which saves itself on the server.
+  if (app.planOpen) {
+    await shell.showHome();
+    if (app.planOpen) return;
+  }
+  $("#home").hidden = true;
+  $("#account").hidden = false;
+  document.body.classList.add("account-page");
+  // The hint of the home page does not fit the page of the account.
+  showStatus("");
+  renderAccountPage();
+  // The space and the plans of the account change with each save: the session has them new.
+  const state = server;
+  if (state) void state.client.session().then(setSession, () => undefined);
+}
+
+/** The page of the account: the account, and for the admin or an inviter, the server. */
+function renderAccountPage(): void {
   const state = server;
   const me = account();
-  if (!state || !me) return;
-  const { element, body } = dialog(me.name);
-  note(body, t("On {server}: {usage}.", { server: state.name, usage: usageText(me) }));
+  const sections = $("#account-sections");
+  sections.replaceChildren();
+  updateAccountButton();
+  if (!state || !me) return void shell.showHome();
+  $("#account-title").textContent = me.name;
+  $("#account-note").textContent = t("Your account on {server}: {usage}.", {
+    server: state.name,
+    usage: usageText(me),
+  });
+  accountCard(card(sections, t("Your account")));
+  if (me.admin || me.makeAccounts) void serverCards(sections);
+}
+
+/** A card of the page of the account, with its heading. It gives the card. */
+function card(parent: HTMLElement, title: string): HTMLElement {
+  const element = document.createElement("section");
+  element.className = "account-card";
   const heading = document.createElement("h3");
-  heading.textContent = t("Change the password");
-  body.append(heading);
+  heading.textContent = title;
+  element.append(heading);
+  parent.append(element);
+  return element;
+}
+
+/** A heading in a card. */
+function subheading(parent: HTMLElement, text: string): void {
+  const heading = document.createElement("h4");
+  heading.textContent = text;
+  parent.append(heading);
+}
+
+/** The card of the own account: the password and the logout. */
+function accountCard(body: HTMLElement): void {
+  const state = server!;
+  subheading(body, t("Change the password"));
   const old = textInput("", { type: "password", autocomplete: "current-password" });
   row(body, t("Old password"), old);
   const next = textInput("", { type: "password", autocomplete: "new-password" });
@@ -1194,7 +1284,6 @@ function accountDialog(): void {
         await state.client.changePassword(old.value, next.value);
         old.value = next.value = "";
         showStatus(t("The password is changed. The other logins of the account ended."));
-        element.close();
       } catch (error) {
         message.textContent = errorText(error);
       }
@@ -1207,17 +1296,12 @@ function accountDialog(): void {
           !confirm(t("Some changes did not go to the server yet. Log out and discard them?"))
         )
           return;
-        const open = !!session;
         endSession();
+        // On a computer of others, the plans of the account do not stay in the browser.
+        load();
         setSession(await state.client.logout());
-        // On a computer of others, the plans of the account do not stay in the browser: the open
-        // plan closes, so that it does not save as a project of the browser.
-        if (open) {
-          load();
-          void shell.showHome();
-        }
+        await shell.showHome();
         await removeRemoteCopies(state.client.base).catch(() => undefined);
-        element.close();
         showStatus(t("Logged out."));
       } catch (error) {
         message.textContent = errorText(error);
@@ -1248,7 +1332,7 @@ function planDialog(): void {
     const actions = document.createElement("div");
     actions.className = "dialog-actions";
     actions.append(
-      actionButton(t("Save a copy in this browser"), () => {
+      actionButton(t("Save a copy"), () => {
         element.close();
         void keepCopy();
       }),
@@ -1299,7 +1383,7 @@ function planDialog(): void {
       element.close();
       void reload(current);
     }),
-    actionButton(t("Save a copy in this browser"), () => {
+    actionButton(t("Save a copy"), () => {
       element.close();
       void keepCopy();
     }),
@@ -1461,20 +1545,29 @@ function quotaField(parent: HTMLElement, value: number | null, fallback: string)
  * The accounts of the server: for the admin the settings, the accounts, the invites, and all
  * share links; for an account that invites, its invites.
  */
-async function accountsDialog(): Promise<void> {
+/**
+ * The cards of the server on the page of the account: for the admin, the settings and the
+ * accounts; for each account that may invite, the invites and the open links; and for the admin,
+ * all share links.
+ */
+async function serverCards(parent: HTMLElement): Promise<void> {
   const state = server;
   const me = account();
   if (!state || !me) return;
   const admin = me.admin;
   const client = state.client;
-  const { body } = dialog(admin ? t("Server and accounts") : t("Invite others"));
+  // The cards come in their order at once; their content follows from the server.
+  const settingsCard = admin ? card(parent, t("Server")) : null;
+  const accountsCard = admin ? card(parent, t("Accounts")) : null;
+  const body = card(parent, t("Invite"));
+  const sharesCard = admin ? card(parent, t("Share links")) : null;
 
   let defaults = "";
   if (admin) {
     try {
       const settings = await client.settings();
       const name = textInput(settings.name);
-      row(body, t("Name of the server"), name);
+      row(settingsCard!, t("Name of the server"), name);
       name.addEventListener("change", async () => {
         try {
           await client.saveSettings({ name: name.value });
@@ -1486,7 +1579,7 @@ async function accountsDialog(): Promise<void> {
       defaults =
         settings.quota > 0 ? String(Math.round(settings.quota / 1_048_576)) : t("no limit");
       note(
-        body,
+        settingsCard!,
         t(
           "Version {version}, {plans} plans, {accounts} accounts, {shares} share links. A new account gets {quota} for at most {count} plans; a link for one use works {hours} hours.",
           {
@@ -1501,13 +1594,11 @@ async function accountsDialog(): Promise<void> {
         ),
       );
     } catch (error) {
-      note(body, errorText(error), "dialog-note warning");
+      note(settingsCard!, errorText(error), "dialog-note warning");
     }
-    const heading = document.createElement("h3");
-    heading.textContent = t("Accounts");
     const accounts = document.createElement("div");
     accounts.className = "token-list";
-    body.append(heading, accounts);
+    accountsCard!.append(accounts);
     const refreshAccounts = () =>
       fill(accounts, client.accounts, (a) =>
         listRow(
@@ -1520,7 +1611,7 @@ async function accountsDialog(): Promise<void> {
             try {
               const { path } = await client.resetLink(a.id);
               showNewLink(
-                body,
+                accountsCard!,
                 client.address(path),
                 t("The link for a new password of {name}, shown only now:", { name: a.name }),
               );
@@ -1558,9 +1649,6 @@ async function accountsDialog(): Promise<void> {
   }
 
   // The invites.
-  const inviteHeading = document.createElement("h3");
-  inviteHeading.textContent = t("Invite");
-  body.append(inviteHeading);
   note(
     body,
     t(
@@ -1593,11 +1681,10 @@ async function accountsDialog(): Promise<void> {
     ),
   );
   body.append(form);
-  const linksHeading = document.createElement("h3");
-  linksHeading.textContent = t("Open links");
+  subheading(body, t("Open links"));
   const links = document.createElement("div");
   links.className = "token-list";
-  body.append(linksHeading, links);
+  body.append(links);
   const refreshLinks = () =>
     fill(links, client.invites, (invite: Invite) =>
       listRow(
@@ -1625,12 +1712,10 @@ async function accountsDialog(): Promise<void> {
     );
   await refreshLinks();
 
-  if (admin) {
-    const sharesHeading = document.createElement("h3");
-    sharesHeading.textContent = t("Share links");
+  if (sharesCard) {
     const shares = document.createElement("div");
     shares.className = "token-list";
-    body.append(sharesHeading, shares);
+    sharesCard.append(shares);
     const refreshShares = (): Promise<void> =>
       fill(
         shares,
@@ -1751,46 +1836,6 @@ function uploadDialog(project: { id: string; name: string } | null): void {
   footer(element, put);
 }
 
-/** Copies or moves a plan of the server to this browser. A move deletes it on the server. */
-function downloadDialog(client: ServerClient, plan: RemotePlan): void {
-  const { element, body } = dialog(t('"{name}" to this browser', { name: plan.name }));
-  note(
-    body,
-    t(
-      "The plan becomes a project of this browser, without the server. Its links on the server do not come with it.",
-    ),
-  );
-  const isMove = copyOrMove(
-    body,
-    t("Move: the plan goes away from the server, for everybody"),
-    plan.delete,
-  );
-  const message = note(body, "", "dialog-note warning");
-  const take = actionButton(
-    t("Put in this browser"),
-    async () => {
-      take.disabled = true;
-      try {
-        const remote = await client.plan(plan.id);
-        await addProject(parseBuilding(remote.data), plan.name);
-        if (isMove()) {
-          await client.deletePlan(plan.id, remote.revision);
-          if (session?.planId === plan.id) endSession();
-        }
-        element.close();
-        showStatus(t('"{name}" is in this browser now.', { name: plan.name }));
-        renderHome();
-      } catch (error) {
-        message.textContent = errorText(error);
-      } finally {
-        take.disabled = false;
-      }
-    },
-    true,
-  );
-  footer(element, take);
-}
-
 // ----- The home page -----
 
 /** The section of the server on the home page: the account, and the plans. */
@@ -1803,52 +1848,10 @@ function renderServers(list: HTMLElement): void {
   const me = account();
   const section = document.createElement("section");
   section.className = "project-section server-section";
-  const head = document.createElement("div");
-  head.className = "server-head";
   const heading = document.createElement("h3");
-  heading.innerHTML = icon("cloud");
-  heading.append(state.name);
-  const who = document.createElement("small");
-  who.textContent = me ? me.name : state.info ? t("Not logged in") : t("No connection");
-  heading.append(who);
-  const tools = document.createElement("div");
-  tools.className = "project-tools";
+  heading.textContent = t("Plans on {server}", { server: state.name });
+  section.append(heading);
   const client = state.client;
-  if (canCreate()) {
-    tools.append(
-      iconButton("plus", t("New plan on this server"), async () => {
-        try {
-          const plan = await client.createPlan(
-            t("New plan"),
-            serializeBuilding(localize(emptyBuilding())),
-          );
-          await openRemote(plan.id);
-        } catch (error) {
-          showStatus(errorText(error), true);
-        }
-      }),
-    );
-  }
-  if (me && (me.admin || me.makeAccounts)) {
-    tools.append(
-      iconButton(
-        me.admin ? "settings" : "users",
-        me.admin ? t("Server and accounts") : t("Invite others"),
-        () => void accountsDialog(),
-      ),
-    );
-  }
-  if (me) {
-    tools.append(iconButton("users", t("Your account"), accountDialog));
-  } else if (state.info) {
-    const login = document.createElement("button");
-    login.className = "primary";
-    login.textContent = t("Log in");
-    login.addEventListener("click", loginDialog);
-    tools.append(login);
-  }
-  head.append(heading, tools);
-  section.append(head);
   const grid = document.createElement("div");
   grid.className = "project-grid";
   section.append(grid);
@@ -1873,7 +1876,9 @@ function renderServers(list: HTMLElement): void {
   };
   if (!state.info) return void offline();
   if (!me && state.info.grants.length === 0) {
-    return empty(t("Log in to see your plans on this server."));
+    empty(t("Log in to see your plans on this server."));
+    section.append(button(t("Log in"), loginDialog, { kind: "primary" }));
+    return;
   }
   void client.plans().then(
     (plans) => {
@@ -1999,11 +2004,6 @@ function remoteCard(client: ServerClient, plan: RemotePlan): HTMLElement {
       }),
     );
   }
-  tools.append(
-    iconButton("save", t("Copy or move to this browser"), () => downloadDialog(client, plan), {
-      label: `${t("Copy or move to this browser")}: ${plan.name}`,
-    }),
-  );
   if (plan.delete) {
     tools.append(
       iconButton(
@@ -2048,6 +2048,11 @@ export function setupRemote(): Promise<void> {
   };
   remoteHooks.canUpload = canCreate;
   remoteHooks.toServer = uploadDialog;
+  remoteHooks.serverName = () =>
+    server?.name ??
+    (searched || !/^https?:$/.test(location.protocol) ? null : (knownServer()?.name ?? null));
+  remoteHooks.create = createOnServer;
+  $("#account-button").addEventListener("click", () => void showAccountPage());
   doc.onBlocked = () => {
     if (!session) return;
     showStatus(
@@ -2060,7 +2065,6 @@ export function setupRemote(): Promise<void> {
   $("#remote-state").addEventListener("click", planDialog);
   $("#share").addEventListener("click", () => {
     if (session) void shareDialog(session.client, session.planId, projectName());
-    else uploadDialog(null);
   });
   doc.subscribe(() => {
     updateRemoteState();
@@ -2077,12 +2081,18 @@ export function setupRemote(): Promise<void> {
     if (session?.offline) void tryOnline(session);
     else if (session?.failed) void save();
   });
-  return start();
+  started = start();
+  return started;
 }
 
 async function start(): Promise<void> {
   server = await findServer();
-  if (!server) return;
+  searched = true;
+  if (!server) {
+    // A server of an earlier visit made the home page show its plans.
+    if (!app.planOpen && knownServer()) renderHome();
+    return;
+  }
   updateRemoteState();
   const link = /#(?:setup|invite|reset)=([^&]+)/.exec(location.hash);
   if (link) history.replaceState(null, "", location.pathname);

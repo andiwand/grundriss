@@ -344,4 +344,19 @@ export const PROJECTS: Record<string, string> = {
   current: "aktuell",
   "Some changes did not go to the server yet. Log out and discard them?":
     "Einige Änderungen sind noch nicht auf dem Server. Abmelden und sie verwerfen?",
+  "Draw a house or trace a scan, see it in 3D, and check its energy and a renovation. Your plans are on {server} and save themselves after each change.":
+    "Zeichnen Sie ein Haus oder zeichnen Sie einen Scan nach, sehen Sie es in 3D, und prüfen Sie seine Energie und eine Sanierung. Ihre Pläne sind auf {server} und speichern sich nach jeder Änderung selbst.",
+  "Plans only in this browser: {count}. Move them to {server}…":
+    "Pläne nur in diesem Browser: {count}. Auf {server} verschieben…",
+  "Plans in this browser": "Pläne in diesem Browser",
+  "These plans are not on {server}. Move each one to the server to keep it there.":
+    "Diese Pläne sind nicht auf {server}. Verschieben Sie jeden auf den Server, um ihn dort zu behalten.",
+  "Your account cannot make plans on this server.":
+    "Ihr Konto kann auf diesem Server keine Pläne anlegen.",
+  "Your account and the server: {name} on {server}":
+    "Ihr Konto und der Server: {name} auf {server}",
+  "Your account on {server}: {usage}.": "Ihr Konto auf {server}: {usage}.",
+  "Save a copy": "Eine Kopie speichern",
+  Server: "Server",
+  "Plans on {server}": "Pläne auf {server}",
 };

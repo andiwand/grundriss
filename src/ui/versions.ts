@@ -11,7 +11,7 @@ import { parseBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { doc, showStatus } from "./context";
 import { actionButton, dialog, note } from "./dialog";
-import { addProject, ago, projectId, renderHome } from "./projects";
+import { addProject, ago, projectId, remoteHooks, renderHome } from "./projects";
 
 /** A version in the list. */
 interface Version {
@@ -163,7 +163,13 @@ export async function showVersions(source: Source): Promise<void> {
       actionButton(
         t("Open as a copy"),
         run(async (data) => {
-          await addProject(parseBuilding(data), `${source.name} (${version.title})`);
+          const name = `${source.name} (${version.title})`;
+          // With a server, the copy is a new plan on it, and opens.
+          if (remoteHooks.serverName() !== null) {
+            element.close();
+            return remoteHooks.create(parseBuilding(data), name);
+          }
+          await addProject(parseBuilding(data), name);
           showStatus(t("The version is a new plan in this browser now."));
           renderHome();
         }),

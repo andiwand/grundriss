@@ -30,6 +30,7 @@ import {
   load,
   newPlan,
   openExample,
+  openFileData,
   openFile,
   projectId,
   projectName,
@@ -65,7 +66,7 @@ import { planToSvg } from "./export/svg";
 import { checkFileRevision } from "./io/file-revision";
 import { EXPORT_TYPES, pickFile, readImage, saveBlob, savePlanFile } from "./io/files";
 
-import { isPackageName, readBuildingFile, writePackage } from "./io/package";
+import { isPackageName, writePackage } from "./io/package";
 
 import { renameProject } from "./io/projects";
 
@@ -160,6 +161,8 @@ async function showHome(): Promise<void> {
   document.body.classList.add("no-plan");
   $("#brand").title = "";
   $("#home").hidden = false;
+  $("#account").hidden = true;
+  document.body.classList.remove("account-page");
   $("#area").hidden = true;
   $("#overview").hidden = true;
   document.title = "Grundriss";
@@ -175,6 +178,8 @@ function enterPlan(next: Topic): void {
     "Close the plan and show the projects. The plan is already saved in the browser.",
   );
   $("#home").hidden = true;
+  $("#account").hidden = true;
+  document.body.classList.remove("account-page");
   if (status.textContent === HOME_HINT) showStatus(HINTS[editor.tool]);
   updateTitle();
   setTopic(next);
@@ -847,6 +852,7 @@ Object.assign(shell, {
   fit3d,
   enterPlan,
   showHome,
+  saveAsFile: () => saveFile(true),
   catalog,
   renderPanel,
 });
@@ -989,7 +995,10 @@ for (const element of document.querySelectorAll<HTMLButtonElement>("[data-topic-
   element.addEventListener("click", () => setTopic(element.dataset.topicTab as Topic));
 }
 
-$("#brand").addEventListener("click", () => app.planOpen && showHome());
+$("#brand").addEventListener(
+  "click",
+  () => (app.planOpen || document.body.classList.contains("account-page")) && showHome(),
+);
 
 $("#layers-button").addEventListener("click", () =>
   toggleMenu($("#layers-button"), $("#layers-menu")),
@@ -1211,13 +1220,10 @@ const launchQueue = (
 
 launchQueue?.setConsumer(async ({ files }) => {
   const handle = files[0];
-  if (!handle || !(await confirmDiscard())) return;
+  if (!handle) return;
   try {
     const file = await handle.getFile();
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    load(readBuildingFile(bytes), file.name, handle, "from-file");
-    showStatus(t("Opened {name}.", { name: file.name }));
-    enterPlan("structure");
+    await openFileData(new Uint8Array(await file.arrayBuffer()), file.name, handle);
   } catch (error) {
     showStatus(errorText(error), true);
   }
