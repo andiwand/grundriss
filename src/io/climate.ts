@@ -16,6 +16,7 @@
 
 import { climateFromData, type HourlyData } from "../model/climate";
 import type { Climate } from "../model/types";
+import { TextError } from "../model/errors";
 
 const GEOCODING = "https://geocoding-api.open-meteo.com/v1/search";
 const ARCHIVE = "https://archive-api.open-meteo.com/v1/archive";
@@ -64,7 +65,10 @@ async function getJson(url: string, fetcher: Fetch, signal?: AbortSignal): Promi
   try {
     data = await response.json();
   } catch {
-    if (!response.ok) throw new Error(`Open-Meteo answered with the error ${response.status}.`);
+    if (!response.ok)
+      throw new TextError("Open-Meteo answered with the error {status}.", {
+        status: response.status,
+      });
     throw new Error("Open-Meteo sent an answer that the app cannot read. Try again later.");
   }
   if (!response.ok) {
@@ -226,8 +230,8 @@ export async function downloadClimate(
       downloaded: today.toISOString().slice(0, 10),
     });
   } catch (error) {
-    throw new Error(
-      `Open-Meteo sent incomplete weather data for this place. ${(error as Error).message}`,
-    );
+    throw new TextError("Open-Meteo sent incomplete weather data for this place. {reason}", {
+      reason: (error as Error).message,
+    });
   }
 }

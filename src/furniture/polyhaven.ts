@@ -14,6 +14,7 @@ import { newId } from "../model/plan";
 import type { Model } from "../model/types";
 import { loadGltf, measure, writeGlb } from "./gltf";
 import { glbDataUrl, guessCategory, roundSize } from "./names";
+import { TextError } from "../model/errors";
 
 const API = "https://api.polyhaven.com";
 
@@ -71,7 +72,10 @@ async function getJson<T>(url: string): Promise<T> {
   } catch {
     throw new Error("The app cannot reach Poly Haven. Check the network connection.");
   }
-  if (!response.ok) throw new Error(`Poly Haven answered with the error ${response.status}.`);
+  if (!response.ok)
+    throw new TextError("Poly Haven answered with the error {status}.", {
+      status: response.status,
+    });
   try {
     return (await response.json()) as T;
   } catch {
@@ -109,7 +113,7 @@ export async function downloadModel(item: PolyHavenItem, resolution = "1k"): Pro
   const files = await getJson<FilesData>(`${API}/files/${encodeURIComponent(item.id)}`);
   const entry = files.gltf?.[resolution]?.gltf ?? files.gltf?.["1k"]?.gltf;
   if (typeof entry?.url !== "string")
-    throw new Error(`Poly Haven has no glTF file of "${item.name}".`);
+    throw new TextError('Poly Haven has no glTF file of "{name}".', { name: item.name });
   const include = entry.include ?? {};
 
   // The .gltf file refers to its .bin and its textures with relative paths. The manager gives
@@ -125,7 +129,9 @@ export async function downloadModel(item: PolyHavenItem, resolution = "1k"): Pro
   try {
     scene = await loadGltf(entry.url, manager);
   } catch {
-    throw new Error(`The app cannot load "${item.name}" from Poly Haven. Try again later.`);
+    throw new TextError('The app cannot load "{name}" from Poly Haven. Try again later.', {
+      name: item.name,
+    });
   }
   const glb = await writeGlb(scene);
   return {

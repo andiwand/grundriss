@@ -1,7 +1,7 @@
 // The help of the keyboard shortcuts: a dialog that opens with "?" or with the help button.
 
 import { t } from "../i18n";
-import { closeOutside } from "./dialog";
+import { dialog } from "./dialog";
 
 /** The version of the app from package.json (vite.config.ts). */
 declare const __APP_VERSION__: string;
@@ -70,11 +70,8 @@ function keyName(part: string): string {
 export function showShortcuts(): void {
   if (document.querySelector(".shortcuts-dialog")) return;
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const dialog = document.createElement("dialog");
-  dialog.className = "shortcuts-dialog";
-  const title = document.createElement("h2");
-  title.textContent = t("Keyboard shortcuts");
-  dialog.append(title);
+  const { element, body } = dialog(t("Keyboard shortcuts"));
+  element.classList.add("shortcuts-dialog");
   const columns = document.createElement("div");
   columns.className = "shortcuts-columns";
   for (const [name, keys] of SHORTCUTS) {
@@ -100,17 +97,8 @@ export function showShortcuts(): void {
     block.append(heading, list);
     columns.append(block);
   }
-  dialog.append(columns);
   const version = document.createElement("p");
   version.className = "app-version";
   version.textContent = t("Grundriss {version}", { version: __APP_VERSION__ });
-  dialog.append(version);
-  const close = document.createElement("button");
-  close.textContent = t("Close");
-  close.addEventListener("click", () => dialog.close());
-  dialog.append(close);
-  closeOutside(dialog);
-  dialog.addEventListener("close", () => dialog.remove());
-  document.body.append(dialog);
-  dialog.showModal();
+  body.append(columns, version);
 }

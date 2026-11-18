@@ -3,7 +3,7 @@
 // This module has no DOM and no Three.js.
 
 import { fmt } from "./format";
-import { add, distance, perpendicular, scale, sub } from "./geometry";
+import { add, cross, distance, perpendicular, scale, sub } from "./geometry";
 import { chimneyOutline, stairShape, type StairShape } from "./building";
 import { findWall, wallEnds } from "./plan";
 import { wallFaces } from "./walljoin";
@@ -58,8 +58,6 @@ export interface OpeningShape {
   /** The paths of the free ends of the hinged leaves, from the open to the closed position. */
   arcs: Arc[];
 }
-
-const cross = (u: Point, v: Point) => u.x * v.y - u.y * v.x;
 
 /** The distance of a sliding leaf from the face of the wall, and of the panes of a window. */
 const SLIDE_GAP = 0.03;

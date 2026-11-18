@@ -3134,33 +3134,6 @@ body.overview #layers-button {
 }
 
 /* The comparison of the variants: a dialog over the app, about as wide as its table. */
-.compare-dialog {
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 48px);
-  padding: 16px 20px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow);
-}
-
-.compare-dialog::backdrop {
-  background: rgb(0 0 0 / 0.35);
-}
-
-.compare-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.compare-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
 .compare-dialog .note {
   margin: 0;
   color: var(--ink-3);
@@ -3224,13 +3197,7 @@ body.overview #layers-button {
   border-bottom: none;
 }
 
-.compare-dialog .compare-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.compare-dialog .compare-block p {
+.compare-dialog .app-dialog-body p {
   margin: 0;
 }
 
@@ -3390,28 +3357,12 @@ body.overview #layers-button {
 }
 
 /* The help of the keyboard shortcuts. */
-.shortcuts-dialog {
-  max-width: min(760px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  padding: 20px 24px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow);
-}
-
-.shortcuts-dialog::backdrop {
-  background: rgb(0 0 0 / 0.35);
-}
-
-.shortcuts-dialog h2 {
-  margin: 0 0 12px;
-  font-size: 18px;
+.app-dialog.shortcuts-dialog {
+  width: min(760px, calc(100vw - 32px));
 }
 
 .shortcuts-dialog .app-version {
-  margin: 12px 0 8px;
+  margin: 4px 0 0;
   color: var(--ink-3);
   font-size: 12px;
 }
@@ -3422,12 +3373,8 @@ body.overview #layers-button {
   gap: 16px 24px;
 }
 
-.shortcuts-dialog h3 {
+.shortcuts-dialog section h3 {
   margin: 0 0 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .shortcuts-dialog dl {
@@ -3455,10 +3402,6 @@ body.overview #layers-button {
     12px/1.4 ui-monospace,
     monospace;
   text-align: center;
-}
-
-.shortcuts-dialog > button {
-  margin-top: 16px;
 }
 
 .project-warning {
@@ -3708,9 +3651,9 @@ body.compact:not(.no-plan) {
   padding-bottom: var(--sheet-bottom);
 }
 
-/* The status of a phone: a small card above the bar at the bottom, only while it has a message
-   (src/ui/context.ts). The whole text shows, in more lines if it needs them. A message goes
-   after some seconds; an error stays until a tap. */
+/* The status of a phone: a small card above the bar at the bottom, or above the sheet of the
+   panel with a plan, only while it has a message (src/ui/context.ts). The whole text shows, in
+   more lines if it needs them. A message goes after some seconds; an error stays until a tap. */
 body.compact #status {
   position: fixed;
   left: 8px;
@@ -3734,6 +3677,23 @@ body.compact #status {
 }
 
 body.compact:not(.no-plan) #status {
+  bottom: calc(var(--sheet-bottom) + var(--sheet-height, 72px) + 8px);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease,
+    bottom 180ms ease;
+}
+
+/* The "Done" button is there too: the card goes above it. */
+body.compact:not(.no-plan):has(#tool-done:not([hidden])) #status {
+  bottom: calc(var(--sheet-bottom) + var(--sheet-height, 72px) + 64px);
+}
+
+body.compact.sheet-drag #status {
+  transition: none;
+}
+
+body.compact.overview:not(.no-plan) #status {
   bottom: calc(var(--bottom-bar) + 8px);
 }
 

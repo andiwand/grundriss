@@ -234,4 +234,29 @@ export const MODEL: Record<string, string> = {
   "Main roof": "Hauptdach",
   "Household electricity": "Haushaltsstrom",
   "Outer walls with own layers": "Außenwände mit eigenen Schichten",
+  "Open-Meteo answered with the error {status}.": "Open-Meteo antwortete mit dem Fehler {status}.",
+  "Open-Meteo sent incomplete weather data for this place. {reason}":
+    "Open-Meteo hat für diesen Ort unvollständige Wetterdaten gesendet. {reason}",
+  "Poly Haven answered with the error {status}.": "Poly Haven antwortete mit dem Fehler {status}.",
+  'Poly Haven has no glTF file of "{name}".': "Poly Haven hat keine glTF-Datei von „{name}“.",
+  'The app cannot load "{name}" from Poly Haven. Try again later.':
+    "Die App kann „{name}“ nicht von Poly Haven laden. Versuchen Sie es später wieder.",
+  "The app cannot read this model ({reason}).":
+    "Die App kann dieses Modell nicht lesen ({reason}).",
+  'The package is damaged: the background image "{name}" is missing.':
+    "Das Paket ist beschädigt: Das Hintergrundbild „{name}“ fehlt.",
+  'The package is damaged: the file "{file}" of {name} is missing.':
+    "Das Paket ist beschädigt: Die Datei „{file}“ von {name} fehlt.",
+  'The package is damaged: it has no "{file}".': "Das Paket ist beschädigt: Es hat kein „{file}“.",
+  'The package is damaged: "{file}" is not valid JSON.':
+    "Das Paket ist beschädigt: „{file}“ ist kein gültiges JSON.",
+  "The recognition model does not load: {reason}": "Das Erkennungsmodell lädt nicht: {reason}",
+  "The recognition model does not load (HTTP {status}).":
+    "Das Erkennungsmodell lädt nicht (HTTP {status}).",
+  "The recognition model has contract {contract}, but this app needs contract {needed}. Install a matching model.":
+    "Das Erkennungsmodell hat den Vertrag {contract}, aber diese App braucht den Vertrag {needed}. Installieren Sie ein passendes Modell.",
+  "The recognition model has the classes {classes}, but this app needs {needed}.":
+    "Das Erkennungsmodell hat die Klassen {classes}, aber diese App braucht {needed}.",
+  'The recognition model has no output "{name}".':
+    "Das Erkennungsmodell hat keine Ausgabe „{name}“.",
 };

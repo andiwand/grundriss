@@ -4,6 +4,17 @@ The changes that a user notices.
 
 ## Unreleased
 
+- German: the error messages with a value, for example a status code or a file name, show in
+  German too (Open-Meteo, Poly Haven, the import of a model, a package, the recognition).
+- 2D: a drag of one of some selected roofs moves all of them, like the arrow keys.
+- Server: the selection of another person shows also on an outdoor area, a corner of an area, a
+  fence, and a tree.
+- Phone: the status card is above the sheet of the panel, and above the Done button while it
+  shows, so it covers no part of them.
+- Server: an own change that the server saves after a send without an answer does not hide the
+  newer own changes any more.
+- The keyboard shortcuts and the comparison of the variants are dialogs like the others.
+
 ## 0.6.0 – 2026-11-18
 
 - Server: a text in a plan cannot read a file of the server any more. Before, a person who could

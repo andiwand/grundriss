@@ -5,6 +5,7 @@ import { newId } from "../model/plan";
 import type { Model } from "../model/types";
 import { loadGltf, measure, writeGlb } from "./gltf";
 import { glbDataUrl, guessUnitFactor, nameFromFile, roundSize } from "./names";
+import { TextError } from "../model/errors";
 
 /** True if a glTF JSON refers to a file outside itself, which the app cannot load. */
 export function hasExternalFiles(gltf: {
@@ -45,8 +46,9 @@ export async function importModelFile(file: File): Promise<Model> {
   try {
     scene = await loadGltf(bytes);
   } catch (error) {
-    const detail = error instanceof Error ? ` (${error.message})` : "";
-    throw new Error(`The app cannot read this model${detail}.`);
+    throw new TextError("The app cannot read this model ({reason}).", {
+      reason: error instanceof Error ? error.message : String(error),
+    });
   }
   const raw = measure(scene);
   if (!(raw.x > 0 || raw.y > 0 || raw.z > 0)) throw new Error("The model has no geometry.");

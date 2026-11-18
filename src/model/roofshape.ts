@@ -33,7 +33,16 @@
 // lines go on outward and down until the hip face reaches its overhang, so the hip face and the
 // faces of its neighbors meet without a gap.
 
-import { signedArea } from "./geometry";
+import {
+  add,
+  cross,
+  dot,
+  length as len,
+  scale as mul,
+  signedArea,
+  sub,
+  unitVector,
+} from "./geometry";
 import type { Dormer, Id, Point, RoofSide, RoofWindow } from "./types";
 
 export interface Vec3 {
@@ -103,16 +112,7 @@ export const WINDOW_LIFT = 0.02;
 
 // ----- Small vector functions -----
 
-const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
-const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });
-const mul = (a: Point, s: number): Point => ({ x: a.x * s, y: a.y * s });
-const dot = (a: Point, b: Point): number => a.x * b.x + a.y * b.y;
-const cross = (a: Point, b: Point): number => a.x * b.y - a.y * b.x;
-const len = (a: Point): number => Math.hypot(a.x, a.y);
-const unit = (a: Point): Point => {
-  const l = len(a);
-  return l < EPS ? { x: 0, y: 0 } : mul(a, 1 / l);
-};
+const unit = (a: Point): Point => unitVector(a, EPS);
 const v3 = (p: Point, z: number): Vec3 => ({ x: p.x, y: p.y, z });
 const flat2 = (p: Vec3): Point => ({ x: p.x, y: p.y });
 const dist3 = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);

@@ -52,6 +52,7 @@ import {
 } from "../model/services";
 import {
   add,
+  centroid,
   clamp,
   closestOnSegment,
   distance,
@@ -189,7 +190,7 @@ type Drag =
   | { kind: "furniture"; id: Id; grab: Point }
   | { kind: "fixture"; id: Id; grab: Point }
   | { kind: "roof-corner"; roofId: Id; index: number }
-  | { kind: "roof"; id: Id; startWorld: Point; origin: Point[] }
+  | { kind: "roof"; startWorld: Point; origins: Map<Id, Point[]> }
   | { kind: "area-corner"; areaId: Id; index: number }
   | { kind: "map"; start: Point; anchor: Point; north: number; turn: boolean };
 
@@ -1141,51 +1142,41 @@ export class Editor2D {
    * box that selects the objects in it. A finger on a touch screen pans the plan.
    */
   private selectDown(e: PointerEvent, world: Point): void {
-    // A "+" handle of a roof outline adds a corner in the middle of its side, and drags it.
+    // A "+" handle of the outline of a roof or an area adds a corner in the middle of its side,
+    // and drags it.
     const insert =
       e.target instanceof Element
-        ? e.target.closest<SVGElement>('[data-kind="roof-insert"]')
+        ? e.target.closest<SVGElement>('[data-kind="roof-insert"], [data-kind="area-insert"]')
         : null;
     if (insert && !this.doc.readOnly) {
-      const [roofId, index] = insert.dataset.id!.split(":");
+      const [id, index] = insert.dataset.id!.split(":");
       const i = Number(index);
+      const middle = (outline: Point[]) =>
+        outline.splice(i + 1, 0, scale(add(outline[i], outline[(i + 1) % outline.length]), 0.5));
       this.doc.begin();
-      this.doc.updateBuilding((building) => {
-        const roof = building.roofs.find((r) => r.id === roofId)!;
-        const p = roof.outline[i];
-        const q = roof.outline[(i + 1) % roof.outline.length];
-        roof.outline.splice(i + 1, 0, scale(add(p, q), 0.5));
-        // The new side gets the settings of the side that it splits.
-        roof.sides.splice(i + 1, 0, structuredClone(roof.sides[i]));
-        shiftRoofItems(roof, i + 1);
-      });
-      this.items = [{ kind: "roof-corner", id: `${roofId}:${i + 1}` }];
+      if (insert.dataset.kind === "roof-insert") {
+        this.doc.updateBuilding((building) => {
+          const roof = building.roofs.find((r) => r.id === id)!;
+          middle(roof.outline);
+          // The new side gets the settings of the side that it splits.
+          roof.sides.splice(i + 1, 0, structuredClone(roof.sides[i]));
+          shiftRoofItems(roof, i + 1);
+        });
+        this.items = [{ kind: "roof-corner", id: `${id}:${i + 1}` }];
+        this.drag = { kind: "roof-corner", roofId: id, index: i + 1 };
+      } else {
+        this.doc.update((plan) => {
+          const area = plan.areas.find((a) => a.id === id)!;
+          middle(area.points);
+          // The two halves of a side with a railing both keep it.
+          const railed = area.railings.includes(i);
+          area.railings = area.railings.map((side) => (side > i ? side + 1 : side));
+          if (railed) area.railings.push(i + 1);
+        });
+        this.items = [{ kind: "area-corner", id: `${id}:${i + 1}` }];
+        this.drag = { kind: "area-corner", areaId: id, index: i + 1 };
+      }
       this.onSelect(this.items);
-      this.drag = { kind: "roof-corner", roofId, index: i + 1 };
-      return;
-    }
-    // A "+" handle of the outline of an area adds a corner in the middle of its side.
-    const areaInsert =
-      e.target instanceof Element
-        ? e.target.closest<SVGElement>('[data-kind="area-insert"]')
-        : null;
-    if (areaInsert && !this.doc.readOnly) {
-      const [areaId, index] = areaInsert.dataset.id!.split(":");
-      const i = Number(index);
-      this.doc.begin();
-      this.doc.update((plan) => {
-        const area = plan.areas.find((a) => a.id === areaId)!;
-        const p = area.points[i];
-        const q = area.points[(i + 1) % area.points.length];
-        area.points.splice(i + 1, 0, scale(add(p, q), 0.5));
-        // The two halves of a side with a railing both keep it.
-        const railed = area.railings.includes(i);
-        area.railings = area.railings.map((side) => (side > i ? side + 1 : side));
-        if (railed) area.railings.push(i + 1);
-      });
-      this.items = [{ kind: "area-corner", id: `${areaId}:${i + 1}` }];
-      this.onSelect(this.items);
-      this.drag = { kind: "area-corner", areaId, index: i + 1 };
       return;
     }
     const hit = this.hitNear(e);
@@ -1219,14 +1210,17 @@ export class Editor2D {
     if (this.doc.readOnly) return;
 
     this.doc.begin();
-    if (this.items.length === 1 && hit.kind === "roof") {
-      const roof = this.doc.building.roofs.find((r) => r.id === hit.id)!;
-      this.drag = {
-        kind: "roof",
-        id: hit.id,
-        startWorld: world,
-        origin: roof.outline.map((p) => ({ ...p })),
-      };
+    if (hit.kind === "roof") {
+      // All selected roofs move together.
+      const ids = new Set(this.items.filter((i) => i.kind === "roof").map((i) => i.id));
+      const origins = new Map<Id, Point[]>();
+      for (const roof of this.doc.building.roofs)
+        if (ids.has(roof.id))
+          origins.set(
+            roof.id,
+            roof.outline.map((p) => ({ ...p })),
+          );
+      this.drag = { kind: "roof", startWorld: world, origins };
       return;
     }
     if (this.items.length === 1 && hit.kind === "fixture") {
@@ -1403,17 +1397,13 @@ export class Editor2D {
         break;
       }
       case "roof": {
-        // The whole roof moves, in steps of the grid. Alt: free.
-        let delta = sub(world, drag.startWorld);
-        if (!e.altKey) {
-          delta = {
-            x: Math.round(delta.x / GRID_STEP) * GRID_STEP,
-            y: Math.round(delta.y / GRID_STEP) * GRID_STEP,
-          };
-        }
+        // The whole roofs move, in steps of the grid. Alt: free.
+        const delta = grid(sub(world, drag.startWorld));
         this.doc.updateBuilding((building) => {
-          const roof = building.roofs.find((r) => r.id === drag.id);
-          if (roof) roof.outline = drag.origin.map((p) => add(p, delta));
+          for (const roof of building.roofs) {
+            const origin = drag.origins.get(roof.id);
+            if (origin) roof.outline = origin.map((p) => add(p, delta));
+          }
         });
         break;
       }
@@ -2265,21 +2255,32 @@ export class Editor2D {
    * of each side that adds a corner when the user drags it.
    */
   private renderRoofHandles(roof: Roof): void {
-    const handles = svg("g", { class: "roof-outline" }, this.content);
-    svg("polygon", { points: points(roof.outline), class: "outline" }, handles);
-    const n = roof.outline.length;
-    roof.outline.forEach((p, i) => {
-      const q = roof.outline[(i + 1) % n];
+    const handles = this.outlineHandles(roof.outline, roof.id, "roof", "roof-outline");
+    handles.prepend(svg("polygon", { points: points(roof.outline), class: "outline" }));
+  }
+
+  /**
+   * The handles of an outline of a roof or an area: the corners, a "+" in the middle of each
+   * side, and the number of each side outside the outline, so that the user finds the side of a
+   * row of the panel. The kinds of the handles are `<kind>-corner` and `<kind>-insert`.
+   */
+  private outlineHandles(
+    outline: Point[],
+    id: Id,
+    kind: "roof" | "area",
+    className: string,
+  ): SVGGElement {
+    const handles = svg("g", { class: className }, this.content);
+    const n = outline.length;
+    const center = centroid(outline);
+    outline.forEach((p, i) => {
+      const q = outline[(i + 1) % n];
       const mid = scale(add(p, q), 0.5);
-      // The number of the side, outside the outline, so that the user finds the side of a row
-      // of the panel. The outline can go either way round, so the label goes to the side of
-      // the normal that points away from the center of the outline.
-      const center = scale(roof.outline.reduce(add, { x: 0, y: 0 }), 1 / n);
-      const length = distance(p, q) || 1;
-      let normal = perpendicular(scale(sub(q, p), 1 / length));
+      // The outline can go either way round: the number goes to the side of the normal that
+      // points away from the center.
+      let normal = perpendicular(scale(sub(q, p), 1 / (distance(p, q) || 1)));
       if (dot(normal, sub(mid, center)) < 0) normal = scale(normal, -1);
-      const at = add(mid, scale(normal, 16 / this.zoom));
-      this.label(handles, at, String(i + 1), "side-number");
+      this.label(handles, add(mid, scale(normal, 16 / this.zoom)), String(i + 1), "side-number");
       svg(
         "circle",
         {
@@ -2287,15 +2288,14 @@ export class Editor2D {
           cy: mid.y,
           r: 4 / this.zoom,
           class: "insert",
-          "data-kind": "roof-insert",
-          "data-id": `${roof.id}:${i}`,
+          "data-kind": `${kind}-insert`,
+          "data-id": `${id}:${i}`,
         },
         handles,
       );
     });
-    roof.outline.forEach((p, i) => {
-      const id = `${roof.id}:${i}`;
-      const active = this.isSelected("roof-corner", id);
+    outline.forEach((p, i) => {
+      const corner = `${id}:${i}`;
       svg(
         "rect",
         {
@@ -2303,13 +2303,14 @@ export class Editor2D {
           y: p.y - 5 / this.zoom,
           width: 10 / this.zoom,
           height: 10 / this.zoom,
-          class: active ? "corner selected" : "corner",
-          "data-kind": "roof-corner",
-          "data-id": id,
+          class: this.isSelected(`${kind}-corner`, corner) ? "corner selected" : "corner",
+          "data-kind": `${kind}-corner`,
+          "data-id": corner,
         },
         handles,
       );
     });
+    return handles;
   }
 
   /**
@@ -2379,45 +2380,7 @@ export class Editor2D {
 
   /** The corners of a selected area, a "+" in the middle of each side, and the side numbers. */
   private renderAreaHandles(area: Area): void {
-    const handles = svg("g", { class: "roof-outline area-outline" }, this.content);
-    const n = area.points.length;
-    const center = areaCenter(area.points);
-    area.points.forEach((p, i) => {
-      const q = area.points[(i + 1) % n];
-      const mid = scale(add(p, q), 0.5);
-      const length = distance(p, q) || 1;
-      let normal = perpendicular(scale(sub(q, p), 1 / length));
-      if (dot(normal, sub(mid, center)) < 0) normal = scale(normal, -1);
-      this.label(handles, add(mid, scale(normal, 14 / this.zoom)), String(i + 1), "side-number");
-      svg(
-        "circle",
-        {
-          cx: mid.x,
-          cy: mid.y,
-          r: 4 / this.zoom,
-          class: "insert",
-          "data-kind": "area-insert",
-          "data-id": `${area.id}:${i}`,
-        },
-        handles,
-      );
-    });
-    area.points.forEach((p, i) => {
-      const id = `${area.id}:${i}`;
-      svg(
-        "rect",
-        {
-          x: p.x - 5 / this.zoom,
-          y: p.y - 5 / this.zoom,
-          width: 10 / this.zoom,
-          height: 10 / this.zoom,
-          class: this.isSelected("area-corner", id) ? "corner selected" : "corner",
-          "data-kind": "area-corner",
-          "data-id": id,
-        },
-        handles,
-      );
-    });
+    this.outlineHandles(area.points, area.id, "area", "roof-outline area-outline");
   }
 
   /**

@@ -1,5 +1,5 @@
 import { planPreview } from "../export/preview";
-import { locale, t } from "../i18n";
+import { errorText, locale, t } from "../i18n";
 import { icon, type IconName } from "../icons";
 import { makeBackup, readBackup } from "../io/backup";
 import { openPlanFile, pickFile, saveBlob } from "../io/files";
@@ -38,8 +38,6 @@ import { localSource, showVersions } from "./versions";
 
 /** The message of an error in the language of the app. A static message of the model or of the
  * I/O modules has a translation, because the English message is the key. */
-const errorText = (error: unknown): string =>
-  error instanceof Error ? t(error.message) : String(error);
 
 export function updateTitle(): void {
   if (!app.planOpen) return;

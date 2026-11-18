@@ -11,7 +11,7 @@
 // and follow another person (`presence.ts`).
 
 import { planPreview } from "../export/preview";
-import { locale, t } from "../i18n";
+import { errorText, locale, t } from "../i18n";
 import {
   newProjectId,
   listRemoteCopies,
@@ -88,8 +88,6 @@ interface ServerState {
 const KNOWN_KEY = "grundriss-server";
 
 let server: ServerState | null = null;
-
-const errorText = (error: unknown) => (error instanceof Error ? t(error.message) : String(error));
 
 const account = (): Account | null => server?.info?.account ?? null;
 const canCreate = () => {
@@ -227,6 +225,11 @@ interface Session {
    */
   inflight: Patch | null;
   inflightRevision: string;
+  /**
+   * True after a send without an answer: the server can still apply that patch, and its echo
+   * then is not the echo of the patch on its way now.
+   */
+  unanswered: boolean;
   /** The timer of the load of the whole plan when a change of the server did not come. */
   gap: number;
   /** The timer of the copy in the browser, which waits for a pause of the changes. */
@@ -316,6 +319,48 @@ function storeCopySoon(current: Session): void {
 let session: Session | null = null;
 let opening = 0;
 
+/** A new session of a plan: it edits if it can write, and has no changes on their way. */
+function newSession(
+  fields: Pick<
+    Session,
+    "client" | "planId" | "serverName" | "revision" | "write" | "share" | "saved"
+  > &
+    Partial<Session>,
+): Session {
+  return {
+    editing: fields.write,
+    saving: null,
+    failed: false,
+    events: null,
+    loading: 0,
+    offline: false,
+    viewOnly: false,
+    waiting: new Map(),
+    waiters: [],
+    inflight: null,
+    inflightRevision: "",
+    unanswered: false,
+    gap: 0,
+    copyTimer: 0,
+    stored: doc.building,
+    edits: false,
+    editsTimer: 0,
+    reconnect: 0,
+    retry: 0,
+    retryDelay: 0,
+    ...fields,
+  };
+}
+
+/**
+ * The stream brings back an own patch: it is in the building of the server now. It is the patch
+ * on its way, unless an earlier send without an answer can still come back.
+ */
+function ownEcho(current: Session, change: Change): void {
+  if (change.client !== current.client.client) return;
+  if (!current.unanswered || change.id === current.inflightRevision) current.inflight = null;
+}
+
 /** True if the open plan has changes that neither the server nor the browser keeps. */
 const unsaved = (current: Session) =>
   (doc.building !== current.saved && doc.building !== current.stored) || current.saving !== null;
@@ -341,34 +386,15 @@ export async function openRemote(planId: string): Promise<void> {
     const parsed = parseBuilding(plan.data);
     endSession();
     load(parsed, `${plan.name}.grundriss`, null, "remote");
-    const current: Session = {
+    const current = newSession({
       client,
       planId,
       serverName: state.name,
       revision: plan.revision,
       write: plan.write,
       share: plan.share,
-      editing: plan.write,
       saved: doc.building,
-      saving: null,
-      failed: false,
-      events: null,
-      loading: 0,
-      offline: false,
-      viewOnly: false,
-      waiting: new Map(),
-      waiters: [],
-      inflight: null,
-      inflightRevision: "",
-      gap: 0,
-      copyTimer: 0,
-      stored: doc.building,
-      edits: false,
-      editsTimer: 0,
-      reconnect: 0,
-      retry: 0,
-      retryDelay: 0,
-    };
+    });
     session = current;
     doc.readOnly = !current.editing;
     // The changes that the person made without the network go on top of the newest revision.
@@ -385,15 +411,7 @@ export async function openRemote(planId: string): Promise<void> {
     storeCopy(current, plan.name, plan.data);
     // The address names the plan, for a bookmark.
     history.replaceState(null, "", planAddress(planId));
-    listen(current);
-    startPresence({
-      client: current.client,
-      planId: current.planId,
-      name: account()?.name ?? "",
-      write: current.write,
-      viewOnly: () => current.viewOnly,
-      setViewOnly: (value) => setViewOnly(current, value),
-    });
+    goLive(current);
     showStatus(
       own && current.editing
         ? t("Your changes without the network go to the server now.")
@@ -450,35 +468,18 @@ async function openOffline(
     null,
     "remote",
   );
-  const current: Session = {
+  const current = newSession({
     client,
     planId,
     serverName: name,
     revision: copy.revision,
     write,
     share: false,
-    editing: write,
     // The plan of the server, under the changes of the browser.
     saved: copy.editedData ? base : doc.building,
-    saving: null,
-    failed: false,
-    events: null,
-    loading: 0,
     offline: true,
-    viewOnly: false,
-    waiting: new Map(),
-    waiters: [],
-    inflight: null,
-    inflightRevision: "",
-    gap: 0,
-    copyTimer: 0,
-    stored: doc.building,
     edits: !!copy.editedData,
-    editsTimer: 0,
-    reconnect: 0,
-    retry: 0,
-    retryDelay: 0,
-  };
+  });
   session = current;
   current.reconnect = window.setInterval(() => void tryOnline(current), RECONNECT);
   showStatus(
@@ -554,15 +555,7 @@ function goOnline(current: Session, plan: RemotePlan & { data: string }): void {
   current.stored = doc.building;
   doc.readOnly = !current.editing;
   storeCopy(current, plan.name, plan.data);
-  listen(current);
-  startPresence({
-    client: current.client,
-    planId: current.planId,
-    name: account()?.name ?? "",
-    write: current.write,
-    viewOnly: () => current.viewOnly,
-    setViewOnly: (value) => setViewOnly(current, value),
-  });
+  goLive(current);
   // The session of the server, for example after a start without the network.
   if (server) void server.client.session().then(setSession, () => undefined);
   if (own && current.editing) {
@@ -579,6 +572,19 @@ function goOnline(current: Session, plan: RemotePlan & { data: string }): void {
     showStatus(t("The server answers again."));
   }
   updateRemoteState();
+}
+
+/** Starts the stream of the plan and the presence of this tab on it. */
+function goLive(current: Session): void {
+  listen(current);
+  startPresence({
+    client: current.client,
+    planId: current.planId,
+    name: account()?.name ?? "",
+    write: current.write,
+    viewOnly: () => current.viewOnly,
+    setViewOnly: (value) => setViewOnly(current, value),
+  });
 }
 
 /** The stream of the plan: the changes and the people. */
@@ -607,7 +613,7 @@ function listen(current: Session): void {
     // Each change comes once to each tab, also to the tab that sent it. A known own change is
     // in `saved` already, for example after a load of the whole plan.
     if (revisionNumber(change.id) <= revisionNumber(current.revision)) {
-      if (change.client === current.client.client) current.inflight = null;
+      ownEcho(current, change);
       return;
     }
     current.waiting.set(change.parent ?? "", change);
@@ -675,8 +681,7 @@ function advance(current: Session): void {
     }
     next = patchBuilding(next, change.patch);
     current.revision = change.id;
-    // The own patch is in the building of the server now.
-    if (change.client === current.client.client) current.inflight = null;
+    ownEcho(current, change);
   }
   for (const key of current.waiting.keys()) {
     if (revisionNumber(key) < revisionNumber(current.revision)) current.waiting.delete(key);
@@ -771,6 +776,7 @@ async function sendChanges(current: Session): Promise<void> {
     );
     current.inflightRevision = plan.revision;
     current.failed = false;
+    current.unanswered = false;
     // The change comes back on the stream, with the changes of the others before it.
     await knows(current, plan.revision);
     current.retryDelay = 0;
@@ -799,6 +805,8 @@ async function sendChanges(current: Session): Promise<void> {
       if (current.edits) storeEdits(current);
       return;
     }
+    // Without an answer, the server can still apply the patch later.
+    if (!(error instanceof ServerError) || error.status === 0) current.unanswered = true;
     if (!current.failed) {
       showStatus(t("The server did not save the plan: {error}", { error: errorText(error) }), true);
     }
@@ -1099,7 +1107,7 @@ function loginDialog(): void {
 }
 
 /** A link for one use: the setup of the admin, an invite, or a new password. */
-async function linkDialog(kind: string, code: string): Promise<void> {
+async function linkDialog(code: string): Promise<void> {
   const state = server;
   if (!state) return;
   let link: { kind: string; name: string; server: string };
@@ -1155,7 +1163,6 @@ async function linkDialog(kind: string, code: string): Promise<void> {
     true,
   );
   footer(element, done);
-  void kind;
   (link.kind === "reset" ? fields.password : fields.name).focus();
 }
 
@@ -2077,12 +2084,12 @@ async function start(): Promise<void> {
   server = await findServer();
   if (!server) return;
   updateRemoteState();
-  const link = /#(setup|invite|reset)=([^&]+)/.exec(location.hash);
+  const link = /#(?:setup|invite|reset)=([^&]+)/.exec(location.hash);
   if (link) history.replaceState(null, "", location.pathname);
   const plan = /\/plans\/([^/]+)\/?$/.exec(location.pathname)?.[1];
   if (plan && !app.planOpen) await openRemote(decodeURIComponent(plan));
   else if (!app.planOpen) renderHome();
-  if (link) return linkDialog(link[1], decodeURIComponent(link[2]));
+  if (link) return linkDialog(decodeURIComponent(link[1]));
   // A browser without a login and without a shared plan: the login is the way in.
   if (server.info && !server.info.account && server.info.grants.length === 0) loginDialog();
 }

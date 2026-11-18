@@ -3,7 +3,7 @@
 // state: in the open plan as one change that undo takes back, else as the new state of the
 // project. Before a restore in the browser, the current state goes into the history too.
 
-import { locale, t } from "../i18n";
+import { errorText, locale, t } from "../i18n";
 import { icon } from "../icons";
 import { addRevision, listRevisions, loadProject, loadRevision, saveProject } from "../io/projects";
 import type { ServerClient } from "../io/server";
@@ -30,8 +30,6 @@ interface Source {
   /** Null if the user cannot restore, for example on a server without the right to edit. */
   restore: ((data: string) => Promise<void>) | null;
 }
-
-const errorText = (error: unknown) => (error instanceof Error ? t(error.message) : String(error));
 
 /** The size of a version in kB or MB. */
 function sizeText(bytes: number): string {

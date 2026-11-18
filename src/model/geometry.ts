@@ -6,6 +6,15 @@ export const scale = (a: Point, s: number): Point => ({ x: a.x * s, y: a.y * s }
 export const dot = (a: Point, b: Point): number => a.x * b.x + a.y * b.y;
 export const length = (a: Point): number => Math.hypot(a.x, a.y);
 export const distance = (a: Point, b: Point): number => length(sub(a, b));
+/** The z part of the cross product: positive if `b` turns counterclockwise from `a`. */
+export const cross = (a: Point, b: Point): number => a.x * b.y - a.y * b.x;
+/** The vector with the length 1, or zero for a vector shorter than `eps`. */
+export const unitVector = (a: Point, eps = 1e-12): Point => {
+  const l = length(a);
+  return l < eps ? { x: 0, y: 0 } : scale(a, 1 / l);
+};
+/** The unit vector from `p` to `q`, or zero if they are the same. */
+export const direction = (p: Point, q: Point): Point => unitVector(sub(q, p));
 /** The vector turned by 90 degrees: from the x axis to the y axis. */
 export const perpendicular = (a: Point): Point => ({ x: -a.y, y: a.x });
 

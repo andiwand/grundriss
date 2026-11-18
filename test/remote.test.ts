@@ -50,7 +50,11 @@ vi.mock("../src/ui/presence", () => ({
   personSeenSelf: vi.fn(),
   nameDialog: vi.fn(),
 }));
-vi.mock("../src/i18n", () => ({ locale: () => "en", t: (s: string) => s }));
+vi.mock("../src/i18n", () => ({
+  locale: () => "en",
+  t: (s: string) => s,
+  errorText: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
 // The copies of the server plans in the browser, in memory.
 const copies = new Map<string, Record<string, unknown>>();
 vi.mock("../src/io/projects", () => ({
@@ -229,6 +233,32 @@ describe("remote sessions", () => {
     await openRemote("house");
     emit("revision", { id: "2", parent: "1", client: "other", patch: north(10) });
     expect(doc.building.north).toBe(10);
+    expect(remoteHooks.unsaved()).toBe(false);
+  });
+
+  it("keeps the newer own change when an earlier send without an answer comes back", async () => {
+    await openRemote("house");
+    doc.editBuilding((b) => {
+      b.north = 10;
+    });
+    // The first send gets no answer, but the server applies it later.
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError("Timeout"));
+    await remoteHooks.save();
+    const sent = vi.mocked(fetch).mock.calls.at(-1)![1]!;
+    const client = (sent.headers as Record<string, string>)["X-Client"];
+    doc.editBuilding((b) => {
+      b.north = 20;
+    });
+    // The second send waits for its answer, and the first one comes back on the stream.
+    const answer = deferred<Response>();
+    vi.mocked(fetch).mockReturnValueOnce(answer.promise);
+    const saving = remoteHooks.save();
+    emit("revision", { id: "2", parent: "1", client, patch: north(10) });
+    expect(doc.building.north).toBe(20);
+    emit("revision", { id: "3", parent: "2", client, patch: north(20) });
+    answer.resolve(json(info({ revision: "3" })));
+    await saving;
+    expect(doc.building.north).toBe(20);
     expect(remoteHooks.unsaved()).toBe(false);
   });
 

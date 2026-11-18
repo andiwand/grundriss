@@ -4,6 +4,7 @@
 
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { Project, ProjectInfo } from "./projects";
+import { isObject } from "../model/history";
 
 const FORMAT = "grundriss-backup";
 const VERSION = 1;
@@ -88,9 +89,6 @@ export function readBackup(bytes: Uint8Array): Project[] {
   }
   return result;
 }
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isTime = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;

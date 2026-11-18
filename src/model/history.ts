@@ -24,6 +24,10 @@ import type { Building, Id, Story } from "./types";
 /** The most entries of the undo history. */
 export const HISTORY_LIMIT = 200;
 
+/** True for an object of plain data that is not a list. */
+export const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 /**
  * A deep copy of plain data: objects and arrays are new, and the strings, the numbers, and the
  * other values stay the same. The copy shares each string with the original.

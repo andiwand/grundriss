@@ -9,6 +9,7 @@
 import type { InferenceSession } from "onnxruntime-web";
 import wasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.wasm?url";
 import { CLASSES, CONTRACT_VERSION, MODEL_INFO_URL, MODEL_URL } from "./contract";
+import { TextError } from "../model/errors";
 
 export type Ort = typeof import("onnxruntime-web");
 export type Session = InferenceSession;
@@ -73,7 +74,7 @@ async function load(): Promise<LoadedModel> {
     return { ort, session, info };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`The recognition model does not load: ${reason}`);
+    throw new TextError("The recognition model does not load: {reason}", { reason });
   }
 }
 
@@ -92,16 +93,16 @@ async function fetchInfo(): Promise<ModelInfo> {
 /** Throws an Error for the user if the model does not follow the contract of this app. */
 export function checkInfo(info: ModelInfo): void {
   if (info.contract !== CONTRACT_VERSION) {
-    throw new Error(
-      `The recognition model has contract ${String(info.contract)}, but this app needs ` +
-        `contract ${CONTRACT_VERSION}. Install a matching model.`,
+    throw new TextError(
+      "The recognition model has contract {contract}, but this app needs contract {needed}. Install a matching model.",
+      { contract: String(info.contract), needed: CONTRACT_VERSION },
     );
   }
   const classes = Array.isArray(info.classes) ? info.classes : [];
   if (classes.join() !== CLASSES.join()) {
-    throw new Error(
-      `The recognition model has the classes ${classes.join(", ") || "(none)"}, ` +
-        `but this app needs ${CLASSES.join(", ")}.`,
+    throw new TextError(
+      "The recognition model has the classes {classes}, but this app needs {needed}.",
+      { classes: classes.join(", ") || "–", needed: CLASSES.join(", ") },
     );
   }
 }
@@ -120,7 +121,9 @@ async function fetchOrFail(url: string): Promise<Response> {
     throw new Error("The app has no recognition model yet. The model must be trained first.");
   }
   if (!response.ok) {
-    throw new Error(`The recognition model does not load (HTTP ${response.status}).`);
+    throw new TextError("The recognition model does not load (HTTP {status}).", {
+      status: response.status,
+    });
   }
   return response;
 }

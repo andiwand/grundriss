@@ -19,6 +19,8 @@ import { base64 } from "../furniture/names";
 import { parseBuilding, serializeBuilding } from "../model/file";
 import type { Building } from "../model/types";
 import { ATTRIBUTION, ATTRIBUTION_URL } from "./climate";
+import { TextError } from "../model/errors";
+import { isObject } from "../model/history";
 
 export const PACKAGE_EXTENSION = ".grundriss";
 export const PLAN_ENTRY = "plan.json";
@@ -103,9 +105,6 @@ export function writePackage(
 }
 
 type Raw = Record<string, unknown>;
-const isObject = (value: unknown): value is Raw =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * The extension of an image file by its MIME type. Another image type, for example
  * "image/tiff", gets its subtype as the extension, so that mimeOf can find the type again.
@@ -135,7 +134,9 @@ function inlineImage(owner: Raw, files: Record<string, Uint8Array>): void {
   if (name.startsWith("data:")) return;
   const image = fileOf(files, name);
   if (!image) {
-    throw new Error(`The package is damaged: the background image "${name}" is missing.`);
+    throw new TextError('The package is damaged: the background image "{name}" is missing.', {
+      name,
+    });
   }
   background.image = encodeDataUrl(mimeOf(name), image);
 }
@@ -177,7 +178,10 @@ function inlineModel(model: Raw, files: Record<string, Uint8Array>): void {
   const bytes = fileOf(files, model.data);
   if (!bytes) {
     const name = typeof model.name === "string" ? model.name : "a model";
-    throw new Error(`The package is damaged: the file "${model.data}" of ${name} is missing.`);
+    throw new TextError('The package is damaged: the file "{file}" of {name} is missing.', {
+      file: model.data,
+      name,
+    });
   }
   model.data = encodeDataUrl(MODEL_MIME, bytes);
 }
@@ -191,12 +195,15 @@ export function readPackage(bytes: Uint8Array): Building {
     throw new Error("The package is damaged: it is not a valid ZIP file.");
   }
   const entry = files[PLAN_ENTRY];
-  if (!entry) throw new Error(`The package is damaged: it has no "${PLAN_ENTRY}".`);
+  if (!entry)
+    throw new TextError('The package is damaged: it has no "{file}".', { file: PLAN_ENTRY });
   let raw: unknown;
   try {
     raw = JSON.parse(strFromU8(entry));
   } catch {
-    throw new Error(`The package is damaged: "${PLAN_ENTRY}" is not valid JSON.`);
+    throw new TextError('The package is damaged: "{file}" is not valid JSON.', {
+      file: PLAN_ENTRY,
+    });
   }
   if (isObject(raw)) {
     // Version 1 has the background at the top level. Version 2 has one in each story.

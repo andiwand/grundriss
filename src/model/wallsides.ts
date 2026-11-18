@@ -10,7 +10,7 @@
 // A pinned vertex (`Vertex.pinned`) stays in its place when a length changes: the other end
 // moves. If both ends are pinned, the length cannot change.
 
-import { perpendicular } from "./geometry";
+import { cross, direction as unit, distance as span, dot, perpendicular } from "./geometry";
 import { getVertex, splitWall, wallEnds } from "./plan";
 import { findRooms, pointInPolygon } from "./rooms";
 import type { Dimension, Id, Plan, Point, Wall } from "./types";
@@ -46,14 +46,6 @@ interface Move {
   ids: Id[];
   sign: 1 | -1;
 }
-
-const unit = (p: Point, q: Point): Point => {
-  const length = Math.hypot(q.x - p.x, q.y - p.y);
-  return length > 1e-12 ? { x: (q.x - p.x) / length, y: (q.y - p.y) / length } : { x: 0, y: 0 };
-};
-const dot = (p: Point, q: Point) => p.x * q.x + p.y * q.y;
-const cross = (p: Point, q: Point) => p.x * q.y - p.y * q.x;
-const span = (p: Point, q: Point) => Math.hypot(q.x - p.x, q.y - p.y);
 
 /**
  * The walls as one line, or null if they are not in one straight line, or do not join end to

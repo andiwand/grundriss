@@ -152,7 +152,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/io/projects.ts`       | The projects in the browser: IndexedDB, the list, and persistent storage.                                     |
 | `src/pwa/sw.js`            | The service worker: the cache of the app for offline use and the install.                                     |
 | `src/io/package.ts`        | The `.grundriss` package: a ZIP file with the plan and its image.                                             |
-| `src/export/`              | The exports: SVG, PDF, DXF, and glTF.                                                                         |
+| `src/export/`              | The exports: SVG, PDF, and DXF. The GLB of the building uses `writeGlb` of `src/furniture/gltf.ts`.           |
 | `src/export/preview.ts`    | The picture of a plan on the Projects page. The server uses it for its list of plans.                         |
 | `src/model/services.ts`    | The devices and lines of electricity and heating, and symbols.                                                |
 | `src/model/insulation.ts`  | The materials and the default envelope.                                                                       |

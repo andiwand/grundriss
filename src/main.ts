@@ -1,7 +1,7 @@
 import { type Tool } from "./editor/editor2d";
 import { CSV_DE, CSV_EN, takeoffZip } from "./export/csv";
 import { buildingReport } from "./export/report";
-import { currentLanguage, locale, setLanguage, t, translatePage } from "./i18n";
+import { currentLanguage, errorText, locale, setLanguage, t, translatePage } from "./i18n";
 import { fmt } from "./model/format";
 import { buildingTakeoff } from "./model/takeoff";
 import { isCompact, selectionChanged, setupCompact, toolChanged, topicChanged } from "./ui/compact";
@@ -50,8 +50,6 @@ import { drawInsulation, openServicesMenu } from "./ui/utilities";
 
 import { fillIcons, icon } from "./icons";
 
-import { exportGlb } from "./export/gltf";
-
 import { buildingExports } from "./export/building";
 
 import { slug, storyExtras } from "./export/context";
@@ -86,6 +84,7 @@ import { buildModelAsync } from "./view3d/view3d";
 
 import { MAP_SOURCES, type MapSourceId } from "./io/tiles";
 import { fitBar, inOneRow, noScroll } from "./ui/fit";
+import { writeGlb } from "./furniture/gltf";
 
 translatePage();
 fillIcons();
@@ -594,7 +593,7 @@ async function saveFile(saveAs: boolean): Promise<void> {
     if (projectId) void renameProject(projectId, projectName());
     showStatus(t("Saved {name}.", { name: app.fileName }));
   } catch (error) {
-    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+    showStatus(errorText(error), true);
   }
 }
 
@@ -620,7 +619,7 @@ async function exportFile(
   if (format === "pdf") return buildingToPdf(building, { ...pdf, translate: t });
   if (format === "dxf") return buildingToDxf(building, t);
   // The model has the whole building, also the stories that the 3D view hides now.
-  return new Uint8Array(await exportGlb(await buildModelAsync(building)));
+  return writeGlb(await buildModelAsync(building), Infinity);
 }
 
 /** The exports that a package contains, so that other programs can use them at once. */
@@ -645,7 +644,7 @@ async function exportPlan(format: ExportFormat, pdf: PlanOptions = {}): Promise<
     const result = await saveBlob(blob, `${name}.${format}`, [EXPORT_TYPES[format]]);
     if (result) showStatus(t("Exported {name}.", { name: result.name }));
   } catch (error) {
-    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+    showStatus(errorText(error), true);
   }
 }
 
@@ -723,7 +722,7 @@ async function exportReport(kind: "pdf" | "csv"): Promise<void> {
       if (result) showStatus(t("Exported {name}.", { name: result.name }));
     }
   } catch (error) {
-    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+    showStatus(errorText(error), true);
   }
 }
 
@@ -1220,7 +1219,7 @@ launchQueue?.setConsumer(async ({ files }) => {
     showStatus(t("Opened {name}.", { name: file.name }));
     enterPlan("structure");
   } catch (error) {
-    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+    showStatus(errorText(error), true);
   }
 });
 

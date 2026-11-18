@@ -14,7 +14,7 @@
 import { cleanRailings } from "./outdoor";
 import { normalize } from "./plan";
 import type { Building, Layout } from "./types";
-import { copyTree, sameTree } from "./history";
+import { copyTree, isObject, sameTree } from "./history";
 
 /**
  * A change of a value. `set` replaces it. `keys` changes the fields of an object. `items`
@@ -33,9 +33,6 @@ export type Patch =
     };
 
 type Data = Record<string, unknown>;
-
-const isObject = (value: unknown): value is Data =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** True if the list has only objects with an id, each id once. An empty list is one too. */
 function isKeyed(list: unknown[]): list is { id: string }[] {

@@ -457,6 +457,9 @@ function drawPeople(group: SVGGElement, zoom: number): void {
   }
 }
 
+/** The points of an SVG polygon or polyline. */
+const pointList = (points: Point[]) => points.map((p) => `${p.x},${p.y}`).join(" ");
+
 function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): void {
   const stroke = { class: "person-selection", "stroke-width": 4 / zoom };
   const vertex = (id: Id) => plan.vertices.find((v) => v.id === id);
@@ -518,18 +521,33 @@ function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): voi
     if (run) {
       shape(layer, "polyline", {
         ...stroke,
-        points: run.points.map((p) => `${p.x},${p.y}`).join(" "),
+        points: pointList(run.points),
       });
     }
   } else if (item.kind === "dimension") {
     const d = plan.dimensions.find((x) => x.id === item.id);
     if (d) shape(layer, "line", { ...stroke, x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y });
+  } else if (item.kind === "area") {
+    const area = plan.areas.find((x) => x.id === item.id);
+    if (area) shape(layer, "polygon", { ...stroke, points: pointList(area.points) });
+  } else if (item.kind === "area-corner") {
+    const at = item.id.lastIndexOf(":");
+    const p = plan.areas.find((x) => x.id === item.id.slice(0, at))?.points[
+      Number(item.id.slice(at + 1))
+    ];
+    if (p) shape(layer, "circle", { ...stroke, cx: p.x, cy: p.y, r: 8 / zoom });
+  } else if (item.kind === "fence") {
+    const fence = plan.fences.find((x) => x.id === item.id);
+    if (fence) shape(layer, "polyline", { ...stroke, points: pointList(fence.points) });
+  } else if (item.kind === "tree") {
+    const tree = plan.trees.find((x) => x.id === item.id);
+    if (tree) shape(layer, "circle", { ...stroke, cx: tree.x, cy: tree.y, r: tree.crown / 2 });
   } else if (item.kind === "room") {
     const room = findRooms(plan).find((r) => r.key === item.id);
     if (room) {
       shape(layer, "polygon", {
         class: "person-room",
-        points: room.polygon.map((p) => `${p.x},${p.y}`).join(" "),
+        points: pointList(room.polygon),
       });
     }
   }

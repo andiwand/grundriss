@@ -13,7 +13,7 @@
 //
 // The positions are distances along the wall from its vertex `a`.
 
-import { perpendicular } from "./geometry";
+import { cross, direction as unit, dot, perpendicular } from "./geometry";
 import { wallEnds } from "./plan";
 import type { Plan, Point, Wall } from "./types";
 
@@ -39,13 +39,6 @@ export interface WallFaces {
 export const STRAIGHT = 0.9995;
 /** A miter of a very sharp corner goes no further than this many times the wall thickness. */
 export const MAX_MITER = 3;
-
-const unit = (p: Point, q: Point): Point => {
-  const length = Math.hypot(q.x - p.x, q.y - p.y);
-  return length > 1e-12 ? { x: (q.x - p.x) / length, y: (q.y - p.y) / length } : { x: 0, y: 0 };
-};
-const dot = (p: Point, q: Point) => p.x * q.x + p.y * q.y;
-const cross = (p: Point, q: Point) => p.x * q.y - p.y * q.x;
 
 /**
  * The distance t along `u` from the vertex where the line V + o·n + t·u meets the line

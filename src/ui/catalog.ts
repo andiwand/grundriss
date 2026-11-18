@@ -6,7 +6,7 @@
 import { importModelFile } from "../furniture/import";
 import { kenneyModel, loadKenneyCatalog, type KenneyItem } from "../furniture/kenney";
 import { downloadModel, listFurniture, type PolyHavenItem } from "../furniture/polyhaven";
-import { t } from "../i18n";
+import { errorText, t } from "../i18n";
 import { icon } from "../icons";
 import { pickFile } from "../io/files";
 import {
@@ -352,7 +352,7 @@ export class Catalog {
 
   private fail(error: unknown): void {
     // The messages of the model have a translation in the dictionary.
-    this.error = t(error instanceof Error ? error.message : String(error));
+    this.error = errorText(error);
     this.host.status(this.error, true);
     this.render();
   }

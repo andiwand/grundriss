@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { errorText, t } from "../i18n";
 import { defaultWallHeight } from "../model/building";
 import type { Background } from "../model/types";
 import { addRecognized, recognizedToWorld, type RecognizedOpening } from "../recognition/openings";
@@ -66,7 +66,7 @@ export async function work(
   try {
     if (current()) await step(current, background);
   } catch (error) {
-    showStatus(t(error instanceof Error ? error.message : String(error)), true);
+    showStatus(errorText(error), true);
   } finally {
     busy = null;
     renderPanel();

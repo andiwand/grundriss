@@ -8,6 +8,7 @@
 
 import { setNumberLocale } from "../model/format";
 import { DE } from "./de";
+import { TextError } from "../model/errors";
 
 export type Language = "en" | "de";
 
@@ -66,6 +67,12 @@ export function t(text: string, values?: Record<string, string | number>): strin
   return translated.replace(/\{(\w+)\}/g, (all, key: string) =>
     key in values ? String(values[key]) : all,
   );
+}
+
+/** The text of an error for the user, in the language of the app. */
+export function errorText(error: unknown): string {
+  if (error instanceof TextError) return t(error.key, error.values);
+  return error instanceof Error ? t(error.message) : String(error);
 }
 
 /** The locale of the dates and the numbers. */

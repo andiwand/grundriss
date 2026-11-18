@@ -29,12 +29,15 @@ export function measure(object: THREE.Object3D): { x: number; y: number; z: numb
   return { x: size.x, y: size.z, z: size.y };
 }
 
-/** Writes the object as one GLB file. Textures keep their format and are at most 1024 px. */
-export async function writeGlb(object: THREE.Object3D): Promise<Uint8Array> {
-  const result = await new GLTFExporter().parseAsync(object, {
-    binary: true,
-    maxTextureSize: MAX_TEXTURE_SIZE,
-  });
+/**
+ * Writes the object as one GLB file. Textures keep their format and are at most `maxTextureSize`
+ * px: 1024 for a model of the plan, and any size for the export of the building.
+ */
+export async function writeGlb(
+  object: THREE.Object3D,
+  maxTextureSize = MAX_TEXTURE_SIZE,
+): Promise<Uint8Array> {
+  const result = await new GLTFExporter().parseAsync(object, { binary: true, maxTextureSize });
   if (!(result instanceof ArrayBuffer)) throw new Error("The model cannot be written as GLB.");
   return new Uint8Array(result);
 }

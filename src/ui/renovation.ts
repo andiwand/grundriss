@@ -46,7 +46,7 @@ import {
   table,
 } from "./panel";
 import { numberInput, textInput } from "./controls";
-import { closeOutside } from "./dialog";
+import { dialog } from "./dialog";
 
 /**
  * Opens the variant with the id, or the plan for null. The changes in all topics then go into the
@@ -616,22 +616,11 @@ function showComparison(): void {
     });
   }
   wrap.append(table);
-  const dialog = document.createElement("dialog");
-  dialog.className = "compare-dialog";
+  const { element, body: block } = dialog(t("Compare the variants"));
+  element.classList.add("compare-dialog");
   // The dialog is about as wide as the table, so the notes wrap at its width.
-  dialog.style.width = `${260 + 180 * columns.length}px`;
-  const top = document.createElement("div");
-  top.className = "compare-head";
-  const title = document.createElement("h2");
-  title.textContent = t("Compare the variants");
-  top.append(
-    title,
-    iconButton("close", t("Close"), () => dialog.close()),
-  );
-  const block = document.createElement("div");
-  block.className = "compare-block";
+  element.style.width = `min(${260 + 180 * columns.length}px, calc(100vw - 32px))`;
   block.append(wrap);
-  dialog.append(top, block);
   const note = (text: string) => {
     const element = document.createElement("p");
     element.className = "note";
@@ -651,10 +640,6 @@ function showComparison(): void {
       { years: LIFETIME },
     ),
   );
-  closeOutside(dialog);
-  dialog.addEventListener("close", () => dialog.remove());
-  document.body.append(dialog);
-  dialog.showModal();
 }
 
 /** The variants that the user closed. The panel keeps them closed after a change. */

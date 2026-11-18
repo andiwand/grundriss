@@ -7,6 +7,7 @@
 import { CLASSES, INPUT_NAME, LONG_SIDE, OUTPUT_NAME, OVERLAP, TILE } from "./contract";
 import { loadModel } from "./runtime";
 import { argmax, blendTile, padTo32, tileStarts } from "./tiles";
+import { TextError } from "../model/errors";
 
 export type ImageSource = HTMLImageElement | ImageBitmap | HTMLCanvasElement;
 
@@ -96,7 +97,8 @@ export async function segmentPlan(
       const feeds = { [INPUT_NAME]: new ort.Tensor("float32", tile.slice(), [1, 1, th, tw]) };
       const results = await session.run(feeds);
       const output = results[OUTPUT_NAME];
-      if (!output) throw new Error(`The recognition model has no output "${OUTPUT_NAME}".`);
+      if (!output)
+        throw new TextError('The recognition model has no output "{name}".', { name: OUTPUT_NAME });
       const logits = output.data as Float32Array;
       if (logits.length !== classes * tw * th) {
         throw new Error("The output of the recognition model has the wrong size.");

@@ -15,7 +15,11 @@ vi.mock("../src/ui/context", async () => {
 vi.mock("../src/ui/energy", () => ({ resetLocation: vi.fn() }));
 vi.mock("../src/ui/tracing", () => ({ setSuggestions: vi.fn() }));
 vi.mock("../src/ui/panel", () => ({ iconButton: vi.fn() }));
-vi.mock("../src/i18n", () => ({ locale: () => "en", t: (s: string) => s }));
+vi.mock("../src/i18n", () => ({
+  locale: () => "en",
+  t: (s: string) => s,
+  errorText: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
 vi.mock("../src/io/projects", () => ({
   projectsAvailable: vi.fn(async () => true),
   emptyOldTrash: vi.fn(async () => {}),

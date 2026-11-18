@@ -324,6 +324,15 @@ test("uses the layout for a phone with the topics at the bottom", async ({ page 
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await expect(page.locator("#bottom-bar #topics")).toBeVisible();
   await expect(page.locator("#layers-button")).toBeHidden();
+  // The status card is above the sheet of the panel, so that it covers no part of it.
+  await expect(page.locator("#status")).not.toHaveClass(/gone/);
+  await expect
+    .poll(async () => {
+      const status = (await page.locator("#status").boundingBox())!;
+      const panel = (await page.locator("#panel").boundingBox())!;
+      return status.y + status.height <= panel.y;
+    })
+    .toBe(true);
   // A tap on the handle opens the sheet of the panel.
   const height = async () => (await page.locator("#panel").boundingBox())!.height;
   const before = await height();

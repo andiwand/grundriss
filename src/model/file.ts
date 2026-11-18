@@ -57,7 +57,7 @@ import type {
 
 import { decodeSeries, SERIES_NAMES } from "./climate";
 import { defaultHeating, HEATING_KINDS } from "./heating";
-import { copyTree } from "./history";
+import { copyTree, isObject } from "./history";
 import { DEFAULT_COLORS, isColor } from "./colors";
 import { defaultEnvelope, defaultFinance, defaultHousehold } from "./insulation";
 import { storyBox } from "./roof";
@@ -98,9 +98,6 @@ export function serializeBuilding(building: Building): string {
 }
 
 type Data = Record<string, unknown>;
-
-const isObject = (value: unknown): value is Data =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function number(data: Data, key: string, where: string): number {
   const value = data[key];
