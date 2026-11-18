@@ -16,6 +16,7 @@ import {
   storyAbove,
   storyBelow,
   stairShape,
+  wallTop,
 } from "../model/building";
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
 import { wallSideColor } from "../model/colors";
@@ -569,9 +570,12 @@ export class View3D {
     );
     // Without the stories above, the roof of the active story does not show, and the roofs of
     // lower stories show where they are not over the active story, for example over a low wing.
-    const roofs = roofsInView(building, view.activeStoryId, view.showAbove || !active);
+    const all = view.showAbove || !active;
+    const roofs = roofsInView(building, view.activeStoryId, all);
     const layers = view.layers ?? ALL_LAYERS;
-    const group = buildGroup(building, visible, roofs, layers, () => this.modelLoaded());
+    // Without the stories above, a chimney stops at the top of the walls of the active story.
+    const top = all ? Infinity : wallTop(active);
+    const group = buildGroup(building, visible, roofs, layers, () => this.modelLoaded(), top);
     group.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.castShadow = true;
@@ -752,6 +756,7 @@ function buildGroup(
   roofs: Roof[],
   layers: ServiceLayers,
   onLoad?: OnLoad,
+  top = Infinity,
 ): THREE.Group {
   const group = new THREE.Group();
   const lowest = building.stories[0];
@@ -759,7 +764,7 @@ function buildGroup(
     const storyGroup = new THREE.Group();
     storyGroup.name = story.name;
     storyGroup.userData.storyId = story.id;
-    addStory(storyGroup, building, story, story !== lowest);
+    addStory(storyGroup, building, story, story !== lowest, top);
     for (const piece of story.furniture) {
       const object = furnitureObject(building, story, piece, onLoad);
       object.userData.item = { kind: "furniture", id: piece.id };
@@ -895,7 +900,14 @@ function prism(
   return mesh;
 }
 
-function addStory(group: THREE.Group, building: Building, story: Story, slab: boolean): void {
+/** Adds the walls, the floors, the stairs, and the chimneys of a story. No chimney goes above `top`. */
+function addStory(
+  group: THREE.Group,
+  building: Building,
+  story: Story,
+  slab: boolean,
+  top = Infinity,
+): void {
   const base = story.elevation;
   const ceiling = roofCeiling(building, story);
   // A wall that reaches the slab of the story above goes on up to the floor of that story, so
@@ -950,8 +962,14 @@ function addStory(group: THREE.Group, building: Building, story: Story, slab: bo
     });
   }
   for (const chimney of story.chimneys) {
-    const { bottom, top } = chimneyExtent(building, story, chimney);
-    const mesh = prism(chimneyOutline(chimney), bottom, top, materials.chimney, true);
+    const extent = chimneyExtent(building, story, chimney);
+    const mesh = prism(
+      chimneyOutline(chimney),
+      extent.bottom,
+      Math.min(extent.top, top),
+      materials.chimney,
+      true,
+    );
     if (!mesh) continue;
     mesh.userData.item = { kind: "chimney", id: chimney.id };
     group.add(mesh);
