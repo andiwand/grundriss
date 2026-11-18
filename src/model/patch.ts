@@ -11,6 +11,7 @@
 // The same functions make the undo of each person: an undo applies the patch back to the state
 // before the change, so it does not undo the changes of the others.
 
+import { cleanRailings } from "./outdoor";
 import { normalize } from "./plan";
 import type { Building, Layout } from "./types";
 import { copyTree, sameTree } from "./history";
@@ -173,6 +174,9 @@ function repairLayout(layout: Layout): void {
   for (const story of layout.stories) {
     const vertices = new Set(story.vertices.map((v) => v.id));
     story.walls = story.walls.filter((w) => w.a !== w.b && vertices.has(w.a) && vertices.has(w.b));
+    // Two people can change the corners and the railings of an area: a railing needs its side.
+    for (const area of story.areas)
+      area.railings = cleanRailings(area.railings, area.points.length);
     const fixtures = new Set(story.fixtures.map((f) => f.id));
     for (const run of story.runs) {
       if (run.from !== null && !fixtures.has(run.from)) run.from = null;

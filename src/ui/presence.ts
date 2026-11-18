@@ -189,9 +189,9 @@ export function personSeen(person: Person): void {
   };
   others.set(person.client, next);
   if (following === person.client) follow(next);
-  // The marks show the name, the story, and if the person only views.
+  // The marks show the name, the story or the roof level, and if the person only views.
   const mark = (p: Other | undefined) =>
-    p && JSON.stringify([p.name, p.state?.story, p.state?.viewing]);
+    p && JSON.stringify([p.name, p.state?.story, p.state?.roof, p.state?.viewing]);
   if (mark(known) !== mark(next)) renderPeople();
   redraw();
 }

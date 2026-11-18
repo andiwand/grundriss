@@ -265,11 +265,6 @@ export function shadeParts(building: Building): ShadePart[] {
   return result.filter((part) => part.polygon.length >= 3);
 }
 
-/** The polygons of `shadeParts`, without the season. */
-export function shadePolygons(building: Building): Vec3[][] {
-  return shadeParts(building).map((part) => part.polygon);
-}
-
 /**
  * True for each hour of the typical year from May to October, when a tree has its leaves: from
  * day 120 (May 1) to day 303 (October 31) of a year of 365 days.

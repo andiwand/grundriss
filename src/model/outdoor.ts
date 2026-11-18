@@ -141,6 +141,23 @@ export const isFenceKind = (value: unknown): value is FenceKind =>
 /** The height of a railing above the top of its area, in meters. */
 export const RAILING_HEIGHT = 1;
 
+/** The sides of an outline with `sides` corners that a list names, each once and in order. */
+export function cleanRailings(railings: unknown, sides: number): number[] {
+  if (!Array.isArray(railings)) return [];
+  const valid = railings.filter(
+    (side): side is number => Number.isInteger(side) && side >= 0 && side < sides,
+  );
+  return [...new Set(valid)].sort((a, b) => a - b);
+}
+
+/** The two ends of each side of an area with a railing. */
+export function railingSides(area: Area): [Point, Point][] {
+  const n = area.points.length;
+  return area.railings
+    .filter((side) => side < n)
+    .map((side) => [area.points[side], area.points[(side + 1) % n]]);
+}
+
 /** The defaults of a new tree: a crown of 5 m and a height of 8 m. */
 export const TREE_DEFAULTS = { crown: 5, height: 8 };
 

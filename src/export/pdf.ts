@@ -14,7 +14,14 @@ import {
 } from "../model/drawing";
 import { findRooms, roomLabel } from "../model/rooms";
 import { fmt } from "../model/format";
-import { areaCenter, areaSize, areaType, fenceType, outdoorOrder } from "../model/outdoor";
+import {
+  areaCenter,
+  areaSize,
+  areaType,
+  fenceType,
+  outdoorOrder,
+  railingSides,
+} from "../model/outdoor";
 
 import { wallDimensions } from "../model/wallsides";
 import type { Building, Plan, Point } from "../model/types";
@@ -27,6 +34,7 @@ import {
   riseOf,
   storyExtras,
   withFurniture,
+  withOutdoor,
   type Box,
   type StoryExtras,
 } from "./context";
@@ -219,7 +227,9 @@ function pageDimensions(plan: Plan, options: PlanOptions) {
 function storyBounds(plan: Plan, extras: StoryExtras, options: PlanOptions = {}): Box | null {
   const dimensions = lengthDimensions(plan, options);
   const plain = planBounds(plan);
-  return grow(options.furniture === false ? plain : withFurniture(plain, plan), [
+  // The outdoor parts are in the drawing also without the furniture.
+  const box = options.furniture === false ? withOutdoor(plain, plan) : withFurniture(plain, plan);
+  return grow(box, [
     ...(extras.through ?? []).flatMap((c) => chimneySymbol(c).outline),
     // The text of a line is beside it: the box takes a little more than the line.
     ...dimensions.flatMap((d) => {
@@ -356,11 +366,7 @@ function pageContent(
       ops.push("B");
     }
     ops.push("0.294 0.325 0.388 RG 1.2 w");
-    for (const side of area.railings) {
-      const p = area.points[side];
-      const q = area.points[(side + 1) % area.points.length];
-      if (p && q) line(p, q);
-    }
+    for (const [p, q] of railingSides(area)) line(p, q);
   }
 
   const rooms = findRooms(plan);

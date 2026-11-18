@@ -307,6 +307,10 @@ function renderMany(items: Item[]): void {
     ["run", "line", "lines"],
     ["roof", "roof", "roofs"],
     ["roof-corner", "roof corner", "roof corners"],
+    ["area", "outdoor area", "outdoor areas"],
+    ["area-corner", "corner of an area", "corners of areas"],
+    ["fence", "fence", "fences"],
+    ["tree", "tree", "trees"],
   ];
   stats(
     kinds
@@ -800,7 +804,7 @@ function renderArea(plan: Story, id: Id): void {
         a.level = next.level;
         a.thickness = next.thickness;
         if (next.railing && a.railings.length === 0) a.railings = a.points.map((_, i) => i);
-        if (!next.railing && !areaType(kind).living) a.railings = [];
+        if (!next.railing && !next.living) a.railings = [];
       }),
   );
   textField(t("Name"), area.name, (value) => edit((a) => (a.name = value)), {

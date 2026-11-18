@@ -64,7 +64,14 @@ import { storyBox } from "./roof";
 import { roomSide, WIDE_WINDOW } from "./openings";
 import { findRooms } from "./rooms";
 import { FIXTURE_TYPES, RUN_KINDS, serviceSystem } from "./services";
-import { areaType, fenceType, isAreaKind, isFenceKind, TREE_DEFAULTS } from "./outdoor";
+import {
+  areaType,
+  cleanRailings,
+  fenceType,
+  isAreaKind,
+  isFenceKind,
+  TREE_DEFAULTS,
+} from "./outdoor";
 import { switchVariant, syncBackgrounds } from "./variants";
 
 export const FILE_FORMAT = "grundriss";
@@ -463,7 +470,7 @@ function oldRoof(r: Data, stories: Story[]): Roof | null {
 function layers(data: Data, key: string, where: string): Layer[] {
   return list(data, key).map((l, i) => ({
     material: string(l, "material", `${where}, layer ${i}`),
-    thickness: number(l, "thickness", `${where}, layer ${i}`),
+    thickness: bounded(l, "thickness", `${where}, layer ${i}`, 0, Infinity),
   }));
 }
 
@@ -476,8 +483,8 @@ function parseEnvelope(data: unknown): Envelope {
     roof: data.roof == null ? defaults.roof : layers(data, "roof", "the roof"),
     floor: data.floor == null ? defaults.floor : layers(data, "floor", "the floor"),
     ceiling: data.ceiling == null ? defaults.ceiling : layers(data, "ceiling", "the ceiling"),
-    windowU: finite(data.windowU, defaults.windowU),
-    doorU: finite(data.doorU, defaults.doorU),
+    windowU: Math.max(0, finite(data.windowU, defaults.windowU)),
+    doorU: Math.max(0, finite(data.doorU, defaults.doorU)),
     thermalBridge: Math.max(0, finite(data.thermalBridge, defaults.thermalBridge)),
     ventilation: parseVentilation(data.ventilation),
     outside: finite(data.outside, defaults.outside),
@@ -821,12 +828,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
       points,
       level: finite(d.level, type.level),
       thickness: Math.max(0, finite(d.thickness, type.thickness)),
-      railings: Array.isArray(d.railings)
-        ? d.railings.filter(
-            (side): side is number =>
-              Number.isInteger(side) && (side as number) >= 0 && (side as number) < points.length,
-          )
-        : [],
+      railings: cleanRailings(d.railings, points.length),
     };
   });
   const fences: Fence[] = list(data, "fences").map((d, i) => {

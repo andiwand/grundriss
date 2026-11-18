@@ -35,7 +35,11 @@ export function loadKenneyCatalog(): Promise<KenneyItem[]> {
           }))
         : [],
     )
-    .catch(() => []);
+    .catch(() => {
+      // Without the network, the next open tries again.
+      catalog = null;
+      return [];
+    });
   return catalog;
 }
 

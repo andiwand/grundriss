@@ -34,8 +34,6 @@ import { roofGeometries } from "./roof";
 import { findRooms, netRoomArea, pointInPolygon, type Room } from "./rooms";
 import type { Building, Envelope, Id, Layer, Point, Story, Wall } from "./types";
 
-export { netRoomArea };
-
 /** The surface resistances in m²K/W: inside and outside. */
 export const SURFACE_RESISTANCE = {
   wall: { inside: 0.13, outside: 0.04 },

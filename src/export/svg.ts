@@ -15,7 +15,14 @@ import { fixtureSymbol, runKind, SERVICE_SYSTEMS } from "../model/services";
 import { grow, riseOf, withFurniture, type StoryExtras } from "./context";
 import { findRooms, roomLabel } from "../model/rooms";
 import { fmt } from "../model/format";
-import { areaCenter, areaSize, areaType, fenceType, outdoorOrder } from "../model/outdoor";
+import {
+  areaCenter,
+  areaSize,
+  areaType,
+  fenceType,
+  outdoorOrder,
+  railingSides,
+} from "../model/outdoor";
 
 import type { Plan, Point, ServiceSystem } from "../model/types";
 
@@ -122,15 +129,11 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
           `<polygon points="${points(area.points)}" fill="${type.color}" stroke="${COLORS.furniture}"/>`,
         );
       }
-      for (const side of area.railings) {
-        const p = area.points[side];
-        const q = area.points[(side + 1) % area.points.length];
-        if (p && q)
-          out.push(
-            `<line x1="${n(p.x)}" y1="${n(p.y)}" x2="${n(q.x)}" y2="${n(q.y)}" ` +
-              `stroke="${COLORS.stair}" stroke-width="${n(line * 3)}"/>`,
-          );
-      }
+      for (const [p, q] of railingSides(area))
+        out.push(
+          `<line x1="${n(p.x)}" y1="${n(p.y)}" x2="${n(q.x)}" y2="${n(q.y)}" ` +
+            `stroke="${COLORS.stair}" stroke-width="${n(line * 3)}"/>`,
+        );
       const at = areaCenter(area.points);
       out.push(
         `<text x="${n(at.x)}" y="${n(at.y)}" fill="${COLORS.furniture}" font-size="${n(font * 0.8)}" ` +

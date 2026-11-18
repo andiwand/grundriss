@@ -96,7 +96,11 @@ const materials = {
     roughness: 0.9,
     side: THREE.DoubleSide,
   }),
-  north: new THREE.MeshBasicMaterial({ color: 0xd94b3b, side: THREE.DoubleSide }),
+  north: new THREE.MeshBasicMaterial({
+    color: 0xd94b3b,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  }),
   /** The building services. */
   plate: new THREE.MeshStandardMaterial({ color: 0xeceae6, roughness: 0.6 }),
   accent: new THREE.MeshStandardMaterial({ color: 0xe8590c, roughness: 0.6 }),
@@ -317,7 +321,12 @@ export class View3D {
     const element = this.renderer.domElement;
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(1, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0x2f6bff, depthTest: false, transparent: true }),
+      new THREE.MeshBasicMaterial({
+        color: 0x2f6bff,
+        depthTest: false,
+        transparent: true,
+        toneMapped: false,
+      }),
     );
     marker.renderOrder = 10;
     marker.visible = false;

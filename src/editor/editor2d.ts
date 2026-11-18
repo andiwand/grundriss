@@ -39,6 +39,7 @@ import {
   newFence,
   newTree,
   outdoorOrder,
+  railingSides,
 } from "../model/outdoor";
 import { clearHeightLines, WOFLV } from "../model/attic";
 import {
@@ -449,6 +450,10 @@ export class Editor2D {
   }
 
   selectAll(): void {
+    // The roof level shows only the roofs: the objects of the story stay as they are.
+    if (this.roofView) {
+      return this.select(this.doc.building.roofs.map((r) => ({ kind: "roof" as const, id: r.id })));
+    }
     const plan = this.doc.plan;
     this.select([
       ...plan.walls.map((w) => ({ kind: "wall" as const, id: w.id })),
@@ -503,16 +508,11 @@ export class Editor2D {
     this.render();
   }
 
-  /** True while the area tool or the fence tool has points. */
-  get drawingPath(): boolean {
-    return this.pathPoints.length > 0;
-  }
-
   /**
    * Ends the outline of the area tool (at least three points) or the line of the fence tool (at
-   * least two points), and selects the new object.
+   * least two points), and selects the new object. It gives true if it made one.
    */
-  finishPath(): void {
+  finishPath(): boolean {
     const points = this.pathPoints;
     this.pathPoints = [];
     if (this.currentTool === "area" && points.length >= 3) {
@@ -527,8 +527,12 @@ export class Editor2D {
       this.tool = "select";
       this.select({ kind: "fence", id: fence.id });
       this.onFinish();
+    } else {
+      this.render();
+      return false;
     }
     this.render();
+    return true;
   }
 
   /** Ends the line of the run tool, if it has at least two points. */
@@ -668,7 +672,8 @@ export class Editor2D {
    */
   paste(): void {
     const clip = this.clipboard;
-    if (!clip) return;
+    // The roof level does not show the objects of the story.
+    if (!clip || this.roofView) return;
     const ends = [
       ...clip.vertices,
       ...clip.dimensions.flatMap((d) => [d.a, d.b]),
@@ -677,6 +682,9 @@ export class Editor2D {
       ...clip.furniture,
       ...clip.fixtures,
       ...clip.runs.flatMap((r) => r.points),
+      ...(clip.areas ?? []).flatMap((a) => a.points),
+      ...(clip.fences ?? []).flatMap((f) => f.points),
+      ...(clip.trees ?? []),
     ];
     if (ends.length === 0) return;
     const center = scale(ends.reduce(add, { x: 0, y: 0 }), 1 / ends.length);
@@ -710,11 +718,33 @@ export class Editor2D {
   nudge(delta: Point): void {
     if (this.items.length === 0) return;
     const items = this.items;
+    // A corner of a roof or an area: its id is the id of the owner and the index of the corner.
+    const corners = (kind: Item["kind"]) =>
+      items
+        .filter((i) => i.kind === kind)
+        .map((i) => {
+          const at = i.id.lastIndexOf(":");
+          return { id: i.id.slice(0, at), index: Number(i.id.slice(at + 1)) };
+        });
     const roofs = items.filter((i) => i.kind === "roof").map((i) => i.id);
-    if (roofs.length > 0) {
+    const roofCorners = corners("roof-corner");
+    if (roofs.length > 0 || roofCorners.length > 0) {
       this.doc.editBuilding((building) => {
         for (const roof of building.roofs) {
           if (roofs.includes(roof.id)) roof.outline = roof.outline.map((p) => add(p, delta));
+          for (const c of roofCorners)
+            if (c.id === roof.id && roof.outline[c.index])
+              roof.outline[c.index] = add(roof.outline[c.index], delta);
+        }
+      });
+      return;
+    }
+    const areaCorners = corners("area-corner");
+    if (areaCorners.length > 0) {
+      this.doc.edit((plan) => {
+        for (const c of areaCorners) {
+          const area = plan.areas.find((a) => a.id === c.id);
+          if (area?.points[c.index]) area.points[c.index] = add(area.points[c.index], delta);
         }
       });
       return;
@@ -1059,7 +1089,7 @@ export class Editor2D {
           this.currentTool === "area" &&
           first &&
           this.pathPoints.length >= 3 &&
-          distance(first, point) * this.zoom < SNAP_PIXELS
+          distance(first, point) * this.zoom < this.snapPixels
         ) {
           this.finishPath();
           break;
@@ -2325,11 +2355,8 @@ export class Editor2D {
         },
         element,
       );
-      for (const side of area.railings) {
-        const p = area.points[side];
-        const q = area.points[(side + 1) % area.points.length];
-        if (p && q) svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "railing" }, element);
-      }
+      for (const [p, q] of railingSides(area))
+        svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "railing" }, element);
       // A label in a room, for example of a lawn around the house, shows only for a selection.
       const center = areaCenter(area.points);
       if (selected || !rooms.some((room) => pointInPolygon(center, room.polygon))) {

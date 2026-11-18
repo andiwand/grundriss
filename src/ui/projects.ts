@@ -360,6 +360,9 @@ export function load(
   storedBuilding = project === "from-file" ? null : doc.building;
   saveFailed = false;
   locking = lockProject(projectId);
+  // A new plan starts on a story, without the points of a drawing of the old plan.
+  shell.setRoofLevel(false, false);
+  editor.tool = editor.tool;
   editor.select(null);
   if (!app.planOpen || app.topic === "overview") app.fitPending = true;
   else {
@@ -515,12 +518,12 @@ async function backUpProjects(): Promise<void> {
     if (projects.length === 0) return showStatus(t("There are no projects to back up."));
     const date = new Date().toISOString().slice(0, 10);
     const bytes = makeBackup(projects);
-    await saveBlob(
+    const saved = await saveBlob(
       new Blob([bytes as BlobPart], { type: "application/zip" }),
       t("Grundriss backup {date}.zip", { date }),
       [{ description: t("ZIP archive"), accept: { "application/zip": [".zip"] } }],
     );
-    showStatus(t("Backed up {count} projects.", { count: projects.length }));
+    if (saved) showStatus(t("Backed up {count} projects.", { count: projects.length }));
   } catch (error) {
     showStatus(errorText(error), true);
   }
@@ -717,13 +720,16 @@ function projectCard(project: ProjectInfo): HTMLElement {
       remoteHooks.toServer({ id: project.id, name: project.name }),
     );
   }
-  tool("copy", t("Duplicate"), () => void duplicateProject(project.id));
-  tool("trash", t("Delete"), () => void trashProject(project), true);
+  tool("copy", t("Duplicate"), () => void duplicateProject(project.id).catch(failed));
+  tool("trash", t("Delete"), () => void trashProject(project).catch(failed), true);
   card.append(open, tools);
   return card;
 }
 
 /** Moves the project to the trash. The open plan stays, and its next change saves it again. */
+/** Shows the error of an action on a project of the home page. */
+const failed = (error: unknown) => showStatus(errorText(error), true);
+
 async function trashProject(project: ProjectInfo): Promise<void> {
   await deleteProject(project.id);
   if (project.id === projectId) {
@@ -748,7 +754,7 @@ function trashItem(project: ProjectInfo): HTMLElement {
   name.textContent = project.name;
   const restore = document.createElement("button");
   restore.textContent = t("Restore");
-  restore.addEventListener("click", () => void restoreProject(project.id).then(renderHome));
+  restore.addEventListener("click", () => restoreProject(project.id).then(renderHome, failed));
   const remove = document.createElement("button");
   remove.className = "danger";
   remove.textContent = t("Delete for good");
@@ -756,7 +762,7 @@ function trashItem(project: ProjectInfo): HTMLElement {
     if (!confirm(t('Delete "{name}" for good? This cannot be undone.', { name: project.name }))) {
       return;
     }
-    void purgeProject(project.id).then(renderHome);
+    void purgeProject(project.id).then(renderHome, failed);
   });
   item.append(name, restore, remove);
   return item;
@@ -778,7 +784,7 @@ function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
       app.fileName = `${value}${extension}`;
       updateTitle();
     }
-    void renameProject(project.id, value).then(renderHome);
+    void renameProject(project.id, value).then(renderHome, failed);
   };
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") finish(true);

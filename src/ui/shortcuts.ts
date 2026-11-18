@@ -1,6 +1,7 @@
 // The help of the keyboard shortcuts: a dialog that opens with "?" or with the help button.
 
 import { t } from "../i18n";
+import { closeOutside } from "./dialog";
 
 /** The version of the app from package.json (vite.config.ts). */
 declare const __APP_VERSION__: string;
@@ -108,7 +109,7 @@ export function showShortcuts(): void {
   close.textContent = t("Close");
   close.addEventListener("click", () => dialog.close());
   dialog.append(close);
-  dialog.addEventListener("click", (e) => e.target === dialog && dialog.close());
+  closeOutside(dialog);
   dialog.addEventListener("close", () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();

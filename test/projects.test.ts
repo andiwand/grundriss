@@ -6,8 +6,8 @@ vi.mock("../src/ui/context", async () => {
   return {
     doc: new PlanDocument(),
     app: { planOpen: true, fileName: "plan.grundriss", topic: "overview" },
-    editor: { clearCalibration: vi.fn(), select: vi.fn() },
-    shell: { enterPlan: vi.fn() },
+    editor: { clearCalibration: vi.fn(), select: vi.fn(), tool: "select" },
+    shell: { enterPlan: vi.fn(), setRoofLevel: vi.fn() },
     showStatus: vi.fn(),
     $: () => ({ textContent: "", classList: { toggle: vi.fn() } }),
   };

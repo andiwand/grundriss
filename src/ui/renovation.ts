@@ -46,6 +46,7 @@ import {
   table,
 } from "./panel";
 import { numberInput, textInput } from "./controls";
+import { closeOutside } from "./dialog";
 
 /**
  * Opens the variant with the id, or the plan for null. The changes in all topics then go into the
@@ -650,7 +651,7 @@ function showComparison(): void {
       { years: LIFETIME },
     ),
   );
-  dialog.addEventListener("click", (e) => e.target === dialog && dialog.close());
+  closeOutside(dialog);
   dialog.addEventListener("close", () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();

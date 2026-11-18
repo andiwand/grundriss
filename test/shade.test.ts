@@ -3,7 +3,7 @@ import { energyBalance } from "../src/model/balance";
 import { climateFace, HOURS } from "../src/model/climate";
 import { makeHouse } from "../src/model/example";
 import { faceInfo, fieldShade, pvLayout, specificYield } from "../src/model/pv";
-import { BEAM_SHARE, shadeParts, shadePolygons } from "../src/model/shade";
+import { BEAM_SHARE, shadeParts } from "../src/model/shade";
 import { newArea, newTree } from "../src/model/outdoor";
 import { boxHouse } from "./houses";
 import type { Building, Climate, PvArray, RoofKind } from "../src/model/types";
@@ -82,10 +82,10 @@ describe("shade of the building on a field", () => {
 
   it("finds the polygons of the roofs and the chimneys", () => {
     const building = house();
-    const before = shadePolygons(building).length;
+    const before = shadeParts(building).length;
     addChimney(building, 0.5);
     // A chimney adds four sides and a top.
-    expect(shadePolygons(building).length).toBe(before + 5);
+    expect(shadeParts(building).length).toBe(before + 5);
   });
 
   it("gives shade from a chimney south of a south field, more for a bigger chimney", () => {

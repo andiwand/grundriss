@@ -515,7 +515,10 @@ const catalog = new Catalog($("#catalog"), {
   toggled: () => markTool(editor.tool),
 });
 
-editor.onFinish = () => markTool(editor.tool);
+editor.onFinish = () => {
+  markTool(editor.tool);
+  showStatus(HINTS[editor.tool]);
+};
 
 editor.onPlace = (piece) => {
   // After one piece, the editor is back in the select tool, unless Shift kept the furniture tool.
@@ -615,14 +618,14 @@ async function exportFile(
     return planToSvg(story, { ...storyExtras(building, story), background: false, translate: t });
   }
   if (format === "pdf") return buildingToPdf(building, { ...pdf, translate: t });
-  if (format === "dxf") return buildingToDxf(building);
+  if (format === "dxf") return buildingToDxf(building, t);
   // The model has the whole building, also the stories that the 3D view hides now.
   return new Uint8Array(await exportGlb(await buildModelAsync(building)));
 }
 
 /** The exports that a package contains, so that other programs can use them at once. */
 async function exportsOf(building: Building): Promise<Record<string, Uint8Array | string>> {
-  return buildingExports(building, (await exportFile(building, "glb")) as Uint8Array);
+  return buildingExports(building, (await exportFile(building, "glb")) as Uint8Array, t);
 }
 
 const MIME: Record<ExportFormat, string> = {
@@ -844,6 +847,7 @@ Object.assign(shell, {
   updateMapCredit,
   fit3d,
   enterPlan,
+  showHome,
   catalog,
   renderPanel,
 });
@@ -930,7 +934,10 @@ setupCompact({
   },
   done: () => {
     if (editor.tool === "run") editor.finishRun();
-    if (editor.tool === "area" || editor.tool === "fence") editor.finishPath();
+    if (editor.tool === "area" || editor.tool === "fence") {
+      // A finished area or fence is the selection now.
+      if (editor.finishPath()) return setTool("select");
+    }
     editor.cancel();
     setTool("select");
   },

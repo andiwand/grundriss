@@ -304,7 +304,9 @@ export function mergeWalls(plan: Plan, wallIds: Id[]): Id | null {
   const line = wallLine(plan, wallIds);
   if (!line || mergeProblem(plan, line) !== null) return null;
   const first = getVertex(plan, line.vertices[0]);
-  const keep = line.walls[0];
+  // The line goes along the first wall of the list, so that wall keeps its direction and its
+  // colors. It can be anywhere on the line.
+  const keep = line.walls.find((w) => w.id === wallIds[0])!;
   line.walls.forEach((wall, i) => {
     const start = getVertex(plan, line.vertices[i]);
     const [a, b] = wallEnds(plan, wall);
@@ -322,9 +324,9 @@ export function mergeWalls(plan: Plan, wallIds: Id[]): Id | null {
   });
   const note = line.walls.find((w) => w.note)?.note;
   if (note) keep.note = note;
-  // The line goes along the first wall, so that wall keeps its direction and its colors.
+  keep.a = line.vertices[0];
   keep.b = line.vertices[line.vertices.length - 1];
-  const gone = new Set(line.walls.slice(1).map((w) => w.id));
+  const gone = new Set(line.walls.filter((w) => w !== keep).map((w) => w.id));
   const inner = new Set(line.vertices.slice(1, -1));
   plan.walls = plan.walls.filter((w) => !gone.has(w.id));
   plan.vertices = plan.vertices.filter((v) => !inner.has(v.id));

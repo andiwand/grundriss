@@ -19,11 +19,30 @@ export function dialog(title: string): { element: HTMLDialogElement; body: HTMLE
   const body = document.createElement("div");
   body.className = "app-dialog-body";
   element.append(head, body);
-  element.addEventListener("click", (e) => e.target === element && element.close());
+  closeOutside(element);
   element.addEventListener("close", () => element.remove());
   document.body.append(element);
   element.showModal();
   return { element, body };
+}
+
+/**
+ * Closes the dialog on a click on the backdrop. A click on the padding of the dialog, or the end
+ * of a selection of text outside a field, also has the dialog as its target: it stays open.
+ */
+export function closeOutside(element: HTMLDialogElement): void {
+  let down: EventTarget | null = null;
+  element.addEventListener("pointerdown", (e) => (down = e.target));
+  element.addEventListener("click", (e) => {
+    if (e.target !== element || down !== element) return;
+    const box = element.getBoundingClientRect();
+    const inside =
+      e.clientX >= box.left &&
+      e.clientX <= box.right &&
+      e.clientY >= box.top &&
+      e.clientY <= box.bottom;
+    if (!inside) element.close();
+  });
 }
 
 /** A row of a dialog: a label in a fixed column, and the control after it. */

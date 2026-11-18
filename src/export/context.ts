@@ -28,11 +28,19 @@ export function grow(box: Box | null, points: Point[]): Box | null {
  * null if all are empty.
  */
 export function withFurniture(box: Box | null, plan: Plan): Box | null {
+  return withOutdoor(
+    grow(box, [
+      ...(plan.furniture ?? []).flatMap(furnitureOutline),
+      ...(plan.fixtures ?? []).map((f) => ({ x: f.x, y: f.y })),
+      ...(plan.runs ?? []).flatMap((r) => r.points),
+    ]),
+    plan,
+  );
+}
+
+/** The box of the plan with its outdoor parts: the outlines, the fences, and the crowns. */
+export function withOutdoor(box: Box | null, plan: Plan): Box | null {
   return grow(box, [
-    ...(plan.furniture ?? []).flatMap(furnitureOutline),
-    ...(plan.fixtures ?? []).map((f) => ({ x: f.x, y: f.y })),
-    ...(plan.runs ?? []).flatMap((r) => r.points),
-    // The outdoor parts: the outlines, the fences, and the crowns of the trees.
     ...(plan.areas ?? []).flatMap((a) => a.points),
     ...(plan.fences ?? []).flatMap((f) => f.points),
     ...(plan.trees ?? []).flatMap((t) => [

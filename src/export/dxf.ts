@@ -15,7 +15,7 @@ import { findRooms, roomLabel } from "../model/rooms";
 import type { Building, Plan, Point, ServiceSystem } from "../model/types";
 import { furnitureSymbol } from "../model/furniture";
 import { fixtureSymbol } from "../model/services";
-import { areaCenter, areaType } from "../model/outdoor";
+import { areaCenter, areaType, railingSides } from "../model/outdoor";
 import { riseOf, storyExtras, type StoryExtras } from "./context";
 
 /** The layers and their AutoCAD color numbers. */
@@ -63,13 +63,16 @@ export function layerPrefix(name: string): string {
   return `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_`;
 }
 
+/** The names of the model in the language of the app. Without it, the names are English. */
+type Translate = (text: string) => string;
+
 /** Exports one story. Its layers have no prefix. */
-export function planToDxf(plan: Plan, extras: StoryExtras = {}): string {
-  return writeDxf([{ plan, extras, prefix: "" }]);
+export function planToDxf(plan: Plan, extras: StoryExtras = {}, translate?: Translate): string {
+  return writeDxf([{ plan, extras, prefix: "" }], translate);
 }
 
 /** Exports all stories in one file, each story on its own layers. */
-export function buildingToDxf(building: Building): string {
+export function buildingToDxf(building: Building, translate?: Translate): string {
   const used = new Set<string>();
   return writeDxf(
     building.stories.map((story) => {
@@ -79,10 +82,14 @@ export function buildingToDxf(building: Building): string {
       used.add(prefix);
       return { plan: story, extras: storyExtras(building, story), prefix };
     }),
+    translate,
   );
 }
 
-function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]): string {
+function writeDxf(
+  stories: { plan: Plan; extras: StoryExtras; prefix: string }[],
+  translate: Translate = (text) => text,
+): string {
   const out: string[] = [];
   const pair = (code: number, value: string | number) => {
     out.push(String(code), typeof value === "number" ? n(value) : value);
@@ -251,12 +258,13 @@ function writeDxf(stories: { plan: Plan; extras: StoryExtras; prefix: string }[]
     for (const area of plan.areas ?? []) {
       if (area.points.length < 3) continue;
       polygon(L.OUTDOOR, area.points);
-      for (const side of area.railings) {
-        const p = area.points[side];
-        const q = area.points[(side + 1) % area.points.length];
-        if (p && q) line(L.OUTDOOR, p, q);
-      }
-      text(L.OUTDOOR, areaCenter(area.points), area.name || areaType(area.kind).name, 0.2);
+      for (const [p, q] of railingSides(area)) line(L.OUTDOOR, p, q);
+      text(
+        L.OUTDOOR,
+        areaCenter(area.points),
+        area.name || translate(areaType(area.kind).name),
+        0.2,
+      );
     }
     for (const fence of plan.fences ?? []) {
       if (fence.points.length >= 2) polygon(L.FENCES, fence.points, false);

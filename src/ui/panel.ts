@@ -237,11 +237,22 @@ export function checkField(
   return input;
 }
 
+/**
+ * The groups that the user opened or closed against their default, by their title without the
+ * numbers. The panel draws itself again after each change, and the groups keep their state.
+ */
+const groupState = new Map<string, boolean>();
+
 /** A group that the user can open and close. The helpers append to it while it is open. */
 export function group(title: string, open: boolean, fill: () => void): void {
   const details = document.createElement("details");
   details.className = "group";
-  details.open = open;
+  const key = title.replace(/[\d.,]+/g, "#");
+  details.open = groupState.get(key) ?? open;
+  details.addEventListener("toggle", () => {
+    if (details.open === open) groupState.delete(key);
+    else groupState.set(key, details.open);
+  });
   const summary = document.createElement("summary");
   summary.textContent = title;
   details.append(summary);

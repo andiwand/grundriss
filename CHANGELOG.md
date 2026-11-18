@@ -4,6 +4,26 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Server: a text in a plan cannot read a file of the server any more. Before, a person who could
+  edit a plan could read other files of the server through a text that looked like a stored
+  image.
+- Server: logins that come at the same time all count for the limit of the logins. Behind a
+  proxy, set `GRUNDRISS_TRUST_PROXY=true` (the `compose.yaml` does), so that the limit counts
+  each address; without it, a client cannot give itself a new address with a header. A request
+  without a plan can have at most 64 KB. A deleted plan also removes its files and the images
+  that no other plan has. A server does not start with the data of a newer version.
+- Server: the changes without the network move with the copy to each newer revision, so they
+  never undo the changes of others. "Load again" drops them, and the log out asks first if
+  changes did not go to the server yet; it also closes the open plan.
+- 2D: a merge of walls where the first selected wall goes the other way does not break the plan
+  any more. On the roof level, Ctrl+A selects only the roofs, and paste does nothing. Copy,
+  paste, and duplicate work for outdoor areas, fences, and trees. The arrow keys move a selected
+  corner of a roof or an area. A new plan opens on a story, not on the roof level.
+- The groups of the panel stay open after a change. A click in a dialog closes it only outside
+  of the dialog. An update of the app keeps the files of the version before, so an open page
+  can still load the tracing.
+- The PDF without furniture fits the page around the outdoor parts, and the DXF and the package
+  name the outdoor areas in the language of the app.
 - Server: a plan of a server opens without the network to edit, if you could edit it. The browser
   keeps your changes, also after the tab closes, and sends them when the server answers again;
   they merge with the changes of the others. A send that fails tries again by itself, and the

@@ -271,6 +271,8 @@ function storeCopy(current: Session, name: string, data: string): void {
     planPreview(current.saved),
     current.write,
   ).catch(() => undefined);
+  // The stored changes have the copy as their base: they move with it to the new revision.
+  if (current.edits || current.editsTimer) storeEdits(current);
 }
 
 /**
@@ -412,7 +414,7 @@ export async function openRemote(planId: string): Promise<void> {
   } catch (error) {
     // Without the network, the copy of the browser opens to view.
     if (error instanceof ServerError && error.status === 0 && request === opening) {
-      if (await openOffline(planId, client)) return;
+      if (await openOffline(planId, client, request)) return;
     }
     showStatus(errorText(error), true);
     // A plan that this browser cannot open: perhaps after a login.
@@ -428,8 +430,14 @@ export async function openRemote(planId: string): Promise<void> {
  * plan edits the copy: the browser keeps the changes, and they go to the server when it answers
  * again (`tryOnline`). The changes of an earlier time without the network are there too.
  */
-async function openOffline(planId: string, client: ServerClient): Promise<boolean> {
+async function openOffline(
+  planId: string,
+  client: ServerClient,
+  request: number,
+): Promise<boolean> {
   const copy = await loadRemoteCopy(client.base, planId).catch(() => undefined);
+  // Another plan opened meanwhile.
+  if (request !== opening) return true;
   if (!copy) return false;
   const name = server?.name ?? "";
   const write = copy.write === true;
@@ -516,7 +524,16 @@ async function tryOnline(current: Session): Promise<void> {
   } finally {
     current.loading = 0;
   }
-  if (session === current && current.offline) goOnline(current, plan);
+  // A drag keeps its copy of the building: the server waits for its end.
+  if (!(await afterDrag(current)) || !current.offline) return;
+  goOnline(current, plan);
+}
+
+/** Waits until a drag ends. It gives false if the session ended meanwhile. */
+async function afterDrag(current: Session): Promise<boolean> {
+  while (session === current && doc.inTransaction)
+    await new Promise((done) => window.setTimeout(done, 200));
+  return session === current;
 }
 
 /**
@@ -526,7 +543,6 @@ async function tryOnline(current: Session): Promise<void> {
  */
 function goOnline(current: Session, plan: RemotePlan & { data: string }): void {
   window.clearInterval(current.reconnect);
-  storeEdits(current);
   const own = diffBuildings(current.saved, doc.building);
   current.offline = false;
   current.write = plan.write;
@@ -695,10 +711,7 @@ async function catchUp(current: Session): Promise<void> {
     const plan = await current.client.plan(current.planId);
     if (session !== current || request !== current.loading) return;
     // A drag keeps its copy of the building: the new revision waits for its end.
-    while (doc.inTransaction) {
-      await new Promise((done) => window.setTimeout(done, 200));
-      if (session !== current) return;
-    }
+    if (!(await afterDrag(current))) return;
     if (revisionNumber(plan.revision) <= revisionNumber(current.revision)) return;
     const own = unsent(current);
     current.revision = plan.revision;
@@ -781,7 +794,9 @@ async function sendChanges(current: Session): Promise<void> {
       );
       current.inflight = null;
       await catchUp(current);
-      if (session === current) adopt(current, current.saved, undefined);
+      if (!(await afterDrag(current))) return;
+      adopt(current, current.saved, undefined);
+      if (current.edits) storeEdits(current);
       return;
     }
     if (!current.failed) {
@@ -1179,9 +1194,21 @@ function accountDialog(): void {
     }),
     actionButton(t("Log out"), async () => {
       try {
+        const copies = await listRemoteCopies(state.client.base).catch(() => []);
+        if (
+          copies.some((copy) => copy.edited) &&
+          !confirm(t("Some changes did not go to the server yet. Log out and discard them?"))
+        )
+          return;
+        const open = !!session;
         endSession();
         setSession(await state.client.logout());
-        // On a computer of others, the plans of the account do not stay in the browser.
+        // On a computer of others, the plans of the account do not stay in the browser: the open
+        // plan closes, so that it does not save as a project of the browser.
+        if (open) {
+          load();
+          void shell.showHome();
+        }
         await removeRemoteCopies(state.client.base).catch(() => undefined);
         element.close();
         showStatus(t("Logged out."));

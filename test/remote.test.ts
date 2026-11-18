@@ -314,4 +314,38 @@ describe("remote sessions", () => {
       keys: { north: { t: "set", v: 40 } },
     });
   });
+
+  it("moves the changes without the network onto the newer copy of the server", async () => {
+    const edited = emptyBuilding();
+    edited.north = 40;
+    copies.set("house", {
+      key: "x|house",
+      planId: "house",
+      name: "House",
+      revision: "1",
+      time: 1,
+      write: true,
+      data: serializeBuilding(emptyBuilding()),
+      editedData: serializeBuilding(edited),
+    });
+    // Another person renamed the first story on the server.
+    const newer = emptyBuilding();
+    newer.stories[0].name = "Garden floor";
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      String(url).endsWith("/plans/house")
+        ? json(info({ revision: "2", data: serializeBuilding(newer) }))
+        : original(url as string, init),
+    );
+    await openRemote("house");
+    await vi.advanceTimersByTimeAsync(0);
+    // The stored changes have the newest revision as their base, so they never undo the rename.
+    const stored = vi
+      .mocked(saveRemoteEdits)
+      .mock.calls.map(([, , data]) => data)
+      .filter((data): data is string => typeof data === "string")
+      .map((data) => JSON.parse(data));
+    expect(stored.at(-1)).toMatchObject({ north: 40 });
+    expect(stored.at(-1).stories[0].name).toBe("Garden floor");
+  });
 });

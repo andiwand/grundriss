@@ -8,8 +8,6 @@ export function setNumberLocale(next: string): void {
   locale = next;
 }
 
-export const numberLocale = (): string => locale;
-
 /** A number with exactly `digits` digits after the decimal mark, in the locale. */
 export function fmt(value: number, digits = 2): string {
   return value.toLocaleString(locale, {

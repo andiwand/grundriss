@@ -218,6 +218,21 @@ describe("walls in one line", () => {
     expect(p.openings[0]).toMatchObject({ wallId: first, offset: 4, hinge: "b", swing: -1 });
   });
 
+  it("merges a line whose first wall of the list is in its middle", () => {
+    // The first wall goes the other way than the line.
+    const p = plan([
+      [P(1, 0), P(0, 0)],
+      [P(1, 0), P(2, 0)],
+      [P(2, 0), P(3, 0)],
+    ]);
+    const [w1, w2, w3] = p.walls.map((w) => w.id);
+    expect(mergeWalls(p, [w2, w1, w3])).toBe(w2);
+    expect(p.walls).toHaveLength(1);
+    const ids = new Set(p.vertices.map((v) => v.id));
+    expect(ids.has(p.walls[0].a) && ids.has(p.walls[0].b)).toBe(true);
+    expect(p.vertices.map((v) => v.x).sort()).toEqual([0, 3]);
+  });
+
   it("does not merge walls of other thickness", () => {
     const p = plan([[P(0, 0), P(2, 0)]]);
     const other = plan([[P(2, 0), P(5, 0)]], 0.3);

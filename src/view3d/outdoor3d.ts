@@ -4,7 +4,7 @@
 // The plan point (x, y) is the world point (x, z), and the height is the world y.
 
 import * as THREE from "three";
-import { areaType, fenceType, RAILING_HEIGHT } from "../model/outdoor";
+import { areaType, fenceType, RAILING_HEIGHT, railingSides } from "../model/outdoor";
 import type { Area, Fence, Point, Story, Tree } from "../model/types";
 
 const materials = new Map<string, THREE.Material>();
@@ -21,7 +21,6 @@ function material(color: string, opacity = 1): THREE.Material {
       opacity,
       depthWrite: opacity >= 1,
     });
-    found.userData.shared = true;
     materials.set(key, found);
   }
   return found;
@@ -102,10 +101,7 @@ function areaObject(area: Area, floor: number): THREE.Object3D | null {
   // A railing: a panel of glass and a rail on top.
   const glass = material("#cfe0ea", 0.35);
   const rail = material("#6b7280");
-  for (const side of area.railings) {
-    const p = area.points[side];
-    const q = area.points[(side + 1) % area.points.length];
-    if (!p || !q) continue;
+  for (const [p, q] of railingSides(area)) {
     const panel = wallBox(p, q, 0.02, top, top + RAILING_HEIGHT - 0.05, glass);
     const bar = wallBox(p, q, 0.05, top + RAILING_HEIGHT - 0.05, top + RAILING_HEIGHT, rail);
     if (panel) group.add(panel);

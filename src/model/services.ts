@@ -4,7 +4,7 @@
 // A device uses the local frame of furniture (src/model/furniture.ts): the origin at its center,
 // x along the wall, the back at -y against the wall, and the front at +y in the room.
 
-import { add, distance, scale } from "./geometry";
+import { distance } from "./geometry";
 import { newId } from "./plan";
 import type { Fixture, Plan, Point, Run, ServiceSystem } from "./types";
 
@@ -398,25 +398,4 @@ export function fixtureSymbol(f: Fixture): FixtureSymbol {
 /** The point where a line connects to a device: at the device, a bit in front of the wall. */
 export function fixtureAnchor(f: Fixture): Point {
   return toPlan(f, { x: 0, y: 0.02 });
-}
-
-/** The middle of a line, for its label. */
-export function runMiddle(run: Run): Point {
-  const total = runLength(run);
-  let walked = 0;
-  for (let i = 1; i < run.points.length; i++) {
-    const step = distance(run.points[i - 1], run.points[i]);
-    if (walked + step >= total / 2 && step > 0) {
-      const t = (total / 2 - walked) / step;
-      return add(
-        run.points[i - 1],
-        scale(
-          { x: run.points[i].x - run.points[i - 1].x, y: run.points[i].y - run.points[i - 1].y },
-          t,
-        ),
-      );
-    }
-    walked += step;
-  }
-  return run.points[0] ?? { x: 0, y: 0 };
 }

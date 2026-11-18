@@ -20,17 +20,16 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// The cache of the version before stays until the next update: a page of the old version that is
+// still open loads its files (for example the tracing) with the names of its build.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key.startsWith("grundriss-") && key !== CACHE)
-            .map((key) => caches.delete(key)),
-        ),
-      )
+      .then((keys) => {
+        const old = keys.filter((key) => key.startsWith("grundriss-") && key !== CACHE);
+        return Promise.all(old.slice(0, -1).map((key) => caches.delete(key)));
+      })
       .then(() => self.clients.claim()),
   );
 });
@@ -59,16 +58,25 @@ async function networkFirst(request) {
     if (response.ok) await cache.put("./", response.clone());
     return response;
   } catch (error) {
-    const cached = (await cache.match(request)) ?? (await cache.match("./"));
-    if (cached) return cached;
+    const page = (await cache.match(request)) ?? (await cache.match("./"));
+    if (page) return page;
     throw error;
   }
 }
 
+/** A file of the cache of this version, or of the version before, which it then takes over. */
+async function cached(cache, request) {
+  const own = await cache.match(request);
+  if (own) return own;
+  const old = await caches.match(request);
+  if (old) await cache.put(request, old.clone());
+  return old;
+}
+
 async function cacheFirst(request) {
   const cache = await caches.open(CACHE);
-  const cached = await cache.match(request);
-  if (cached) return cached;
+  const found = await cached(cache, request);
+  if (found) return found;
   const response = await fetch(request);
   if (response.ok) await cache.put(request, response.clone());
   return response;
@@ -76,14 +84,14 @@ async function cacheFirst(request) {
 
 async function staleWhileRevalidate(request, event) {
   const cache = await caches.open(CACHE);
-  const cached = await cache.match(request);
+  const found = await cached(cache, request);
   const update = fetch(request).then(async (response) => {
     if (response.ok) await cache.put(request, response.clone());
     return response;
   });
-  if (cached) {
+  if (found) {
     event.waitUntil(update.catch(() => undefined));
-    return cached;
+    return found;
   }
   return update;
 }

@@ -341,4 +341,7 @@ export const PROJECTS: Record<string, string> = {
   "Changes wait": "Änderungen warten",
   "Your changes without the network go to the server when you open the plan.":
     "Ihre Änderungen ohne Netzwerk gehen an den Server, wenn Sie den Plan öffnen.",
+  current: "aktuell",
+  "Some changes did not go to the server yet. Log out and discard them?":
+    "Einige Änderungen sind noch nicht auf dem Server. Abmelden und sie verwerfen?",
 };

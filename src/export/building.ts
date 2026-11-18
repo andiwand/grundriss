@@ -15,16 +15,17 @@ import { planToSvg } from "./svg";
 export function buildingExports(
   building: Building,
   glb?: Uint8Array,
+  translate?: (text: string) => string,
 ): Record<string, Uint8Array | string> {
   const files: Record<string, Uint8Array | string> = {
-    "plan.pdf": buildingToPdf(building),
-    "plan.dxf": buildingToDxf(building),
+    "plan.pdf": buildingToPdf(building, { translate }),
+    "plan.dxf": buildingToDxf(building, translate),
   };
   for (const story of building.stories) {
     let name = `${slug(story.name)}.svg`;
     // Two stories with the same name get different files.
     for (let i = 2; name in files; i++) name = `${slug(story.name)}-${i}.svg`;
-    files[name] = planToSvg(story, storyExtras(building, story));
+    files[name] = planToSvg(story, { ...storyExtras(building, story), translate });
   }
   if (glb) files["model.glb"] = glb;
   return files;

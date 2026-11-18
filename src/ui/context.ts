@@ -133,6 +133,7 @@ export const shell = {
   updateMapCredit: (): void => {},
   fit3d: (): void => {},
   enterPlan: (_topic: Topic): void => {},
+  showHome: async (): Promise<void> => {},
   renderPanel: (): void => {},
   catalog: null as unknown as Catalog,
 };
