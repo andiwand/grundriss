@@ -68,7 +68,8 @@ export const HINTS: Record<Tool, string> = {
  * The topics of the user interface. A topic shows its own tools in the palette, its own content
  * in the panel when nothing is selected, and its own layers.
  */
-export type Topic = "overview" | "structure" | "utilities" | "interior" | "energy" | "renovation";
+export type Topic =
+  "overview" | "structure" | "outdoor" | "utilities" | "interior" | "energy" | "renovation";
 
 export type LayerName = keyof typeof editor.layers;
 

@@ -418,13 +418,21 @@ export const PANELS: Record<string, string> = {
   Fence: "Zaun",
   Hedge: "Hecke",
   "Garden wall": "Gartenmauer",
-  Outdoor: "Außen",
+  Outdoor: "Außenanlagen",
   Tree: "Baum",
   "Outdoor area": "Außenfläche",
   "Outdoor areas": "Außenflächen",
   "Fences and hedges": "Zäune und Hecken",
   Trees: "Bäume",
-  "Outdoor areas, fences, and trees (A, G, T)": "Außenflächen, Zäune und Bäume (A, G, T)",
+  "Terraces, balconies, the garden, fences, and trees":
+    "Terrassen, Balkone, Garten, Zäune und Bäume",
+  "Draw an outdoor area: a terrace, a balcony, a path, a lawn, or the plot (A)":
+    "Außenfläche zeichnen: Terrasse, Balkon, Weg, Rasen oder Grundstück (A)",
+  "Draw a fence, a hedge, or a garden wall (G)": "Zaun, Hecke oder Gartenmauer zeichnen (G)",
+  "Put a tree (T)": "Baum setzen (T)",
+  "Draw the terraces, the paths, the lawn, and the plot with Area (A), the fences and the hedges with Fence (G), and put the trees with Tree (T).":
+    "Zeichnen Sie Terrassen, Wege, Rasen und Grundstück mit Fläche (A), Zäune und Hecken mit Zaun (G), und setzen Sie Bäume mit Baum (T).",
+  "{crown} m crown, {height} m high": "{crown} m Krone, {height} m hoch",
   "A balcony or a roof terrace goes on its story, for example on the floor above or on a flat roof. The plot, the lawn, and the neighbors go on the ground floor.":
     "Ein Balkon oder eine Dachterrasse gehört zu ihrem Geschoss, zum Beispiel zum Geschoss darüber oder auf ein Flachdach. Grundstück, Rasen und Nachbarn gehören ins Erdgeschoss.",
   "living area (WoFlV, a quarter)": "Wohnfläche (WoFlV, ein Viertel)",

@@ -110,7 +110,9 @@ test("draws a terrace, a hedge, and a tree outside the house", async ({ page }, 
   const [x0, y0] = [box.width / 2 - 60, box.height - 120];
 
   // A terrace: four corners, and a click on the first corner ends it.
+  // The key of the tool opens the topic Outdoor.
   await page.keyboard.press("a");
+  await expect(page.locator('[data-topic-tab="outdoor"]')).toHaveClass(/active/);
   await expect(page.locator("#panel")).toContainText("Outdoor area");
   await page.locator("#panel select").first().selectOption("terrace");
   await page.locator("#panel select").first().blur();
@@ -133,11 +135,11 @@ test("draws a terrace, a hedge, and a tree outside the house", async ({ page }, 
   await page.locator("#panel select").first().selectOption("balcony");
   await expect(page.locator("#plan-2d .area .railing")).toHaveCount(4);
 
-  // A hedge from the menu "Outdoor" with two points, ended with Enter.
+  // A hedge from the palette with two points, ended with Enter.
   await page.keyboard.press("Escape");
-  await page.locator("#outdoor").click();
-  await page.locator("#outdoor-menu button", { hasText: "Hedge" }).click();
-  await expect(page.locator("#outdoor")).toHaveClass(/active/);
+  await page.locator('#tools [data-tool="fence"]').click();
+  await page.locator("#panel select").first().selectOption("hedge");
+  await page.locator("#panel select").first().blur();
   await at(x0 - 40, y0 - 40);
   await at(x0 + 160, y0 - 40);
   await page.keyboard.press("Enter");
@@ -172,12 +174,15 @@ test("draws a terrace, a hedge, and a tree outside the house", async ({ page }, 
   await expect(page.locator("#panel h2").first()).toContainText("Balcony");
   await page.keyboard.press("Delete");
   await expect(areas).toHaveCount(0);
+  // Without a selection, the panel of the topic lists the hedge.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#panel")).toContainText("Fences and hedges");
 });
 
 test("shows each topic with its panel", async ({ page }) => {
   await openApp(page);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
-  for (const topic of ["utilities", "interior", "energy", "renovation"]) {
+  for (const topic of ["outdoor", "utilities", "interior", "energy", "renovation"]) {
     await page.locator(`[data-topic-tab="${topic}"]`).click();
     await expect(page.locator("#panel h2").first()).toBeVisible();
   }

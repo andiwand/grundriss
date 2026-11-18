@@ -24,8 +24,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 
 - Without an open plan (`planOpen` in `src/main.ts`), the app shows the home page (`#home`) with
   the projects, and the top bar hides the parts with the class `plan-tools`. With an open plan,
-  the user interface has six topics (`Topic`): overview, structure, utilities, interior, energy,
-  and renovation. Energy and renovation have a wide panel (`body.wide`). A topic selects the tools of the palette (`data-topic`), the panel without a
+  the user interface has seven topics (`Topic`): overview, structure, outdoor, utilities,
+  interior, energy, and renovation. Energy and renovation have a wide panel (`body.wide`). A topic selects the tools of the palette (`data-topic`), the panel without a
   selection, and the layers. The overview (`#overview`) shows the contents in place of the 2D
   and the 3D view. The topic is not in the plan file.
 - `src/main.ts` is the shell: the topics, the tools, the views, the files, the menus, the
@@ -192,6 +192,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/ui/panel.ts`          | The helpers of the panel: headings, fields, stats, tables, groups.                                            |
 | `src/ui/selection.ts`      | The panel of the selected objects.                                                                            |
 | `src/ui/structure.ts`      | Background, stories, building, and roofs.                                                                     |
+| `src/ui/outdoor.ts`        | The topic Outdoor: the areas, the fences, and the trees of a story, and the panel of their tools.             |
 | `src/ui/utilities.ts`      | The utilities, the PV fields, and the distribution board.                                                     |
 | `src/ui/energy.ts`         | Location, climate, envelope, heating, readiness, summer, and the balance.                                     |
 | `src/ui/renovation.ts`     | The variants with their measures, cost, subsidy, and payback.                                                 |

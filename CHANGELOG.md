@@ -4,6 +4,13 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Outdoor is a topic of its own, after Structure. It has the tools **Area** (A), **Fence** (G),
+  and **Tree** (T) in place of the menu Outdoor, and its panel lists the areas, the fences, and
+  the trees of the story. The overview opens them in this topic.
+
+- 3D: without "All stories", a chimney stops at the top of the walls of the active story. Before,
+  it went up through the hidden stories and the roof.
+
 ## 0.6.2 – 2026-11-18
 
 - Structure: the tools of the outdoor parts are one menu **Outdoor**, like Water and Heating. It

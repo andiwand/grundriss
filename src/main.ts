@@ -47,7 +47,6 @@ import { renderVariantSwitch } from "./ui/renovation";
 import { renderPanel } from "./ui/selection";
 import { showShortcuts } from "./ui/shortcuts";
 import { backgroundElement, replaceBackground, tracing, work } from "./ui/tracing";
-import { openOutdoorMenu } from "./ui/structure";
 import { drawInsulation, openServicesMenu } from "./ui/utilities";
 
 import { fillIcons, icon } from "./icons";
@@ -116,6 +115,7 @@ const SERVICE_LAYERS = { water: false, heating: false, electric: false, comms: f
 const topicLayers: Record<Topic, Partial<Record<LayerName, boolean>>> = {
   overview: { ...SERVICE_LAYERS, pv: false, insulation: false },
   structure: { ...SERVICE_LAYERS, pv: false, insulation: false },
+  outdoor: { ...SERVICE_LAYERS, pv: false, insulation: false },
   utilities: {
     water: true,
     heating: true,
@@ -140,9 +140,9 @@ const TOOL_TOPIC: Partial<Record<Tool, Topic>> = {
   stair: "structure",
   chimney: "structure",
   dimension: "structure",
-  area: "structure",
-  fence: "structure",
-  tree: "structure",
+  area: "outdoor",
+  fence: "outdoor",
+  tree: "outdoor",
   fixture: "utilities",
   run: "utilities",
   furniture: "interior",
@@ -276,7 +276,6 @@ function markTool(tool: Tool): void {
     button.classList.toggle("active", button.dataset.tool === tool);
   }
   $("#furniture").classList.toggle("active", tool === "furniture" || catalog.isOpen);
-  $("#outdoor").classList.toggle("active", tool === "area" || tool === "fence" || tool === "tree");
   toolChanged(tool);
 }
 
@@ -986,8 +985,6 @@ $("#undo").addEventListener("click", () => doc.undo());
 $("#redo").addEventListener("click", () => doc.redo());
 
 $("#background").addEventListener("click", () => void loadBackground());
-
-$("#outdoor").addEventListener("click", () => openOutdoorMenu($("#outdoor")));
 
 for (const element of document.querySelectorAll<HTMLButtonElement>("[data-system]")) {
   element.addEventListener("click", () =>

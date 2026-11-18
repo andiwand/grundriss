@@ -2390,20 +2390,6 @@ body.roof-level #tools .divider {
   border-radius: 2px;
 }
 
-/* An area of the outdoor menu is a small surface, and a tree is a crown. */
-.services-menu .swatch.area {
-  height: 14px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
-}
-
-.services-menu .swatch.tree {
-  width: 14px;
-  height: 14px;
-  margin: 0 4px;
-  border-radius: 50%;
-}
-
 .menu .check {
   display: flex;
   align-items: center;

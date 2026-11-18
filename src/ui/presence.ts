@@ -212,6 +212,7 @@ const VIEWS = new Set<unknown>(["2d", "split", "3d"]);
 const TOPICS = new Set<unknown>([
   "overview",
   "structure",
+  "outdoor",
   "utilities",
   "interior",
   "energy",

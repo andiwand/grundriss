@@ -62,7 +62,7 @@ import type {
   StairKind,
   Story,
 } from "../model/types";
-import { $, app, cached, doc, editor, HINTS, panel, shell, showStatus } from "./context";
+import { $, app, cached, doc, editor, panel, shell, showStatus } from "./context";
 import { renderEnergyTopic } from "./energy";
 import { renderConflicts } from "./conflicts";
 import { renderCircuit, renderNotes, type NoteChange } from "./notes";
@@ -101,6 +101,7 @@ import {
   renderRoofPanel,
   renderStructurePanel,
 } from "./structure";
+import { renderOutdoorPanel, renderOutdoorTool } from "./outdoor";
 import { renderTracing } from "./tracing";
 import { renderInteriorPanel, renderUtilitiesPanel, SYSTEM_ICONS } from "./utilities";
 import { selectInput } from "./controls";
@@ -240,6 +241,8 @@ export function renderPanel(): void {
       return;
     case "structure":
       return renderStructurePanel();
+    case "outdoor":
+      return renderOutdoorPanel();
     case "utilities":
       return renderUtilitiesPanel();
     case "interior":
@@ -740,40 +743,6 @@ function renderStair(plan: Story, id: Id): void {
 }
 
 // ----- The outdoor parts -----
-
-/** The panel of the area tool, the fence tool, and the tree tool: the kind of the next object. */
-function renderOutdoorTool(): void {
-  if (editor.tool === "tree") {
-    heading(t("Tree"), "tree");
-    paragraph(HINTS.tree, "note");
-    return;
-  }
-  if (editor.tool === "fence") {
-    heading(t("Fence"), "fence");
-    selectField(
-      t("Kind"),
-      editor.fenceKind,
-      FENCE_TYPES.map((type) => [type.kind, t(type.name)]),
-      (kind) => (editor.fenceKind = kind),
-    );
-    paragraph(HINTS.fence, "note");
-    return;
-  }
-  heading(t("Outdoor area"), "terrace");
-  selectField(
-    t("Kind"),
-    editor.areaKind,
-    AREA_TYPES.map((type) => [type.kind, t(type.name)]),
-    (kind) => (editor.areaKind = kind),
-  );
-  paragraph(HINTS.area, "note");
-  paragraph(
-    t(
-      "A balcony or a roof terrace goes on its story, for example on the floor above or on a flat roof. The plot, the lawn, and the neighbors go on the ground floor.",
-    ),
-    "note",
-  );
-}
 
 /** The panel of an outdoor area. */
 function renderArea(plan: Story, id: Id): void {

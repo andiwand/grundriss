@@ -6,7 +6,7 @@ import { pvSummary } from "../model/pv";
 import { findRooms } from "../model/rooms";
 import { SERVICE_SYSTEMS } from "../model/services";
 import type { Item, ItemKind } from "../model/types";
-import { $, app, cached, doc, editor, shell, Topic } from "./context";
+import { $, app, cached, doc, editor, shell, type Topic } from "./context";
 import { projectName } from "./projects";
 import { SYSTEM_ICONS } from "./utilities";
 
@@ -100,7 +100,7 @@ export function renderContents(): void {
         );
       }
     }
-    const counts: [string, Item[], IconName][] = [
+    const counts: [string, Item[], IconName, Topic?][] = [
       [t("Walls"), all("wall", story.walls), "wall"],
       [
         t("Doors"),
@@ -121,13 +121,13 @@ export function renderContents(): void {
       [t("Stairs"), all("stair", story.stairs), "stair"],
       [t("Chimneys"), all("chimney", story.chimneys), "chimney"],
       [t("Dimensions"), all("dimension", story.dimensions), "dimension"],
-      [t("Outdoor areas"), all("area", story.areas), "terrace"],
-      [t("Fences and hedges"), all("fence", story.fences), "fence"],
-      [t("Trees"), all("tree", story.trees), "tree"],
+      [t("Outdoor areas"), all("area", story.areas), "terrace", "outdoor"],
+      [t("Fences and hedges"), all("fence", story.fences), "fence", "outdoor"],
+      [t("Trees"), all("tree", story.trees), "tree", "outdoor"],
     ];
-    for (const [title, items, iconName] of counts) {
+    for (const [title, items, iconName, topic] of counts) {
       if (items.length > 0) {
-        leaf(storyNode, title, `${items.length}`, show(items, "structure"), iconName);
+        leaf(storyNode, title, `${items.length}`, show(items, topic ?? "structure"), iconName);
       }
     }
     if (story.background) {

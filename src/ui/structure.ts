@@ -3,14 +3,14 @@ import { livingArea, roofIsCeiling } from "../model/attic";
 import { findStory, sortStories } from "../model/building";
 import { fmt } from "../model/format";
 import { newId } from "../model/plan";
-import { AREA_TYPES, FENCE_TYPES, outdoorLivingArea } from "../model/outdoor";
+import { outdoorLivingArea } from "../model/outdoor";
 import { newRoof, roofBase, roofGeometryOf } from "../model/roof";
 import { halfHipHeight, presetSides } from "../model/roofshape";
 import type { Room } from "../model/rooms";
 import { findRooms, planOutline } from "../model/rooms";
 import type { Dormer, Roof, RoofKind, RoofSide, RoofWindow, Story } from "../model/types";
 import { renderConflicts } from "./conflicts";
-import { $, doc, editor, shell, showStatus } from "./context";
+import { doc, editor, shell, showStatus } from "./context";
 import { numberInput, selectInput } from "./controls";
 import {
   button,
@@ -20,7 +20,6 @@ import {
   heading,
   numberField,
   paragraph,
-  placeMenu,
   rangeField,
   section,
   selectField,
@@ -569,50 +568,4 @@ export function renderRoofPanel(roofId: string, corner: number | null): void {
 
   paragraph(t("Drag the corners of the outline on the plan. Drag a + to add a corner."), "note");
   button(t("Delete roof"), () => editor.deleteSelection(), { kind: "danger", icon: "trash" });
-}
-
-/**
- * Opens the menu of the outdoor parts under the button, or closes it if it is open: the kinds of
- * areas, the kinds of fences, and the tree. An item starts its tool with the kind.
- */
-export function openOutdoorMenu(anchor: HTMLElement): void {
-  const menu = $("#outdoor-menu");
-  if (!menu.hidden) return shell.closeMenus();
-  menu.replaceChildren();
-  const title = (text: string) => {
-    const heading = document.createElement("h4");
-    heading.textContent = text;
-    menu.append(heading);
-  };
-  const item = (name: string, color: string, shape: string, start: () => void) => {
-    const element = document.createElement("button");
-    const swatch = document.createElement("span");
-    swatch.className = `swatch ${shape}`;
-    swatch.style.background = color;
-    element.append(swatch, name);
-    element.addEventListener("click", () => {
-      shell.closeMenus();
-      start();
-    });
-    menu.append(element);
-  };
-  title(t("Outdoor areas"));
-  for (const type of AREA_TYPES) {
-    item(t(type.name), type.color, "area", () => {
-      editor.areaKind = type.kind;
-      shell.setTool("area");
-    });
-  }
-  title(t("Fences and hedges"));
-  for (const type of FENCE_TYPES) {
-    item(t(type.name), type.color, "", () => {
-      editor.fenceKind = type.kind;
-      shell.setTool("fence");
-    });
-  }
-  title(t("Trees"));
-  item(t("Tree"), "#6aa84f", "tree", () => shell.setTool("tree"));
-  shell.closeMenus();
-  menu.hidden = false;
-  placeMenu(menu, anchor);
 }

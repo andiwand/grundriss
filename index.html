@@ -74,6 +74,13 @@
           <span>Structure</span>
         </button>
         <button
+          data-topic-tab="outdoor"
+          data-icon="tree"
+          title="Terraces, balconies, the garden, fences, and trees"
+        >
+          <span>Outdoor</span>
+        </button>
+        <button
           data-topic-tab="utilities"
           data-icon="wrench"
           title="Water, heating, electricity, and communication"
@@ -268,13 +275,23 @@
             Dimension<kbd>L</kbd>
           </button>
           <button
-            data-topic="structure"
-            id="outdoor"
+            data-topic="outdoor"
+            data-tool="area"
             data-icon="terrace"
-            data-menu
-            title="Outdoor areas, fences, and trees (A, G, T)"
+            title="Draw an outdoor area: a terrace, a balcony, a path, a lawn, or the plot (A)"
           >
-            Outdoor
+            Area<kbd>A</kbd>
+          </button>
+          <button
+            data-topic="outdoor"
+            data-tool="fence"
+            data-icon="fence"
+            title="Draw a fence, a hedge, or a garden wall (G)"
+          >
+            Fence<kbd>G</kbd>
+          </button>
+          <button data-topic="outdoor" data-tool="tree" data-icon="tree" title="Put a tree (T)">
+            Tree<kbd>T</kbd>
           </button>
           <button
             data-topic="utilities"
@@ -416,7 +433,6 @@
       </button>
     </div>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
-    <div class="menu services-menu" id="outdoor-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>
       <div class="menu-label">This topic</div>
       <label class="check"><input type="checkbox" data-layer="water" checked /> Water</label>

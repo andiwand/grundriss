@@ -55,12 +55,14 @@ account and no server, and your plans stay on your computer as files.
 ## Use
 
 The app starts with the **Projects** page: start a new plan, open a file, open a plan of this
-browser, or open the example house. With an open plan, the top bar has six topics. Each topic
+browser, or open the example house. With an open plan, the top bar has seven topics. Each topic
 shows its own tools, panel, and layers. A click on **‹ Grundriss** at the top left closes the plan and goes back.
 
 - **Overview**: the contents of the open plan. A click on a part opens it in its topic.
 - **Structure**: the background and the tracing, walls, doors, windows, stairs, chimneys, stories,
   and roofs.
+- **Outdoor**: terraces, balconies, paths, the lawn, the plot, neighbor buildings, fences,
+  hedges, and trees.
 - **Utilities**: water, heating, electricity with PV, and communication.
 - **Interior**: furniture and rooms.
 - **Energy**: the location, the map, the climate, the insulation, the heated stories, the
@@ -411,18 +413,17 @@ the story that you choose. A story shows its roofs as dashed lines. Click a roof
 
 ### Outdoor
 
-The menu **Outdoor** in Structure has the kinds of areas, of fences, and the tree. An area (A)
-has corners: click them, and a click on the first corner, a double click, or Enter ends it. The
-corners snap to the corners and the faces of the walls, and to the corners and the sides of other
-areas and fences. Shift keeps the direction at steps of 45°, and Alt turns the snap off. The
-menu or the panel chooses the kind: a **terrace**, a
-**balcony**, a **roof terrace**, a **path**, a **driveway**, a **lawn**, a **pool**, the
-**plot**, or a **neighbor building**. An area belongs to its story, so a balcony goes on the floor
-above, and a roof terrace on its story or on a flat roof. Each area has a height of its top
-above the floor and a thickness (a pool has a depth, and a neighbor a height). Its corners drag
-like the corners of a roof, and a terrace or a balcony has a railing on each side that you
-choose. A terrace, a balcony, and a roof terrace count with a quarter of their area as living
-area (WoFlV).
+The topic **Outdoor** has the tools **Area** (A), **Fence** (G), and **Tree** (T), and its panel
+lists the areas, the fences, and the trees of the story. An area has corners: click them, and a
+click on the first corner, a double click, or Enter ends it. The corners snap to the corners and the
+faces of the walls, and to the corners and the sides of other areas and fences. Shift keeps the
+direction at steps of 45°, and Alt turns the snap off. The panel chooses the kind: a **terrace**, a
+**balcony**, a **roof terrace**, a **path**, a **driveway**, a **lawn**, a **pool**, the **plot**,
+or a **neighbor building**. An area belongs to its story, so a balcony goes on the floor above, and
+a roof terrace on its story or on a flat roof. Each area has a height of its top above the floor and
+a thickness (a pool has a depth, and a neighbor a height). Its corners drag like the corners of a
+roof, and a terrace or a balcony has a railing on each side that you choose. A terrace, a balcony,
+and a roof terrace count with a quarter of their area as living area (WoFlV).
 
 A fence (G) is a fence, a hedge, or a garden wall with a height. Its points snap like the corners
 of an area, and a click on the first point closes it into a ring. A tree (T) has a
