@@ -180,6 +180,22 @@ A rewrite in C++ (or Rust) is not a good way to remove duplication, because:
 C++ or Rust compiled to WASM makes sense later for one slow part only, if a profile shows the
 need (see the decisions). Then the same WASM module runs in the browser and in each shell.
 
+- **Sync with git.** For people without a server, or who do not want a public or paid one: a
+  plan is a folder in a git repository, and each save is a commit, so git keeps the revisions.
+  The folder has the content of a package unzipped (`plan.yaml`, `backgrounds/`, `models/`),
+  because a ZIP file has no useful diff; YAML gives readable diffs. A pull merges with the
+  patches by object id (`src/model/patch.ts`), not with the text merge of git, and a conflict
+  of one field shows in the app. The options:
+  - The installed app writes the folder to the disk (File System Access API), and the user runs
+    git or a git client. No new code for git, but only in Chromium, and the user needs git.
+  - The app talks git itself with isomorphic-git, to any host (GitHub, Codeberg, Gitea, a home
+    server). A browser needs a CORS proxy for most hosts, and the token of the host stays in the
+    browser.
+  - The API of one host (GitHub or Gitea) with a token: no proxy, but only for that host.
+
+  Large images make the repository grow with each change of the image, so the images keep a
+  name by their hash, as on the server.
+
 ## Ideas
 
 - Sections and elevations: a cut along a line, and a view of each facade, with the heights.
