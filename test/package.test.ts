@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   decodeDataUrl,
   isPackage,
@@ -8,7 +8,8 @@ import {
   writePackage,
 } from "../src/io/package";
 import { addStoryOnTop, emptyBuilding } from "../src/model/building";
-import { FILE_VERSION, serializeBuilding } from "../src/model/file";
+import { FILE_VERSION, serializeBuilding, serializeBuildingYaml } from "../src/model/file";
+import { parseText } from "../src/model/yaml";
 import { addVertex, addWall, emptyPlan } from "../src/model/plan";
 import type { Building, Climate } from "../src/model/types";
 import vienna from "./fixtures/vienna-climate.json";
@@ -78,11 +79,14 @@ describe("package format", () => {
         `backgrounds/${upper.id}.jpg`,
         "exports/model.glb",
         "exports/plan.svg",
-        "plan.json",
+        "plan.yaml",
       ].sort(),
     );
     expect(files[`backgrounds/${ground.id}.png`]).toEqual(decodeDataUrl(PNG).bytes);
-    const json = JSON.parse(new TextDecoder().decode(files["plan.json"]));
+    const json = parseText(strFromU8(files["plan.yaml"])) as {
+      version: number;
+      stories: { background: { image: string } }[];
+    };
     expect(json.version).toBe(FILE_VERSION);
     expect(json.stories[1].background.image).toBe(`backgrounds/${upper.id}.jpg`);
   });
@@ -92,10 +96,22 @@ describe("package format", () => {
     expect(readPackage(writePackage(original))).toEqual(original);
   });
 
-  it("reads a package and a JSON file", () => {
+  it("reads a package, a YAML file, and a JSON file", () => {
     const original = building();
     expect(readBuildingFile(writePackage(original))).toEqual(original);
+    expect(readBuildingFile(strToU8(serializeBuildingYaml(original)))).toEqual(original);
     expect(readBuildingFile(strToU8(serializeBuilding(original)))).toEqual(original);
+  });
+
+  it("has the plan as YAML, and reads the plan.json of an older package", () => {
+    const original = building();
+    const files = unzipSync(writePackage(original));
+    expect(Object.keys(files)).toContain("plan.yaml");
+    expect(strFromU8(files["plan.yaml"])).toMatch(/^format: grundriss$/m);
+    const plain = parseText(strFromU8(files["plan.yaml"]));
+    const { "plan.yaml": _yaml, ...rest } = files;
+    const old = zipSync({ ...rest, "plan.json": strToU8(JSON.stringify(plain)) });
+    expect(readPackage(old)).toEqual(original);
   });
 
   it("reads an old package of version 1", () => {
@@ -130,14 +146,16 @@ describe("package format", () => {
   });
 
   it("gives clear errors", () => {
-    expect(() => readPackage(zipSync({ "other.txt": strToU8("x") }))).toThrow('no "plan.json"');
+    expect(() => readPackage(zipSync({ "other.txt": strToU8("x") }))).toThrow('no "plan.yaml"');
     const original = building();
     const files = unzipSync(writePackage(original));
     const missing = `backgrounds/${original.stories[1].id}.jpg`;
     delete files[missing];
     expect(() => readPackage(zipSync(files))).toThrow(`"${missing}" is missing`);
     expect(() => readPackage(new Uint8Array([0x50, 0x4b, 3, 4, 0]))).toThrow("damaged");
-    expect(() => readPackage(zipSync({ "plan.json": strToU8("{") }))).toThrow("not valid JSON");
+    expect(() => readPackage(zipSync({ "plan.json": strToU8("{") }))).toThrow(
+      '"plan.json" is not valid YAML or JSON',
+    );
   });
 });
 
@@ -178,7 +196,7 @@ describe("models in the package", () => {
     expect(files["models/m-chair.glb"]).toEqual(decodeDataUrl(GLB).bytes);
     // The bundled model has no file, because the app has it.
     expect(files["models/m-kenney.glb"]).toBeUndefined();
-    const stored = JSON.parse(new TextDecoder().decode(files["plan.json"]));
+    const stored = parseText(strFromU8(files["plan.yaml"])) as Building;
     expect(stored.models[0].data).toBe("models/m-chair.glb");
     expect(readPackage(bytes)).toEqual(original);
   });

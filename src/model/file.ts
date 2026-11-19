@@ -1,5 +1,6 @@
-// The file format: JSON with a format name and a version. A change that old versions of the app
-// cannot read needs a new version and a migration in parseBuilding.
+// The file format: a format name and a version, in YAML. The app reads JSON too (see yaml.ts),
+// and keeps the plan as JSON inside. A change that old versions of the app cannot read needs a
+// new version and a migration in parseBuilding.
 //
 // A new field that old versions can ignore needs no new version. parsePlan gives it a default
 // value when a file does not have it. Examples: `hinge`, `swing`, `style`, and `leaves` of an
@@ -16,6 +17,7 @@
 // the defaults. Version 2 has stories, a roof, and the north direction. Version 1 had one floor
 // plan at the top level. parseBuilding reads it as a building with one story.
 
+import { parseText, toYaml } from "./yaml";
 import type {
   Area,
   Fence,
@@ -137,13 +139,21 @@ function list(data: Data, key: string): Data[] {
   return value;
 }
 
+/**
+ * The YAML of the building for a file that a person can read. The app keeps the JSON of
+ * `serializeBuilding` inside, and writes YAML only to the files.
+ */
+export function serializeBuildingYaml(building: Building): string {
+  return toYaml(JSON.parse(serializeBuilding(building)));
+}
+
 /** Reads a building from the text of a file. It throws an Error with a message for the user. */
 export function parseBuilding(text: string): Building {
   let data: unknown;
   try {
-    data = JSON.parse(text);
+    data = parseText(text);
   } catch {
-    throw new Error("The file is not valid JSON.");
+    throw new Error("The file is not valid YAML or JSON.");
   }
   if (!isObject(data) || data.format !== FILE_FORMAT) {
     throw new Error("The file is not a Grundriss plan.");

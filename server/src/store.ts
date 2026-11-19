@@ -2,7 +2,7 @@
 //
 // The accounts, the links, the sessions, and the plans are in one YAML file (`data.yaml`), which
 // the store writes again after each change, through a temporary file, so that a crash does not
-// leave half a file. The files of the revisions are separate, one file for each revision. The
+// leave half a file. The files of the revisions are separate, one YAML file for each revision. The
 // large images of a plan are in `blobs/`, once for all revisions, and a revision refers to them by
 // hash (src/model/blobs.ts). A private server has a few users and some dozen plans, so this is
 // enough, and the image needs no native module.
@@ -31,6 +31,7 @@ import {
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { blobRefs, dehydrate, hydrate } from "../../src/model/blobs";
+import { parseText, toYaml } from "../../src/model/yaml";
 
 /** What an account may do. The admin may do all of it, and more. */
 export interface Rights {
@@ -803,15 +804,18 @@ export class Store {
     parent: string | null,
     data: string,
   ): RevisionRecord {
-    // Each large image goes to the store of the blobs once; the revision refers to it.
+    // Each large image goes to the store of the blobs once; the revision refers to it. The file
+    // of the revision is YAML, so that a person can read it.
     const { json, blobs } = dehydrate(data);
+    const yaml = revisionYaml(json);
+    const text = yaml ?? json;
     const revision: RevisionRecord = {
       id: String(plan.revisions.length + 1),
       parent,
       time: Date.now(),
       by,
       size: Buffer.byteLength(data),
-      stored: Buffer.byteLength(json),
+      stored: Buffer.byteLength(text),
       blobs: [...blobs.keys()],
     };
     try {
@@ -826,7 +830,7 @@ export class Store {
         const file = join(this.dir, "blobs", hash);
         if (!existsSync(file)) writeFileSync(file, value);
       }
-      writeFileSync(join(dir, `${revision.id}.json`), json);
+      writeFileSync(join(dir, `${revision.id}.${yaml === null ? "json" : "yaml"}`), text);
       plan.revisions.push(revision);
       this.save();
     } catch (error) {
@@ -840,7 +844,11 @@ export class Store {
     if (!plan.revisions.some((r) => r.id === id)) {
       throw new StoreError(404, "The revision does not exist.");
     }
-    const json = readFileSync(join(this.dir, "plans", plan.id, `${id}.json`), "utf8");
+    // Older servers wrote the revisions as JSON, and a text that is not JSON stays in a JSON file.
+    const base = join(this.dir, "plans", plan.id, id);
+    const json = existsSync(`${base}.yaml`)
+      ? JSON.stringify(parseText(readFileSync(`${base}.yaml`, "utf8")))
+      : readFileSync(`${base}.json`, "utf8");
     return hydrate(json, (hash) => {
       const file = join(this.dir, "blobs", hash);
       return existsSync(file) ? readFileSync(file, "utf8") : undefined;
@@ -905,4 +913,13 @@ function emptyData(): Data {
     sessions: [],
     plans: [],
   };
+}
+
+/** The YAML of the JSON of a revision, or null if the text is not JSON. */
+function revisionYaml(json: string): string | null {
+  try {
+    return toYaml(JSON.parse(json));
+  } catch {
+    return null;
+  }
 }

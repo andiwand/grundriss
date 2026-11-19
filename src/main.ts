@@ -73,7 +73,8 @@ import { renameProject } from "./io/projects";
 import { addCellar, addStoryOnTop, findStory } from "./model/building";
 import { roofGeometries } from "./model/roof";
 
-import { newRevision, serializeBuilding } from "./model/file";
+import { newRevision, serializeBuilding, serializeBuildingYaml } from "./model/file";
+import { isJsonName } from "./model/yaml";
 
 import type { Building, Point, ServiceSystem } from "./model/types";
 
@@ -655,7 +656,9 @@ async function saveFile(saveAs: boolean): Promise<void> {
           ? new Blob([writePackage(written, await exportsOf(written)) as BlobPart], {
               type: "application/zip",
             })
-          : new Blob([serializeBuilding(written)], { type: "application/json" }),
+          : isJsonName(name)
+            ? new Blob([serializeBuilding(written)], { type: "application/json" })
+            : new Blob([serializeBuildingYaml(written)], { type: "application/yaml" }),
       handle,
       app.fileName,
     );
@@ -1298,7 +1301,7 @@ $("#install").addEventListener("click", () => {
   void installPrompt?.prompt();
 });
 
-// The installed app opens the .grundriss and .json files that the user opens with it.
+// The installed app opens the .grundriss, .yaml, and .json files that the user opens with it.
 interface LaunchParams {
   files: FileSystemFileHandle[];
 }

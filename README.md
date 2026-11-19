@@ -218,6 +218,8 @@ The addresses of the server:
 | `/setup/<code>`, `/invite/<code>`, `/reset/<code>` | A link for one use: the app asks for a name and a password. |
 
 `data.yaml` holds the accounts, the sessions, the links, and the plans, and a person can read it.
+Each revision of a plan is a YAML file in `plans/<id>/`. The revisions of older servers are JSON
+files, and the server still reads them.
 The server keeps only hashes of the passwords and the links. A server before 0.6 had tokens in
 place of accounts: at its first start, the server moves `data.json` to `data.yaml`, the old tokens
 and links stop working, and the plans go to the admin at the setup.
@@ -350,13 +352,15 @@ The wall tool snaps the direction of a wall to multiples of 15° when it is near
 
 A plan is a `.grundriss` file. It is a ZIP file that contains:
 
-- `plan.json`: the building with its stories.
+- `plan.yaml`: the building with its stories, in YAML, so that a person can read it. Packages of
+  older versions have `plan.json`, and the app still opens them.
 - `backgrounds/`: the background image of each story as a separate file.
 - `exports/`: a PDF with a page for each story, an SVG for each story, a DXF, and a glTF model,
   so that other programs can use them without Grundriss.
 
-The app also opens and saves a plan as one `.json` file. That file contains the background image
-as a data URL.
+The app also opens and saves a plan as one `.yaml` file. That file contains the background image
+as a data URL. The app still opens and saves `.json` files: a plan that you open from a `.json`
+file stays JSON when you save it again.
 
 Chrome and Edge save to the same file again. Firefox and Safari download a new file each time.
 

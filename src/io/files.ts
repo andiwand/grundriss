@@ -1,6 +1,8 @@
 // Reads and writes files. Chromium has the File System Access API, so Save can write to the
 // same file again. Firefox and Safari use a file input to open and a download to save.
 
+import { isJsonName, isYamlName } from "../model/yaml";
+
 export interface FilePickerType {
   description: string;
   accept: Record<string, string[]>;
@@ -17,6 +19,10 @@ interface FilePickerWindow {
 export const PACKAGE_TYPE: FilePickerType = {
   description: "Grundriss package",
   accept: { "application/zip": [".grundriss"] },
+};
+export const YAML_TYPE: FilePickerType = {
+  description: "Grundriss plan (YAML)",
+  accept: { "application/yaml": [".yaml", ".yml"] },
 };
 export const JSON_TYPE: FilePickerType = {
   description: "Grundriss plan (JSON)",
@@ -50,7 +56,7 @@ export function pickFile(accept: string): Promise<File | null> {
   });
 }
 
-/** Asks for a package or a JSON plan and reads its bytes. It gives null if the user cancels. */
+/** Asks for a package or a YAML or JSON plan and reads its bytes. It gives null if the user cancels. */
 export async function openPlanFile(): Promise<OpenedFile | null> {
   const picker = window as FilePickerWindow;
   if (picker.showOpenFilePicker) {
@@ -59,7 +65,11 @@ export async function openPlanFile(): Promise<OpenedFile | null> {
         types: [
           {
             description: "Grundriss plan",
-            accept: { "application/zip": [".grundriss"], "application/json": [".json"] },
+            accept: {
+              "application/zip": [".grundriss"],
+              "application/yaml": [".yaml", ".yml"],
+              "application/json": [".json"],
+            },
           },
         ],
       });
@@ -70,7 +80,9 @@ export async function openPlanFile(): Promise<OpenedFile | null> {
       throw error;
     }
   }
-  const file = await pickFile(".grundriss,.json,application/json,application/zip");
+  const file = await pickFile(
+    ".grundriss,.yaml,.yml,.json,application/zip,application/yaml,application/json",
+  );
   return file
     ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), handle: null }
     : null;
@@ -140,8 +152,8 @@ export function saveBlob(
 }
 
 /**
- * Saves a plan file. The name decides the order of the types in the picker: a name that ends
- * with ".json" shows the JSON type first, else the package type is first. The caller makes the
+ * Saves a plan file. The name decides the order of the types in the picker: the type of the
+ * extension of the name is first, and a name without a known extension has the package first. The caller makes the
  * blob in the format that the name of the result asks for. So with a picker, the caller gives a
  * function that makes the blob for the chosen name.
  */
@@ -150,8 +162,12 @@ export function savePlanFile(
   handle: FileSystemFileHandle | null,
   suggestedName: string,
 ): Promise<SaveResult> {
-  const json = suggestedName.toLowerCase().endsWith(".json");
-  const types = json ? [JSON_TYPE, PACKAGE_TYPE] : [PACKAGE_TYPE, JSON_TYPE];
+  const first = isYamlName(suggestedName)
+    ? YAML_TYPE
+    : isJsonName(suggestedName)
+      ? JSON_TYPE
+      : PACKAGE_TYPE;
+  const types = [first, ...[PACKAGE_TYPE, YAML_TYPE, JSON_TYPE].filter((t) => t !== first)];
   return save(makeBlob, suggestedName, types, handle);
 }
 

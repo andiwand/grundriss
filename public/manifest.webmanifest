@@ -25,6 +25,7 @@
       "action": "./",
       "accept": {
         "application/zip": [".grundriss"],
+        "application/yaml": [".yaml", ".yml"],
         "application/json": [".json"]
       }
     }

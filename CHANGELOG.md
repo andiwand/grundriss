@@ -4,6 +4,10 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Plan files are YAML now, so that a person can read them: `plan.yaml` in a `.grundriss` package,
+  the `.yaml` file of **Save as**, the files of a backup, and the revisions on a server. The app
+  still opens `.json` files and older packages and backups, and a `.json` file stays JSON when
+  you save it again.
 - Angles: the tool **Angle** (K) measures an angle with three clicks (the corner, then a point
   on each side) and keeps it on the plan as an arc with the degrees. Drag the arc to change its
   radius; **Other side** in the panel gives the angle on the other side. The exports draw it.

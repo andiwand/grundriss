@@ -88,6 +88,20 @@ it("removes the sessions, the links, and the share links that ended", () => {
   expect(store.accessOf(admin.session.id)).not.toBeNull();
 });
 
+it("writes a revision as YAML, and reads the JSON revision of an older server", () => {
+  const data = JSON.stringify({ format: "grundriss", name: "true", walls: [{ id: "w", t: 0.3 }] });
+  const plan = store.createPlan(admin, "House", data);
+  const file = join(dir, "plans", plan.id, "1.yaml");
+  expect(readFileSync(file, "utf8")).toBe(
+    'format: grundriss\nname: "true"\nwalls:\n  - { id: w, t: 0.3 }\n',
+  );
+  expect(JSON.parse(store.revisionData(plan, "1"))).toEqual(JSON.parse(data));
+  // An older server wrote "1.json".
+  rmSync(file);
+  writeFileSync(join(dir, "plans", plan.id, "1.json"), data);
+  expect(store.revisionData(plan, "1")).toBe(data);
+});
+
 it("moves the data of an old server from data.json to data.yaml, without its tokens", () => {
   const old = mkdtempSync(join(tmpdir(), "grundriss-old-"));
   mkdirSync(join(old, "plans", "p1"), { recursive: true });

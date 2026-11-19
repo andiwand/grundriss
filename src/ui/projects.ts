@@ -658,7 +658,12 @@ function fillProjects(projects: ProjectInfo[] | null, onServer = false): void {
   if (!onServer || remoteHooks.canUpload()) list.append(start);
   start.append(
     actionTile("plus", t("New plan"), t("Draw the walls, or trace a scan or a photo."), newPlan),
-    actionTile("open", t("Open a file"), t("A .grundriss or a .json file."), () => void openFile()),
+    actionTile(
+      "open",
+      t("Open a file"),
+      t("A .grundriss, .yaml, or .json file."),
+      () => void openFile(),
+    ),
     actionTile(
       "roof",
       t("Example house"),
@@ -870,7 +875,7 @@ function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
     const value = input.value.trim();
     if (!keep || !value || value === project.name) return renderHome();
     if (project.id === projectId) {
-      const extension = /\.json$/i.test(app.fileName) ? ".json" : ".grundriss";
+      const extension = /\.(json|ya?ml)$/i.exec(app.fileName)?.[0] ?? ".grundriss";
       app.fileName = `${value}${extension}`;
       updateTitle();
     }

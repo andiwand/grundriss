@@ -1,9 +1,9 @@
 // The package format ".grundriss": a ZIP file with the plan, the background image as its own
 // file, and optional exports. The image is binary in the package, so the package is smaller than
-// the JSON file with a data URL. This module has no DOM, so the tests can run in Node.
+// the single plan file with a data URL. This module has no DOM, so the tests can run in Node.
 //
 // The layout of a package:
-//   plan.json                      The building. The `background.image` of each story is the
+//   plan.yaml                      The building. The `background.image` of each story is the
 //                                  path of the image in the package.
 //   backgrounds/<storyId>.<ext>    The background image of each story that has one.
 //   models/<modelId>.glb           The 3D model of each imported or downloaded model. A bundled
@@ -11,19 +11,22 @@
 //   exports/...                    Exports for other programs, for example plan.pdf.
 //   exports/CREDITS.txt            The license and the author of each model, if there are models.
 //
-// Old packages (version 1) had one plan with the image at "background.<ext>". readPackage reads
-// them too.
+// Old packages (version 1) had one plan with the image at "background.<ext>". Packages of older
+// apps have the plan as JSON in "plan.json". readPackage reads them too.
 
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { base64 } from "../furniture/names";
 import { parseBuilding, serializeBuilding } from "../model/file";
+import { parseText, toYaml } from "../model/yaml";
 import type { Building } from "../model/types";
 import { ATTRIBUTION, ATTRIBUTION_URL } from "./climate";
 import { TextError } from "../model/errors";
 import { isObject } from "../model/history";
 
 export const PACKAGE_EXTENSION = ".grundriss";
-export const PLAN_ENTRY = "plan.json";
+export const PLAN_ENTRY = "plan.yaml";
+/** The plan in an older package, as JSON. */
+export const OLD_PLAN_ENTRY = "plan.json";
 export const EXPORTS_FOLDER = "exports/";
 export const BACKGROUNDS_FOLDER = "backgrounds/";
 export const MODELS_FOLDER = "models/";
@@ -93,7 +96,7 @@ export function writePackage(
     files[name] = decodeDataUrl(model.data).bytes;
     return { ...model, data: name };
   });
-  files[PLAN_ENTRY] = strToU8(JSON.stringify({ ...plain, models }, null, 2));
+  files[PLAN_ENTRY] = strToU8(toYaml({ ...plain, models }));
   const all = { ...exports };
   if ((models.length > 0 || building.climate) && !("CREDITS.txt" in all)) {
     all["CREDITS.txt"] = credits(building);
@@ -194,15 +197,16 @@ export function readPackage(bytes: Uint8Array): Building {
   } catch {
     throw new Error("The package is damaged: it is not a valid ZIP file.");
   }
-  const entry = files[PLAN_ENTRY];
+  const name = fileOf(files, PLAN_ENTRY) ? PLAN_ENTRY : OLD_PLAN_ENTRY;
+  const entry = fileOf(files, name);
   if (!entry)
     throw new TextError('The package is damaged: it has no "{file}".', { file: PLAN_ENTRY });
   let raw: unknown;
   try {
-    raw = JSON.parse(strFromU8(entry));
+    raw = parseText(strFromU8(entry));
   } catch {
-    throw new TextError('The package is damaged: "{file}" is not valid JSON.', {
-      file: PLAN_ENTRY,
+    throw new TextError('The package is damaged: "{file}" is not valid YAML or JSON.', {
+      file: name,
     });
   }
   if (isObject(raw)) {
@@ -227,11 +231,11 @@ export function readPackage(bytes: Uint8Array): Building {
   return parseBuilding(JSON.stringify(raw));
 }
 
-/** Reads a building from the bytes of a package or of a JSON file. */
+/** Reads a building from the bytes of a package or of a YAML or JSON file. */
 export function readBuildingFile(bytes: Uint8Array): Building {
   return isPackage(bytes) ? readPackage(bytes) : parseBuilding(strFromU8(bytes));
 }
 
-/** The format of a plan file by its name: a package, or else JSON. */
+/** The format of a plan file by its name: a package, or else one text file (YAML or JSON). */
 export const isPackageName = (name: string): boolean =>
   name.toLowerCase().endsWith(PACKAGE_EXTENSION);

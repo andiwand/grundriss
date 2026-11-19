@@ -168,7 +168,7 @@ export const MODEL: Record<string, string> = {
   "Slab to an unheated story": "Decke zu einem unbeheizten Geschoss",
 
   // The messages of src/model/file.ts
-  "The file is not valid JSON.": "Die Datei ist kein gültiges JSON.",
+  "The file is not valid YAML or JSON.": "Die Datei ist kein gültiges YAML oder JSON.",
   "The file is not a Grundriss plan.": "Die Datei ist kein Grundriss-Plan.",
   "The file is damaged: it has no story.": "Die Datei ist beschädigt: Sie hat kein Geschoss.",
   'The file is damaged: invalid "roof".': "Die Datei ist beschädigt: ungültiges „roof“.",
@@ -248,8 +248,8 @@ export const MODEL: Record<string, string> = {
   'The package is damaged: the file "{file}" of {name} is missing.':
     "Das Paket ist beschädigt: Die Datei „{file}“ von {name} fehlt.",
   'The package is damaged: it has no "{file}".': "Das Paket ist beschädigt: Es hat kein „{file}“.",
-  'The package is damaged: "{file}" is not valid JSON.':
-    "Das Paket ist beschädigt: „{file}“ ist kein gültiges JSON.",
+  'The package is damaged: "{file}" is not valid YAML or JSON.':
+    "Das Paket ist beschädigt: „{file}“ ist kein gültiges YAML oder JSON.",
   "The recognition model does not load: {reason}": "Das Erkennungsmodell lädt nicht: {reason}",
   "The recognition model does not load (HTTP {status}).":
     "Das Erkennungsmodell lädt nicht (HTTP {status}).",

@@ -45,7 +45,7 @@ export const PROJECTS: Record<string, string> = {
   "Draw the walls, or trace a scan or a photo.":
     "Zeichnen Sie die Wände, oder zeichnen Sie einen Scan oder ein Foto nach.",
   "Open a file": "Datei öffnen",
-  "A .grundriss or a .json file.": "Eine .grundriss- oder .json-Datei.",
+  "A .grundriss, .yaml, or .json file.": "Eine .grundriss-, .yaml- oder .json-Datei.",
   "Open {name}": "{name} öffnen",
   "A house with two stories, a roof, PV, and utilities. A change saves a copy.":
     "Ein Haus mit zwei Geschossen, Dach, PV und Haustechnik. Eine Änderung speichert eine Kopie.",

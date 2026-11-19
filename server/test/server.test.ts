@@ -769,7 +769,7 @@ describe("the store of the images", () => {
     await admin.call(`plans/${id}`, { method: "PUT", json: { parent: "1", data } });
     const blobs = readdirSync(join(dir, "data", "blobs"));
     expect(blobs).toHaveLength(1);
-    const revision = readFileSync(join(dir, "data", "plans", id, "2.json"), "utf8");
+    const revision = readFileSync(join(dir, "data", "plans", id, "2.yaml"), "utf8");
     expect(revision).not.toContain("data:image");
     const read = await admin.call(`plans/${id}`);
     expect(JSON.parse(read.body.data).stories[0].background.image).toBe(

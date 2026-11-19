@@ -8,7 +8,8 @@ milestones are in [`PLAN.md`](PLAN.md). The user documentation is in [`README.md
 Grundriss is a browser app for floor plans. The user loads a scan or a photo of a plan, traces
 the walls on it, and edits the plan in 2D. A 3D view shows the same plan. The app runs fully in
 the browser for local plans. An optional self-hosted server stores shared plans and revisions.
-The app also reads and writes plans as JSON files.
+The app also reads and writes plans as YAML files, and reads and writes the JSON files of older
+versions.
 
 ## Architecture
 
@@ -62,7 +63,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   the admin, an invite, and a new password are links for one use (`/setup/<code>`,
   `/invite/<code>`, `/reset/<code>`), which go on to the app with the code in the fragment. A
   request that changes something must have the `Origin` of the server. The data of the server is
-  in `data.yaml`; the revisions are plan files, with each large image once in `blobs/`. Each
+  in `data.yaml`; the revisions are plan files in YAML (older ones in JSON), with each large image
+  once in `blobs/`. Each
   account has a space and a number of plans; a revision counts for the owner of its plan. All
   tabs that can write edit an open plan at the same time: each tab sends the
   change since the last revision that it knows as a patch (`src/model/patch.ts`: the objects by
@@ -164,6 +166,7 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/history.ts`     | `PlanDocument`: transactions, undo, redo, and the dirty state.                                                |
 | `src/model/patch.ts`       | The patches of live editing: diff and apply by object id, rebase, and repair.                                 |
 | `src/model/file.ts`        | The file format: `serializePlan` and `parsePlan` with validation.                                             |
+| `src/model/yaml.ts`        | The YAML of the files: `toYaml`, and `parseText`, which reads YAML and the JSON of older files.               |
 | `src/model/drawing.ts`     | The shapes of the 2D drawing, for the editor and the exports.                                                 |
 | `src/io/files.ts`          | Open and save with the File System Access API, and the fallbacks.                                             |
 | `src/io/projects.ts`       | The projects in the browser: IndexedDB, the list, and persistent storage.                                     |

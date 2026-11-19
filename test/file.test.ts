@@ -170,8 +170,8 @@ describe("file format", () => {
     expect(() => parseBuilding(serializeBuilding(building))).toThrow("does not exist");
   });
 
-  it("rejects a file that is not JSON", () => {
-    expect(() => parsePlan("{")).toThrow("not valid JSON");
+  it("rejects a file that is neither YAML nor JSON", () => {
+    expect(() => parsePlan("{")).toThrow("not valid YAML or JSON");
   });
 
   it("rejects a different format", () => {

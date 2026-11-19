@@ -1,12 +1,16 @@
 // The backup of all projects in the browser: one ZIP file. It has one plan file for each project
-// in the folder "plans" (the JSON of the file format, so the app can also open each file alone),
-// and "projects.json" with the names and the times of the projects.
+// in the folder "plans" (the YAML of the file format, so the app can also open each file alone),
+// and "projects.yaml" with the names and the times of the projects. Backups of older apps have
+// JSON files ("projects.json" and "plans/<name>.json"), and readBackup reads them too.
 
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { Project, ProjectInfo } from "./projects";
 import { isObject } from "../model/history";
+import { isYamlName, parseText, toYaml } from "../model/yaml";
 
 const FORMAT = "grundriss-backup";
+const MANIFEST = "projects.yaml";
+const OLD_MANIFEST = "projects.json";
 const VERSION = 1;
 
 interface Manifest {
@@ -26,13 +30,13 @@ export function makeBackup(projects: Project[], now = Date.now()): Uint8Array {
   const manifest: Manifest = { format: FORMAT, version: VERSION, created: now, projects: [] };
   for (const { data, deleted: _deleted, ...info } of projects) {
     // Two projects can have the same name, so the second gets a number.
-    let file = `plans/${safeName(info.name)}.json`;
-    for (let n = 2; used.has(file); n++) file = `plans/${safeName(info.name)} (${n}).json`;
+    let file = `plans/${safeName(info.name)}.yaml`;
+    for (let n = 2; used.has(file); n++) file = `plans/${safeName(info.name)} (${n}).yaml`;
     used.add(file);
-    files[file] = strToU8(data);
+    files[file] = strToU8(yamlOf(data));
     manifest.projects.push({ ...info, file });
   }
-  files["projects.json"] = strToU8(JSON.stringify(manifest, null, 2));
+  files[MANIFEST] = strToU8(toYaml(manifest));
   return zipSync(files, { level: 6 });
 }
 
@@ -44,11 +48,11 @@ export function readBackup(bytes: Uint8Array): Project[] {
   } catch {
     throw new Error("The file is not a backup of Grundriss.");
   }
-  const raw = files["projects.json"];
+  const raw = Object.hasOwn(files, MANIFEST) ? files[MANIFEST] : files[OLD_MANIFEST];
   if (!raw) throw new Error("The file is not a backup of Grundriss.");
   let manifest: unknown;
   try {
-    manifest = JSON.parse(strFromU8(raw));
+    manifest = parseText(strFromU8(raw));
   } catch {
     throw new Error("The file is not a backup of Grundriss.");
   }
@@ -84,10 +88,32 @@ export function readBackup(bytes: Uint8Array): Project[] {
       created: entry.created,
       updated: entry.updated,
       preview: entry.preview,
-      data: strFromU8(files[entry.file]),
+      data: planData(entry.file, strFromU8(files[entry.file])),
     });
   }
   return result;
+}
+
+/** The YAML of the JSON of a plan. A damaged plan stays as it is, so the backup keeps it. */
+function yamlOf(json: string): string {
+  try {
+    return toYaml(JSON.parse(json));
+  } catch {
+    return json;
+  }
+}
+
+/**
+ * The browser keeps the plan of a project as JSON, so a YAML file of the backup becomes JSON. A
+ * damaged file stays as it is: the caller does not take a plan that it cannot read.
+ */
+function planData(file: string, text: string): string {
+  if (!isYamlName(file)) return text;
+  try {
+    return JSON.stringify(parseText(text), null, 2);
+  } catch {
+    return text;
+  }
 }
 
 const isTime = (value: unknown): value is number =>
