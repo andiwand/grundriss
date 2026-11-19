@@ -11,7 +11,7 @@ import { fmt } from "../model/format";
 import { findFurniture, genericType } from "../model/furniture";
 import { distance } from "../model/geometry";
 import { summerOverheating } from "../model/overheating";
-import { wallsAngle } from "../model/angles";
+import { cornerAngles, wallsAngle } from "../model/angles";
 import { angleText, defaultAngleRadius, dimensionShape } from "../model/drawing";
 import { clampBulge, isCurved, maxBulge, wallCurve } from "../model/wallcurve";
 import {
@@ -470,8 +470,27 @@ function renderAngle(dimension: Dimension, id: Id): void {
   deleteButton();
 }
 
-/** The angle between two selected walls, and a button that keeps it as an angle dimension. */
+/**
+ * The angle between two selected walls, and a button that keeps it as an angle dimension. More
+ * walls get a button that keeps the angles at their corners.
+ */
 function wallsAngleFields(plan: Story, ids: Id[]): void {
+  if (ids.length > 2) {
+    const angles = cornerAngles(plan, ids).filter((angle) => angle.center);
+    if (angles.length === 0) return;
+    button(
+      t("Add angle dimensions"),
+      () => {
+        doc.edit((p) => {
+          for (const { center, a, b } of angles) {
+            addDimension(p, a, b, defaultAngleRadius(center!, a, b), center!);
+          }
+        });
+      },
+      { icon: "angle" },
+    );
+    return;
+  }
   if (ids.length !== 2) return;
   const angle = wallsAngle(plan, ids[0], ids[1]);
   if (!angle) return;

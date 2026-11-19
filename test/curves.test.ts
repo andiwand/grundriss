@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wallsAngle } from "../src/model/angles";
+import { cornerAngles, wallsAngle } from "../src/model/angles";
 import { emptyBuilding } from "../src/model/building";
 import {
   angleSweep,
@@ -268,6 +268,29 @@ describe("angles", () => {
     const angle = wallsAngle(plan, one.id, two.id)!;
     expect(angle.degrees).toBeCloseTo(135);
     close(angle.center!, 0, 0);
+  });
+
+  it("gives the angles at the corners of more selected walls", () => {
+    const plan = emptyPlan();
+    const v = (x: number, y: number) => addVertex(plan, { x, y }).id;
+    // A room of 4 × 3 m, the north wall split at (2, 0), and a wall from there into the room.
+    const [nw, mid, ne, se, sw] = [v(0, 0), v(2, 0), v(4, 0), v(4, 3), v(0, 3)];
+    const walls = [
+      addWall(plan, nw, mid)!,
+      addWall(plan, mid, ne)!,
+      addWall(plan, ne, se)!,
+      addWall(plan, se, sw)!,
+      addWall(plan, sw, nw)!,
+      addWall(plan, mid, v(2, 2))!,
+    ];
+    const ids = walls.map((w) => w.id);
+    // Four corners of 90°, and two of 90° at the T. The straight line at (2, 0) does not count.
+    const all = cornerAngles(plan, ids);
+    expect(all.map((a) => Math.round(a.degrees))).toEqual([90, 90, 90, 90, 90, 90]);
+    // Without the wall into the room, the split of the north wall shows no angle.
+    expect(cornerAngles(plan, ids.slice(0, 5))).toHaveLength(4);
+    // Walls that do not meet have no angle at a corner.
+    expect(cornerAngles(plan, [ids[0], ids[2], ids[3]])).toHaveLength(1);
   });
 
   it("gives the angle between two walls that do not meet", () => {

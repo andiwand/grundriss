@@ -1,10 +1,11 @@
-// The angle between two walls, for the editor and the panel when the user selects two walls.
+// The angles between selected walls, for the editor and the panel: the angle between two walls,
+// and the angles at the corners of more walls.
 
 import { angleSweep, smallerAngle } from "./drawing";
 import { add, cross, distance, scale, sub } from "./geometry";
 import { findWall, wallEnds } from "./plan";
 import { wallTangent } from "./wallcurve";
-import type { Id, Plan, Point } from "./types";
+import type { Id, Plan, Point, Wall } from "./types";
 
 /** The angle between two walls. */
 export interface WallsAngle {
@@ -58,6 +59,48 @@ export function wallsAngle(plan: Plan, first: Id, second: Id): WallsAngle | null
   // center is at its middle.
   const side = (mid: Point, d: Point) => (distance(center, mid) > 1e-6 ? mid : add(center, d));
   return ordered(center, side(mid1, d1), side(mid2, d2));
+}
+
+/**
+ * The angles at the vertices where selected walls meet. Around a vertex, each angle is between
+ * two selected walls next to each other. An angle of 180° or more does not count: it is a straight
+ * line, or the outer side of the corner. A wall without length does not count.
+ */
+export function cornerAngles(plan: Plan, ids: Id[]): WallsAngle[] {
+  const walls = ids
+    .map((id) => findWall(plan, id))
+    .filter((wall): wall is Wall => {
+      if (!wall) return false;
+      const [a, b] = wallEnds(plan, wall);
+      return distance(a, b) > 1e-9;
+    });
+  const unique = [...new Map(walls.map((wall) => [wall.id, wall])).values()];
+  const angles: WallsAngle[] = [];
+  const vertices = [...new Set(unique.flatMap((wall) => [wall.a, wall.b]))];
+  for (const vertex of vertices) {
+    const around = unique
+      .filter((wall) => wall.a === vertex || wall.b === vertex)
+      .map((wall) => {
+        const [a, b] = wallEnds(plan, wall);
+        const center = wall.a === vertex ? a : b;
+        const dir = wallTangent(plan, wall, vertex);
+        return { center, dir, length: distance(a, b), turn: Math.atan2(dir.y, dir.x) };
+      })
+      .sort((p, q) => p.turn - q.turn);
+    if (around.length < 2) continue;
+    around.forEach((one, i) => {
+      const two = around[(i + 1) % around.length];
+      let sweep = two.turn - one.turn;
+      if (sweep <= 0) sweep += 2 * Math.PI;
+      if ((sweep * 180) / Math.PI >= 180 - 1e-6) return;
+      const reach = Math.min(one.length, two.length);
+      const center = one.center;
+      angles.push(
+        ordered(center, add(center, scale(one.dir, reach)), add(center, scale(two.dir, reach))),
+      );
+    });
+  }
+  return angles;
 }
 
 /** The angle at `center` from `a` to `b`, in the order that makes it not more than 180°. */

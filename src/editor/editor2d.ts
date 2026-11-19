@@ -116,7 +116,7 @@ import type {
 } from "../model/types";
 import { wallFaces as faceExtents } from "../model/walljoin";
 import { bulgeThrough, clampBulge, isCurved, wallCurve } from "../model/wallcurve";
-import { wallsAngle } from "../model/angles";
+import { cornerAngles, wallsAngle } from "../model/angles";
 import { lineSide, wallLine, type WallLine } from "../model/wallsides";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -2822,20 +2822,22 @@ export class Editor2D {
         );
         if (line) this.drawLineLengths(group, plan, line);
       }
-      // Two walls show the angle between them.
-      if (this.items.length === 2) {
-        const angle = wallsAngle(plan, this.items[0].id, this.items[1].id);
-        if (angle?.center) {
-          const { center, a, b } = angle;
-          const shape = dimensionShape({
-            id: "",
-            a,
-            b,
-            center,
-            offset: defaultAngleRadius(center, a, b),
-          });
-          this.drawDimension(svg("g", { class: "dimension-line walls-angle" }, group), shape);
-        }
+      // Two walls show the angle between them, also when they do not meet. More walls show the
+      // angles at their corners.
+      const ids = this.items.map((item) => item.id);
+      const angles =
+        ids.length === 2 ? [wallsAngle(plan, ids[0], ids[1])] : cornerAngles(plan, ids);
+      for (const angle of angles) {
+        if (!angle?.center) continue;
+        const { center, a, b } = angle;
+        const shape = dimensionShape({
+          id: "",
+          a,
+          b,
+          center,
+          offset: defaultAngleRadius(center, a, b),
+        });
+        this.drawDimension(svg("g", { class: "dimension-line walls-angle" }, group), shape);
       }
     }
     if (this.drag?.kind === "marquee") {

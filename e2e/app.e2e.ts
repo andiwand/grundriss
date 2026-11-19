@@ -468,6 +468,20 @@ test("measures an angle, shows the angle of two walls, and bends a wall", async 
   await page.keyboard.up("Shift");
   await expect(page.locator("#panel")).toContainText("angle between the walls");
   await expect(page.locator("#plan-2d .walls-angle .measure")).toHaveText("90°");
+  // All four walls: the plan shows the angles at the four corners, and the panel keeps them.
+  await page.keyboard.down("Shift");
+  await wall(2);
+  await wall(3);
+  await page.keyboard.up("Shift");
+  await expect(page.locator("#plan-2d .walls-angle .measure")).toHaveText([
+    "90°",
+    "90°",
+    "90°",
+    "90°",
+  ]);
+  await page.locator("#panel button", { hasText: "Add angle dimensions" }).click();
+  // The angle dimension of the angle tool, and the four new ones.
+  await expect(page.locator("#plan-2d .dimensions .measure")).toHaveCount(5);
 
   // One wall: the handle in its middle bends it, and the room grows.
   await page.keyboard.press("Escape");

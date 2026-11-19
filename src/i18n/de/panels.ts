@@ -71,6 +71,7 @@ export const PANELS: Record<string, string> = {
   "angle between the walls": "Winkel zwischen den Wänden",
   "The walls are parallel.": "Die Wände sind parallel.",
   "Add angle dimension": "Winkelmaß hinzufügen",
+  "Add angle dimensions": "Winkelmaße hinzufügen",
 
   // selection.ts: a curved wall.
   "Curve the wall": "Wand biegen",

@@ -4,6 +4,10 @@ The changes that a user notices.
 
 ## Unreleased
 
+- More than two selected walls show the angles at their corners, where two of them meet.
+  **Add angle dimensions** in the panel keeps them on the plan. A straight line does not show
+  an angle.
+
 - A roof of a lower story against a higher part of the house, for example a lean-to roof, ends
   at the face of the wall of the higher part. Before, it went into that wall, and the 3D view
   cut the walls of the higher story down to the roof. Put a point on the outline where the
