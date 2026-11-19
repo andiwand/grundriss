@@ -1,5 +1,5 @@
 import { icon } from "../icons";
-import { t } from "../i18n";
+import { errorText, t } from "../i18n";
 import {
   ATTRIBUTION,
   ATTRIBUTION_URL,
@@ -237,7 +237,7 @@ function placeSearch(): HTMLElement {
       show(found, found.length === 0 ? t('Found no place for "{query}".', { query }) : "");
     } catch (error) {
       if (controller.signal.aborted) return;
-      show([], t((error as Error).message));
+      show([], errorText(error));
     }
   };
   input.addEventListener("input", () => {
@@ -310,7 +310,7 @@ async function loadClimate(): Promise<void> {
     if (request !== climateRequest) return;
     locationMessage = request.signal.aborted
       ? { text: t("Stopped the download."), error: false }
-      : { text: t((error as Error).message), error: true };
+      : { text: errorText(error), error: true };
   } finally {
     if (request === climateRequest) {
       locationBusy = null;

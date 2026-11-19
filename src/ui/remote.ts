@@ -911,15 +911,18 @@ async function keepCopy(): Promise<void> {
   } else await shell.saveAsFile();
 }
 
-/** Makes a plan on the server of the app, and opens it. */
-async function createOnServer(building: Building, name: string): Promise<void> {
+/**
+ * Makes a plan on the server of the app, and opens it. It gives false if the app has no server
+ * after the search, so that the caller makes the plan in the browser.
+ */
+async function createOnServer(building: Building, name: string): Promise<boolean> {
   await started;
   const state = server;
-  if (!state) return;
+  if (!state) return false;
   if (!canCreate()) {
     if (account()) showStatus(t("Your account cannot make plans on this server."), true);
     else loginDialog();
-    return;
+    return true;
   }
   try {
     const plan = await state.client.createPlan(name, serializeBuilding(building));
@@ -927,6 +930,7 @@ async function createOnServer(building: Building, name: string): Promise<void> {
   } catch (error) {
     showStatus(errorText(error), true);
   }
+  return true;
 }
 
 /** Ends the session of the open plan: the stream closes, and the others see that it left. */

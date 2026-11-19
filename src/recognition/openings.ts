@@ -2,7 +2,7 @@
 // functions are pure: no DOM and no OpenCV, so tests run them in Node.
 
 import { closestOnSegment, distance, dot, scale, sub } from "../model/geometry";
-import { addOpening, clampOpening, nearestWall, wallEnds } from "../model/plan";
+import { addOpening, clampOpening, nearestWall, wallLength } from "../model/plan";
 import type { Background, Id, Plan, Point } from "../model/types";
 import { addWallSegments, toWorld, type WallSegment } from "../tracing/segments";
 
@@ -246,8 +246,8 @@ export function addRecognized(
     const reach = Math.max(options.tolerance, source ? source.thickness : 0) + 0.05;
     const hit = nearestWall(plan, recognized.center, reach);
     if (!hit) continue;
-    const [a, b] = wallEnds(plan, hit.wall);
-    const length = distance(a, b);
+    // The offset is along the center line: on the arc of a curved wall.
+    const length = wallLength(plan, hit.wall);
     const opening = addOpening(plan, hit.wall.id, recognized.kind, hit.t * length);
     // addOpening clamps with the default width, so the center goes back before the next clamp.
     opening.width = Math.min(recognized.width, length);

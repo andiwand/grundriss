@@ -8,7 +8,7 @@
 // `Wall.bulge` is the sagitta of the arc: the distance from the middle of the chord to the middle
 // of the center line, + on the side of `perpendicular(b - a)`. 0 or nothing is a straight wall.
 
-import { add, distance, dot, perpendicular, scale, sub } from "./geometry";
+import { add, distance, perpendicular, scale, sub } from "./geometry";
 import type { Id, Plan, Point, Wall } from "./types";
 
 /** A bulge smaller than this is a straight wall. */
@@ -21,6 +21,8 @@ export interface WallCurve {
   b: Point;
   /** The length of the center line. */
   length: number;
+  /** The bulge after the limits of `clampBulge`, 0 for a straight wall. */
+  bulge: number;
   /** The circle of a curved wall, or null for a straight wall. */
   circle: { center: Point; radius: number } | null;
   /** The point at `s` along the center line, and `o` across it. */
@@ -29,21 +31,39 @@ export interface WallCurve {
   tangent(s: number): Point;
   /** `perpendicular(tangent(s))`: the + side across the wall. */
   normal(s: number): Point;
+  /** The positions along the center line of the points of `points`, from `s0` to `s1`. */
+  stations(s0: number, s1: number): number[];
   /** The points from `s0` to `s1` at `o` across, with short chords on a curve. */
   points(s0: number, s1: number, o?: number): Point[];
   /** The position along the center line that is nearest to `p`, from 0 to `length`. */
   project(p: Point): number;
 }
 
-/** The largest bulge for a chord: a half circle. */
-export function maxBulge(chord: number): number {
-  return chord / 2;
+/**
+ * The largest bulge for a chord: a half circle. With `minRadius`, the radius of the arc does not
+ * become smaller than `minRadius`. A wall uses its half thickness, so that its inner face does
+ * not go past the center of the circle.
+ */
+export function maxBulge(chord: number, minRadius = 0): number {
+  const half = chord / 2;
+  // The radius c²/(8h) + h/2 gets smaller as h grows, down to c/2 at a half circle. Its value is
+  // r at h = r - √(r² - c²/4).
+  return minRadius <= half ? half : minRadius - Math.sqrt(minRadius * minRadius - half * half);
 }
 
-/** The center line from `a` to `b` with the sagitta `bulge`. */
-export function curveOf(a: Point, b: Point, bulge = 0): WallCurve {
+/** The bulge in the limits of `maxBulge`. */
+export function clampBulge(chord: number, bulge: number, minRadius = 0): number {
+  const max = maxBulge(chord, minRadius);
+  return Math.max(-max, Math.min(max, bulge));
+}
+
+/**
+ * The center line from `a` to `b` with the sagitta `bulge`. The radius of the arc is not
+ * smaller than `minRadius`.
+ */
+export function curveOf(a: Point, b: Point, bulge = 0, minRadius = 0): WallCurve {
   const chord = distance(a, b);
-  const h = Math.max(-maxBulge(chord), Math.min(maxBulge(chord), bulge));
+  const h = clampBulge(chord, bulge, minRadius);
   if (chord < 1e-9 || Math.abs(h) < FLAT) return straightCurve(a, b, chord);
 
   const dir = scale(sub(b, a), 1 / chord);
@@ -55,30 +75,28 @@ export function curveOf(a: Point, b: Point, bulge = 0): WallCurve {
   const total = 4 * Math.atan2(Math.abs(h), chord / 2);
   const length = radius * total;
   const start = Math.atan2(a.y - center.y, a.x - center.x);
-  // The direction of the turn: the one that goes through the middle of the arc.
-  const top = add(middle, scale(n, h));
-  const turn =
-    distance(add(center, scale(polar(start + total / 2), radius)), top) <
-    distance(add(center, scale(polar(start - total / 2), radius)), top)
-      ? 1
-      : -1;
+  // The direction of the turn: a bulge on the + side turns to smaller angles.
+  const turn = -Math.sign(h);
   const angleAt = (s: number) => start + (turn * s) / radius;
   const tangent = (s: number) => scale(perpendicular(polar(angleAt(s))), turn);
   const normal = (s: number) => perpendicular(tangent(s));
   const at = (s: number, o = 0) =>
     add(add(center, scale(polar(angleAt(s)), radius)), scale(normal(s), o));
+  const stations = (s0: number, s1: number) => {
+    const steps = Math.max(1, Math.ceil(Math.abs(s1 - s0) / radius / STEP));
+    return Array.from({ length: steps + 1 }, (_, i) => s0 + ((s1 - s0) * i) / steps);
+  };
   return {
     a,
     b,
     length,
+    bulge: h,
     circle: { center, radius },
     at,
     tangent,
     normal,
-    points(s0, s1, o = 0) {
-      const steps = Math.max(1, Math.ceil(Math.abs(s1 - s0) / radius / STEP));
-      return Array.from({ length: steps + 1 }, (_, i) => at(s0 + ((s1 - s0) * i) / steps, o));
-    },
+    stations,
+    points: (s0, s1, o = 0) => stations(s0, s1).map((s) => at(s, o)),
     project(p) {
       const angle = Math.atan2(p.y - center.y, p.x - center.x);
       // The turn from the start, in the direction of the wall, from -π to π around the middle.
@@ -102,10 +120,12 @@ function straightCurve(a: Point, b: Point, length: number): WallCurve {
     a,
     b,
     length,
+    bulge: 0,
     circle: null,
     at,
     tangent: () => dir,
     normal: () => n,
+    stations: (s0, s1) => [s0, s1],
     points: (s0, s1, o = 0) => [at(s0, o), at(s1, o)],
     project(p) {
       const s = (p.x - a.x) * dir.x + (p.y - a.y) * dir.y;
@@ -120,9 +140,10 @@ function vertexOf(plan: Plan, id: Id): Point {
   return vertex;
 }
 
-/** The center line of the wall. */
+/** The center line of the wall. Its radius is not smaller than the half thickness. */
 export function wallCurve(plan: Plan, wall: Wall): WallCurve {
-  return curveOf(vertexOf(plan, wall.a), vertexOf(plan, wall.b), wall.bulge ?? 0);
+  const [a, b] = [vertexOf(plan, wall.a), vertexOf(plan, wall.b)];
+  return curveOf(a, b, wall.bulge ?? 0, wall.thickness / 2);
 }
 
 /** True if the wall is curved. */
@@ -144,20 +165,15 @@ export function partBulge(curve: WallCurve, s0: number, s1: number): number {
   if (!curve.circle) return 0;
   const angle = Math.abs(s1 - s0) / curve.circle.radius;
   // The sagitta of a part keeps the side of the whole arc.
-  const h = curve.circle.radius * (1 - Math.cos(angle / 2));
-  const middle = curve.at((s0 + s1) / 2);
-  const p = curve.at(s0);
-  const q = curve.at(s1);
-  const across = perpendicular(sub(q, p));
-  const side = dot(sub(middle, scale(add(p, q), 0.5)), across);
-  return side >= 0 ? h : -h;
+  // A part of an arc of not more than 180° bulges to the same side as the whole arc.
+  return Math.sign(curve.bulge) * curve.circle.radius * (1 - Math.cos(angle / 2));
 }
 
 /**
  * The bulge of a wall from `a` to `b` whose center line goes through the point `p`, as far as
  * the largest bulge allows. The editor uses it to bend a wall with the pointer.
  */
-export function bulgeThrough(a: Point, b: Point, p: Point): number {
+export function bulgeThrough(a: Point, b: Point, p: Point, minRadius = 0): number {
   const chord = distance(a, b);
   if (chord < 1e-9) return 0;
   const dir = scale(sub(b, a), 1 / chord);
@@ -169,11 +185,11 @@ export function bulgeThrough(a: Point, b: Point, p: Point): number {
   const half = chord / 2;
   if (Math.abs(v) < 1e-9 || Math.abs(u) >= half) {
     // The point is on the chord, or beyond the ends: take its distance across as the bulge.
-    return Math.max(-maxBulge(chord), Math.min(maxBulge(chord), v));
+    return clampBulge(chord, v, minRadius);
   }
   // |center - a| = |center - p| with center = middle + t·n.
   const t = (u * u + v * v - half * half) / (2 * v);
   const radius = Math.hypot(half, t);
   const h = v > 0 ? t + radius : t - radius;
-  return Math.max(-maxBulge(chord), Math.min(maxBulge(chord), h));
+  return clampBulge(chord, h, minRadius);
 }

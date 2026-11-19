@@ -167,7 +167,7 @@ export async function showVersions(source: Source): Promise<void> {
           // With a server, the copy is a new plan on it, and opens.
           if (remoteHooks.serverName() !== null) {
             element.close();
-            return remoteHooks.create(parseBuilding(data), name);
+            if (await remoteHooks.create(parseBuilding(data), name)) return;
           }
           await addProject(parseBuilding(data), name);
           showStatus(t("The version is a new plan in this browser now."));

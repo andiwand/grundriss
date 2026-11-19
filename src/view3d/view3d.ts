@@ -16,14 +16,13 @@ import {
   storyAbove,
   storyBelow,
   stairShape,
-  wallTop,
 } from "../model/building";
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
 import { wallSideColor } from "../model/colors";
 import { openingShape } from "../model/drawing";
 import { distance } from "../model/geometry";
 import { pvPanels } from "../model/pv";
-import { roofCeiling, roofGeometries, roofsInView, type Vec3 } from "../model/roof";
+import { roofBase, roofCeiling, roofGeometries, roofsInView, type Vec3 } from "../model/roof";
 import { WINDOW_LIFT } from "../model/roofshape";
 import { findRooms, pointInPolygon, type Room } from "../model/rooms";
 import { wallCurve } from "../model/wallcurve";
@@ -573,8 +572,9 @@ export class View3D {
     const all = view.showAbove || !active;
     const roofs = roofsInView(building, view.activeStoryId, all);
     const layers = view.layers ?? ALL_LAYERS;
-    // Without the stories above, a chimney stops at the top of the walls of the active story.
-    const top = all ? Infinity : wallTop(active);
+    // Without the stories above, a chimney stops at the top of the walls of the active story,
+    // which go up to the floor of the story above.
+    const top = all ? Infinity : roofBase(building, active);
     const group = buildGroup(building, visible, roofs, layers, () => this.modelLoaded(), top);
     group.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -1149,7 +1149,7 @@ function addWall(
     for (let i = 1; i < steps; i++) cuts.add(start + ((end - start) * i) / steps);
   }
   // A curved wall is a line of short flat columns.
-  for (const p of curve.points(start, end)) cuts.add(curve.project(p));
+  for (const s of curve.stations(start, end)) cuts.add(s);
   const grid = [...cuts]
     .sort((p, q) => p - q)
     .filter((s, i, all) => i === 0 || s - all[i - 1] > 1e-6);

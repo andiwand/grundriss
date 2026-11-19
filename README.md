@@ -218,8 +218,6 @@ The addresses of the server:
 | `/setup/<code>`, `/invite/<code>`, `/reset/<code>` | A link for one use: the app asks for a name and a password. |
 
 `data.yaml` holds the accounts, the sessions, the links, and the plans, and a person can read it.
-Each revision of a plan is a YAML file in `plans/<id>/`. The revisions of older servers are JSON
-files, and the server still reads them.
 The server keeps only hashes of the passwords and the links. A server before 0.6 had tokens in
 place of accounts: at its first start, the server moves `data.json` to `data.yaml`, the old tokens
 and links stop working, and the plans go to the admin at the setup.

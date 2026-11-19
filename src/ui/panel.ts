@@ -264,7 +264,9 @@ const groupState = new Map<string, boolean>();
 export function group(title: string, open: boolean, fill: () => void): void {
   const details = document.createElement("details");
   details.className = "group";
-  const key = title.replace(/[\d.,]+/g, "#");
+  // The default is in the key: a group that is closed in one topic and open in another keeps
+  // its state in each one.
+  const key = `${title.replace(/[\d.,]+/g, "#")}|${open}`;
   details.open = groupState.get(key) ?? open;
   details.addEventListener("toggle", () => {
     if (details.open === open) groupState.delete(key);

@@ -346,11 +346,6 @@ textarea.control {
   color: var(--ink-2);
 }
 
-.field.stacked {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-}
-
 .field-label {
   min-width: 0;
 }
@@ -825,11 +820,6 @@ body.wide .empty-state {
   color: var(--ink-2);
 }
 
-/* The keys are in the titles and in the help of the shortcuts (?), not on the buttons. */
-.palette button kbd {
-  display: none;
-}
-
 .palette button:hover:not(:disabled) {
   background: var(--surface-2);
   border-color: transparent;
@@ -849,6 +839,21 @@ body.wide .empty-state {
   height: 1px;
   margin: 3px 0;
   background: var(--line);
+}
+
+/* A low window: the rail of a desktop has smaller buttons, and else it scrolls, with a bar so
+   that the user sees the tools below. */
+body:not(.compact) .palette.fit-tight button {
+  height: 30px;
+}
+
+body:not(.compact) .palette.fit-tight .divider {
+  margin: 1px 0;
+}
+
+.palette.fit-none {
+  scrollbar-width: thin;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
 }
 
 /* The scale and the straightening need a background: without one, they take no room. */
@@ -1071,10 +1076,6 @@ body.compact .palette.fit-icons button {
 body.wide:not(.compact) #panel > section {
   --field-label: 180px;
   --field-control: 220px;
-}
-
-body.wide:not(.compact) #panel > section .field.stacked {
-  grid-template-columns: var(--field-label) var(--field-control);
 }
 
 .input input[type="color"] {
@@ -3051,6 +3052,17 @@ body:not(.no-plan) #account-button {
   font-size: 13px;
 }
 
+.home-links .app-version {
+  margin-left: auto;
+  align-self: center;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.menu .app-version {
+  color: var(--ink-3);
+}
+
 .home-links .link:hover:not(:disabled) {
   background: transparent;
   color: var(--accent);
@@ -4092,7 +4104,9 @@ body.compact #status.gone {
   pointer-events: none;
 }
 
-body.compact .compass {
+/* The palette of a phone lies over the top of both views, so these go below it. */
+body.compact .compass,
+body.compact .pill-toggle {
   top: 60px;
 }
 

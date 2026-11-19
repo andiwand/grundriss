@@ -1,10 +1,8 @@
 // The help of the keyboard shortcuts: a dialog that opens with "?" or with the help button.
 
 import { t } from "../i18n";
+import { APP_VERSION } from "../version";
 import { dialog } from "./dialog";
-
-/** The version of the app from package.json (vite.config.ts). */
-declare const __APP_VERSION__: string;
 
 /** The shortcuts by group. "Mod" is Ctrl, or ⌘ on a Mac. */
 const SHORTCUTS: [string, [string, string][]][] = [
@@ -100,6 +98,6 @@ export function showShortcuts(): void {
   }
   const version = document.createElement("p");
   version.className = "app-version";
-  version.textContent = t("Grundriss {version}", { version: __APP_VERSION__ });
+  version.textContent = t("Grundriss {version}", { version: APP_VERSION });
   body.append(columns, version);
 }

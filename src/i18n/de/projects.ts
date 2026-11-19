@@ -307,6 +307,8 @@ export const PROJECTS: Record<string, string> = {
   "The plan does not exist.": "Den Plan gibt es nicht.",
   "The changes do not fit the plan.": "Die Änderungen passen nicht zum Plan.",
   "The plan is too large for this server.": "Der Plan ist zu groß für diesen Server.",
+  "The request is too large.": "Die Anfrage ist zu groß.",
+  "The plan must be JSON.": "Der Plan muss JSON sein.",
   "The server does not answer. Check the network.":
     "Der Server antwortet nicht. Prüfen Sie das Netzwerk.",
   "This is not a Grundriss server.": "Das ist kein Grundriss-Server.",

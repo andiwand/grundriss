@@ -189,17 +189,16 @@ export function radioGroup<T extends string>(
 /**
  * A row with a label and a control. The container decides the width of the label column: the
  * panel puts the controls in one column on the right, a dialog has a fixed label column.
- * `stacked` puts the control under its label, for a list with long values in a narrow panel.
  */
 export function fieldRow(
   text: string,
   element: HTMLElement,
-  options: { stacked?: boolean; top?: boolean } = {},
+  options: { top?: boolean } = {},
 ): HTMLElement {
   // A group of controls, for example check boxes, has its label at the top of the group. It is
   // no label element, because each check box has its own label.
   const row = document.createElement(options.top ? "div" : "label");
-  row.className = options.stacked ? "field stacked" : options.top ? "field top" : "field";
+  row.className = options.top ? "field top" : "field";
   const label = document.createElement("span");
   label.className = "field-label";
   label.textContent = text;

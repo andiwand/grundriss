@@ -7,10 +7,14 @@ import { clickPlan, isPhone, openApp, projectCount } from "./helpers";
 
 test("opens the example house in the Structure topic", async ({ page }) => {
   await openApp(page);
+  const { version } = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+  await expect(page.locator(".home-links .app-version")).toHaveText(`Grundriss ${version}`);
   await page.locator(".start-row .project-start", { hasText: "Example house" }).click();
   await expect(page.locator("body")).not.toHaveClass(/no-plan/);
   await expect(page.locator('[data-topic-tab="structure"]')).toHaveClass(/active/);
   await expect(page.locator("#plan-2d .room-label").first()).toBeVisible();
+  await page.locator("#file-name").click();
+  await expect(page.locator("#app-version")).toHaveText(`Grundriss ${version}`);
 });
 
 test("draws a room, saves it in the browser, and opens it again after a reload", async ({
@@ -450,19 +454,24 @@ test("measures an angle, shows the angle of two walls, and bends a wall", async 
   await page.locator("#panel button", { hasText: "Other side" }).click();
   await expect(page.locator("#plan-2d .dimensions .measure")).toHaveText("270°");
 
-  // Two walls: the panel and the plan show the angle between them.
+  // Two walls: the panel and the plan show the angle between them. The clicks go to the middle
+  // of the drawn walls, because the wall tool snaps the points to the grid.
+  const wall = async (index: number) => {
+    const box = (await page.locator('#plan-2d [data-kind="wall"]').nth(index).boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  };
   await page.keyboard.press("v");
   await page.keyboard.press("Escape");
-  await clickPlan(page, 300, 250);
+  await wall(0);
   await page.keyboard.down("Shift");
-  await clickPlan(page, 450, 375);
+  await wall(1);
   await page.keyboard.up("Shift");
   await expect(page.locator("#panel")).toContainText("angle between the walls");
   await expect(page.locator("#plan-2d .walls-angle .measure")).toHaveText("90°");
 
   // One wall: the handle in its middle bends it, and the room grows.
   await page.keyboard.press("Escape");
-  await clickPlan(page, 300, 250);
+  await wall(0);
   const handle = page.locator('#plan-2d [data-kind="wall-bend"]');
   await expect(handle).toHaveCount(1);
   const box = (await handle.boundingBox())!;

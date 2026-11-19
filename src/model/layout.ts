@@ -2,13 +2,14 @@
 // the walls to remove, the new walls, the new openings in walls that stay, and the new doors.
 //
 // The comparison is by geometry, not by id, because a split of a wall gives new ids. A wall
-// stays where a wall of the other floor plan lies on the same line. A door or a window stays
-// where the other floor plan has one of the same kind and size at the same place.
+// stays where a wall of the other floor plan lies on the same line. A curved wall stays only
+// where the other floor plan has a wall with the same ends and the same bulge. A door or a window
+// stays where the other floor plan has one of the same kind and size at the same place.
 
 import { isOuterWall } from "./energy";
 import { distance, dot, scale, sub } from "./geometry";
-import { wallEnds } from "./plan";
 import type { Building, Opening, Point, Story, Wall } from "./types";
+import { wallCurve } from "./wallcurve";
 
 export interface LayoutChanges {
   /** The area of the walls to remove, and of the new walls, in m². */
@@ -39,23 +40,39 @@ const BEARING_THICKNESS = 0.24;
 interface Segment {
   a: Point;
   b: Point;
+  /** The length of the center line: along the arc of a curved wall. */
   length: number;
+  /** The unit direction from `a` to `b`. */
   dir: Point;
+  /** The bulge of a curved wall, or 0. */
+  bulge: number;
 }
 
 function segmentOf(story: Story, wall: Wall): Segment | null {
-  const [a, b] = wallEnds(story, wall);
-  const length = distance(a, b);
-  return length < 1e-6 ? null : { a, b, length, dir: scale(sub(b, a), 1 / length) };
+  const curve = wallCurve(story, wall);
+  const { a, b, length, bulge } = curve;
+  const chord = distance(a, b);
+  return chord < 1e-6 ? null : { a, b, length, dir: scale(sub(b, a), 1 / chord), bulge };
+}
+
+/** True if the two segments are the same arc: the same ends and the same bulge. */
+function sameArc(s: Segment, o: Segment): boolean {
+  const near = (p: Point, q: Point) => distance(p, q) < ON_LINE;
+  return (
+    (near(s.a, o.a) && near(s.b, o.b) && Math.abs(s.bulge - o.bulge) < ON_LINE) ||
+    (near(s.a, o.b) && near(s.b, o.a) && Math.abs(s.bulge + o.bulge) < ON_LINE)
+  );
 }
 
 /** The length of the segment that the walls of the story cover on the same line. */
 function covered(segment: Segment, story: Story | undefined): number {
   if (!story) return 0;
+  const others = story.walls.map((wall) => segmentOf(story, wall)).filter((o) => !!o);
+  // A curved wall is covered only by the same arc. A curved wall does not cover a straight one.
+  if (segment.bulge !== 0) return others.some((o) => sameArc(segment, o)) ? segment.length : 0;
   const parts: [number, number][] = [];
-  for (const wall of story.walls) {
-    const other = segmentOf(story, wall);
-    if (!other) continue;
+  for (const other of others) {
+    if (other.bulge !== 0) continue;
     const cross = segment.dir.x * other.dir.y - segment.dir.y * other.dir.x;
     if (Math.abs(cross) > PARALLEL) continue;
     const off = (p: Point) => {
@@ -83,13 +100,7 @@ function covered(segment: Segment, story: Story | undefined): number {
 /** The center of an opening on the plan. */
 function centerOf(story: Story, opening: Opening): Point | null {
   const wall = story.walls.find((w) => w.id === opening.wallId);
-  const segment = wall && segmentOf(story, wall);
-  return segment
-    ? {
-        x: segment.a.x + segment.dir.x * opening.offset,
-        y: segment.a.y + segment.dir.y * opening.offset,
-      }
-    : null;
+  return wall && segmentOf(story, wall) ? wallCurve(story, wall).at(opening.offset) : null;
 }
 
 /** True if the other story has an opening of the same kind and size at the same place. */

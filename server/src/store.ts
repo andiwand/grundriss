@@ -2,7 +2,7 @@
 //
 // The accounts, the links, the sessions, and the plans are in one YAML file (`data.yaml`), which
 // the store writes again after each change, through a temporary file, so that a crash does not
-// leave half a file. The files of the revisions are separate, one YAML file for each revision. The
+// leave half a file. The files of the revisions are separate, one JSON file for each revision. The
 // large images of a plan are in `blobs/`, once for all revisions, and a revision refers to them by
 // hash (src/model/blobs.ts). A private server has a few users and some dozen plans, so this is
 // enough, and the image needs no native module.
@@ -31,7 +31,7 @@ import {
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { blobRefs, dehydrate, hydrate } from "../../src/model/blobs";
-import { parseText, toYaml } from "../../src/model/yaml";
+import { parseText } from "../../src/model/yaml";
 
 /** What an account may do. The admin may do all of it, and more. */
 export interface Rights {
@@ -275,16 +275,7 @@ export class Store {
   private save(): void {
     const file = join(this.dir, "data.yaml");
     try {
-      // The data is on the disk before the rename, so that a power loss keeps the old file or
-      // the new one.
-      const fd = openSync(`${file}.tmp`, "w");
-      try {
-        writeFileSync(fd, stringify(this.data));
-        fsyncSync(fd);
-      } finally {
-        closeSync(fd);
-      }
-      renameSync(`${file}.tmp`, file);
+      writeDurably(file, stringify(this.data));
       this.persisted = JSON.stringify(this.data);
     } catch (error) {
       this.rollback();
@@ -804,18 +795,16 @@ export class Store {
     parent: string | null,
     data: string,
   ): RevisionRecord {
-    // Each large image goes to the store of the blobs once; the revision refers to it. The file
-    // of the revision is YAML, so that a person can read it.
+    // Each large image goes to the store of the blobs once; the revision refers to it. The
+    // revision stays JSON: only the server reads it, and YAML is slow for each patch of a plan.
     const { json, blobs } = dehydrate(data);
-    const yaml = revisionYaml(json);
-    const text = yaml ?? json;
     const revision: RevisionRecord = {
       id: String(plan.revisions.length + 1),
       parent,
       time: Date.now(),
       by,
       size: Buffer.byteLength(data),
-      stored: Buffer.byteLength(text),
+      stored: Buffer.byteLength(json),
       blobs: [...blobs.keys()],
     };
     try {
@@ -828,9 +817,9 @@ export class Store {
       mkdirSync(dir, { recursive: true });
       for (const [hash, value] of blobs) {
         const file = join(this.dir, "blobs", hash);
-        if (!existsSync(file)) writeFileSync(file, value);
+        if (!existsSync(file)) writeDurably(file, value);
       }
-      writeFileSync(join(dir, `${revision.id}.${yaml === null ? "json" : "yaml"}`), text);
+      writeDurably(join(dir, `${revision.id}.json`), json);
       plan.revisions.push(revision);
       this.save();
     } catch (error) {
@@ -844,11 +833,11 @@ export class Store {
     if (!plan.revisions.some((r) => r.id === id)) {
       throw new StoreError(404, "The revision does not exist.");
     }
-    // Older servers wrote the revisions as JSON, and a text that is not JSON stays in a JSON file.
+    // For a short time, builds of the main branch wrote the revisions as YAML.
     const base = join(this.dir, "plans", plan.id, id);
-    const json = existsSync(`${base}.yaml`)
-      ? JSON.stringify(parseText(readFileSync(`${base}.yaml`, "utf8")))
-      : readFileSync(`${base}.json`, "utf8");
+    const json = existsSync(`${base}.json`)
+      ? readFileSync(`${base}.json`, "utf8")
+      : JSON.stringify(parseText(readFileSync(`${base}.yaml`, "utf8")));
     return hydrate(json, (hash) => {
       const file = join(this.dir, "blobs", hash);
       return existsSync(file) ? readFileSync(file, "utf8") : undefined;
@@ -915,11 +904,17 @@ function emptyData(): Data {
   };
 }
 
-/** The YAML of the JSON of a revision, or null if the text is not JSON. */
-function revisionYaml(json: string): string | null {
+/**
+ * Writes a file through a temporary file. The data is on the disk before the rename, so that a
+ * power loss keeps the old file or the new one, and never half a file.
+ */
+function writeDurably(file: string, text: string): void {
+  const fd = openSync(`${file}.tmp`, "w");
   try {
-    return toYaml(JSON.parse(json));
-  } catch {
-    return null;
+    writeFileSync(fd, text);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
   }
+  renameSync(`${file}.tmp`, file);
 }

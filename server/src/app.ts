@@ -780,9 +780,17 @@ function sameHost(origin: string, host: string): boolean {
   }
 }
 
-/** Checks that the data is a plan file that the app can read. */
+/**
+ * Checks that the data is a plan file that the app can read. The API takes only JSON: the store
+ * keeps the images of JSON apart (`dehydrate`), and YAML would be slow for a large plan.
+ */
 function checkPlan(data: unknown): string {
   if (typeof data !== "string") throw new StoreError(400, "The request needs the plan as data.");
+  try {
+    JSON.parse(data);
+  } catch {
+    throw new StoreError(400, "The plan must be JSON.");
+  }
   try {
     parseBuilding(data);
   } catch (error) {

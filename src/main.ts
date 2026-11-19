@@ -75,6 +75,7 @@ import { roofGeometries } from "./model/roof";
 
 import { newRevision, serializeBuilding, serializeBuildingYaml } from "./model/file";
 import { isJsonName } from "./model/yaml";
+import { APP_VERSION } from "./version";
 
 import type { Building, Point, ServiceSystem } from "./model/types";
 
@@ -267,8 +268,17 @@ function setTool(tool: Tool): void {
   if (tool === "area" || tool === "fence" || tool === "tree") editor.select(null);
   editor.tool = tool;
   app.calibration = null;
+  startTool(tool);
+}
+
+/**
+ * Marks a new tool, shows its hint, and opens the 2D view if the tool draws there. The message
+ * of the 2D view comes after the hint, so that the user sees why the view changed.
+ */
+function startTool(tool: Tool): void {
   markTool(tool);
   showStatus(HINTS[tool]);
+  if (tool !== "select" && tool !== "pan") showDrawingView();
   renderPanel();
 }
 
@@ -282,13 +292,8 @@ function showDrawingView(): void {
   showStatus(t("This tool draws in the 2D view."));
 }
 
-/** The tool that the palette marks, so that only a new tool opens the 2D view. */
-let markedTool: Tool = "select";
-
 /** Marks the button of the tool in the palette. The furniture button shows the open catalog. */
 function markTool(tool: Tool): void {
-  if (tool !== markedTool && tool !== "select" && tool !== "pan") showDrawingView();
-  markedTool = tool;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
     button.classList.toggle("active", button.dataset.tool === tool);
   }
@@ -392,6 +397,8 @@ function renderStories(): void {
     const element = document.createElement("button");
     element.className = "story";
     element.title = title;
+    // The rail of a desktop shows only the number, so the name and the level are in the label.
+    element.setAttribute("aria-label", title);
     const label = document.createElement("span");
     label.className = "name";
     label.textContent = name;
@@ -465,9 +472,10 @@ function renderStories(): void {
     element.textContent = chip;
     element.hidden = !chip;
   }
-  const hint = document.querySelector<HTMLElement>("#plan-3d .story-chip");
-  if (hint) hint.title = t("3D · drag to orbit, scroll to zoom, double-click to fit");
 }
+
+// The chip has no translation of the page, because it shows the name of a story.
+$("#plan-3d .story-chip").title = t("3D · drag to orbit, scroll to zoom, double-click to fit");
 
 function addStory(kind: "top" | "attic" | "cellar"): void {
   closeMenus();
@@ -585,9 +593,7 @@ const catalog = new Catalog($("#catalog"), {
     // The drawer covers a part of the plan, so it closes while the user places the piece.
     catalog.close();
     editor.startPlacing(template);
-    markTool("furniture");
-    showStatus(HINTS.furniture);
-    renderPanel();
+    startTool("furniture");
   },
   status: (text, error) => showStatus(text, error),
   toggled: () => markTool(editor.tool),
@@ -920,7 +926,7 @@ Object.assign(shell, {
   setTopic,
   setView,
   view: () => currentView,
-  markTool,
+  startTool,
   closeMenus,
   loadBackground,
   setMapSource,
@@ -1006,7 +1012,7 @@ setupEdit3d();
 const topbar = $(".topbar");
 fitBar(topbar, ["views", "topics", "brand", "dividers"], () => inOneRow(topbar));
 const palette = $("#tools");
-fitBar(palette, ["keys", "icons"], () => noScroll(palette));
+fitBar(palette, ["icons", "tight"], () => noScroll(palette));
 
 setupCompact({
   onCompact: () => {
@@ -1047,12 +1053,17 @@ editor.onCalibrate = (a, b) => {
   renderPanel();
 };
 
-// The menu of the file name: the files and the versions of the plan.
+// The menu of the file name: the files, the versions of the plan, and the version of the app.
+$("#app-version").textContent = t("Grundriss {version}", { version: APP_VERSION });
 $("#file-name").addEventListener("click", () => toggleMenu($("#file-name"), $("#file-menu")));
 $("#file-name").addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
+  // The key opens the menu only, and does not also finish a line of the plan.
   e.preventDefault();
+  e.stopPropagation();
   toggleMenu($("#file-name"), $("#file-menu"));
+  // From the keyboard, the focus goes into the menu, which is at the end of the page.
+  if (!$("#file-menu").hidden) $<HTMLButtonElement>("#file-menu button").focus();
 });
 const FILE: Record<string, () => void> = {
   new: newPlan,
@@ -1113,10 +1124,16 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[name=map]
 
 editor.onRun = () => showStatus(t("Added the line. Draw the next line, or press Esc to stop."));
 
-$("#furniture").addEventListener("click", () => {
-  if (!catalog.isOpen) showDrawingView();
+/** Opens or closes the catalog of the furniture. It places in the 2D view. */
+function toggleCatalog(): void {
+  if (!catalog.isOpen) {
+    setTopic("interior");
+    showDrawingView();
+  }
   catalog.toggle();
-});
+}
+
+$("#furniture").addEventListener("click", toggleCatalog);
 
 $("#export").addEventListener("click", () => toggleMenu($("#export"), $("#export-menu")));
 
@@ -1236,9 +1253,7 @@ window.addEventListener("keydown", (e) => {
     setTopic("utilities");
     openServicesMenu("electric", $<HTMLButtonElement>('[data-system="electric"]'));
   } else if (key === "i") {
-    if (!catalog.isOpen) setTopic("interior");
-    if (!catalog.isOpen) showDrawingView();
-    catalog.toggle();
+    toggleCatalog();
   } else if (key === "r") {
     editor.rotate(e.shiftKey ? 15 : 90);
   } else if (key in ARROWS && editor.selection.length > 0) {

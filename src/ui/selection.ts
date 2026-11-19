@@ -13,7 +13,7 @@ import { distance } from "../model/geometry";
 import { summerOverheating } from "../model/overheating";
 import { wallsAngle } from "../model/angles";
 import { angleText, defaultAngleRadius, dimensionShape } from "../model/drawing";
-import { isCurved, maxBulge, wallCurve } from "../model/wallcurve";
+import { clampBulge, isCurved, maxBulge, wallCurve } from "../model/wallcurve";
 import {
   addDimension,
   findChimney,
@@ -26,6 +26,7 @@ import {
   removeVertex,
   removeWall,
   wallLength,
+  parseCorner,
 } from "../model/plan";
 import { roomReadiness } from "../model/radiators";
 import {
@@ -190,8 +191,8 @@ const PANELS: Partial<Record<ItemKind, (plan: Story, id: Id) => void>> = {
   run: renderRun,
   roof: (_plan, id) => renderRoofPanel(id, null),
   "roof-corner": (_plan, id) => {
-    const [roofId, index] = id.split(":");
-    renderRoofPanel(roofId, Number(index));
+    const corner = parseCorner(id);
+    renderRoofPanel(corner.id, corner.index);
   },
   furniture: renderFurniture,
   stair: renderStair,
@@ -201,8 +202,8 @@ const PANELS: Partial<Record<ItemKind, (plan: Story, id: Id) => void>> = {
   vertex: renderVertex,
   area: renderArea,
   "area-corner": (plan, id) => {
-    const [areaId, index] = id.split(":");
-    renderAreaCorner(plan, areaId, Number(index));
+    const corner = parseCorner(id);
+    renderAreaCorner(plan, corner.id, corner.index);
   },
   fence: renderFence,
   tree: renderTree,
@@ -1146,12 +1147,19 @@ function curveFields(plan: Story, wall: Wall, edit: Edit<Wall>): void {
   if (curve.circle) {
     stats([[`${fmt(curve.circle.radius, 3)} m`, t("radius of the center line"), true]]);
   }
+  // The field shows the bulge that the wall has, in the limits of its chord and thickness. A
+  // bulge of 0 makes the wall straight.
+  const max = maxBulge(chord, wall.thickness / 2);
   numberField(
     t("Bulge"),
-    wall.bulge ?? 0,
+    curve.bulge,
     (value) =>
-      edit((w) => (w.bulge = Math.max(-maxBulge(chord), Math.min(maxBulge(chord), value)))),
-    { min: -maxBulge(chord), max: maxBulge(chord) },
+      edit((w) => {
+        const bulge = clampBulge(chord, value, w.thickness / 2);
+        if (bulge === 0) delete w.bulge;
+        else w.bulge = bulge;
+      }),
+    { min: -max, max },
   );
   paragraph(
     t(

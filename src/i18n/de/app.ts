@@ -4,6 +4,7 @@
 
 export const APP: Record<string, string> = {
   // ----- index.html: the top bar -----
+  "Tools and stories": "Werkzeuge und Geschosse",
   "The name of the plan file": "Der Name der Plandatei",
   "Unsaved changes": "Ungespeicherte Änderungen",
   Topic: "Bereich",

@@ -732,7 +732,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
       b: pointOf(d.b, `${where}, point b`),
       offset: number(d, "offset", where),
     };
-    if (d.center !== undefined) dimension.center = pointOf(d.center, `${where}, center`);
+    if (d.center != null) dimension.center = pointOf(d.center, `${where}, center`);
     return dimension;
   });
 

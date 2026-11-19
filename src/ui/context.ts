@@ -130,7 +130,8 @@ export const shell = {
   setTopic: (_topic: Topic): void => {},
   setView: (_view: View): void => {},
   view: (): View => "split",
-  markTool: (_tool: Tool): void => {},
+  /** Marks a new tool, shows its hint, and opens the 2D view if the tool draws there. */
+  startTool: (_tool: Tool): void => {},
   closeMenus: (): void => {},
   loadBackground: async (): Promise<void> => {},
   setMapSource: (_source: MapSourceId | null): void => {},

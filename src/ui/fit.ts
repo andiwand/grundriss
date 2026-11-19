@@ -53,7 +53,7 @@ export function inOneRow(bar: HTMLElement): boolean {
   return bar.scrollWidth <= bar.clientWidth;
 }
 
-/** True if the content of a bar that scrolls to the side is not wider than the bar. */
+/** True if the content of a bar that can scroll fits into the bar, in both directions. */
 export function noScroll(bar: HTMLElement): boolean {
-  return bar.scrollWidth <= bar.clientWidth;
+  return bar.scrollWidth <= bar.clientWidth && bar.scrollHeight <= bar.clientHeight;
 }

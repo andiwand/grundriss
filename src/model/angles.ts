@@ -1,6 +1,6 @@
 // The angle between two walls, for the editor and the panel when the user selects two walls.
 
-import { angleSweep } from "./drawing";
+import { angleSweep, smallerAngle } from "./drawing";
 import { add, cross, distance, scale, sub } from "./geometry";
 import { findWall, wallEnds } from "./plan";
 import { wallTangent } from "./wallcurve";
@@ -62,8 +62,7 @@ export function wallsAngle(plan: Plan, first: Id, second: Id): WallsAngle | null
 
 /** The angle at `center` from `a` to `b`, in the order that makes it not more than 180°. */
 function ordered(center: Point, a: Point, b: Point): WallsAngle {
-  const sweep = angleSweep(center, a, b);
-  const [from, to] = sweep > Math.PI ? [b, a] : [a, b];
-  const degrees = ((sweep > Math.PI ? 2 * Math.PI - sweep : sweep) * 180) / Math.PI;
+  const [from, to] = smallerAngle(center, a, b);
+  const degrees = (angleSweep(center, from, to) * 180) / Math.PI;
   return { degrees, center, a: from, b: to };
 }

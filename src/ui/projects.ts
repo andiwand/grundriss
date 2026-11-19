@@ -1,5 +1,6 @@
 import { planPreview } from "../export/preview";
 import { errorText, locale, t } from "../i18n";
+import { APP_VERSION } from "../version";
 import { icon, type IconName } from "../icons";
 import { makeBackup, readBackup } from "../io/backup";
 import { openPlanFile, pickFile, saveBlob } from "../io/files";
@@ -75,8 +76,11 @@ export const remoteHooks = {
    * plans are on it: a new plan, a file, and the example go there.
    */
   serverName: (): string | null => null,
-  /** Makes a plan on the server of the app, and opens it. */
-  create: async (_building: Building, _name: string): Promise<void> => {},
+  /**
+   * Makes a plan on the server of the app, and opens it. It gives false if no server answers,
+   * and then the caller makes the plan in the browser.
+   */
+  create: async (_building: Building, _name: string): Promise<boolean> => false,
 };
 
 /** The autosave keeps a revision in the history at most this often, in ms. */
@@ -229,7 +233,10 @@ async function checkStorage(): Promise<void> {
 /** The time from a change to the save, in milliseconds. */
 const AUTOSAVE_DELAY = 800;
 
-export const projectName = () => app.fileName.replace(/\.(grundriss|json)$/i, "") || "Plan";
+/** The extension of a plan file. */
+const PLAN_EXTENSION = /\.(grundriss|json|ya?ml)$/i;
+
+export const projectName = () => app.fileName.replace(PLAN_EXTENSION, "") || "Plan";
 
 /** Saves the open plan to the browser soon, if it changed since the last save. */
 export function scheduleAutosave(): void {
@@ -403,9 +410,8 @@ export async function openFileData(
   handle: FileSystemFileHandle | null,
 ): Promise<void> {
   const building = readBuildingFile(bytes);
-  if (remoteHooks.serverName() !== null) {
-    return remoteHooks.create(building, name.replace(/\.(grundriss|json)$/i, ""));
-  }
+  const plan = name.replace(PLAN_EXTENSION, "");
+  if (remoteHooks.serverName() !== null && (await remoteHooks.create(building, plan))) return;
   if (!(await confirmDiscard())) return;
   load(building, name, handle, "from-file");
   showStatus(t("Opened {name}.", { name }));
@@ -445,18 +451,22 @@ export function localize(building: Building): Building {
 }
 
 export async function newPlan(): Promise<void> {
-  if (remoteHooks.serverName() !== null) {
-    return remoteHooks.create(localize(emptyBuilding()), t("New plan"));
-  }
+  if (
+    remoteHooks.serverName() !== null &&
+    (await remoteHooks.create(localize(emptyBuilding()), t("New plan")))
+  )
+    return;
   if (!(await confirmDiscard())) return;
   load(localize(emptyBuilding()));
   shell.enterPlan("structure");
 }
 
 export async function openExample(): Promise<void> {
-  if (remoteHooks.serverName() !== null) {
-    return remoteHooks.create(localize(makeHouse()), t("Example house"));
-  }
+  if (
+    remoteHooks.serverName() !== null &&
+    (await remoteHooks.create(localize(makeHouse()), t("Example house")))
+  )
+    return;
   if (!(await confirmDiscard())) return;
   load(localize(makeHouse()), `${t("Example house")}.grundriss`);
   showStatus(t("Opened the example house. A change saves it as a project in the browser."));
@@ -706,15 +716,20 @@ function fillProjects(projects: ProjectInfo[] | null, onServer = false): void {
   list.append(mine);
 
   // The backup and the trash are less frequent, so they are links at the end.
+  // The version of the app is at the right end, and the links (also the later trash) before it.
   const links = document.createElement("nav");
   links.className = "home-links";
+  const version = document.createElement("span");
+  version.className = "app-version";
+  version.textContent = t("Grundriss {version}", { version: APP_VERSION });
+  links.append(version);
   const link = (iconName: IconName, text: string, run: () => void) => {
     const element = document.createElement("button");
     element.className = "link";
     element.innerHTML = icon(iconName);
     element.append(text);
     element.addEventListener("click", run);
-    links.append(element);
+    version.before(element);
     return element;
   };
   link("save", t("Back up all projects"), () => void backUpProjects());
@@ -875,7 +890,7 @@ function renameInPlace(card: HTMLElement, project: ProjectInfo): void {
     const value = input.value.trim();
     if (!keep || !value || value === project.name) return renderHome();
     if (project.id === projectId) {
-      const extension = /\.(json|ya?ml)$/i.exec(app.fileName)?.[0] ?? ".grundriss";
+      const extension = PLAN_EXTENSION.exec(app.fileName)?.[0] ?? ".grundriss";
       app.fileName = `${value}${extension}`;
       updateTitle();
     }

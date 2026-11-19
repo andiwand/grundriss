@@ -66,8 +66,6 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
   const curve = wallCurve(plan, wall);
   if (curve.length === 0) return null;
   const half = wall.thickness / 2;
-  /** The point at s along the wall from `a`, at o across it (+ is the side of `normal`). */
-  const at = (s: number, o: number) => curve.at(s, o);
   const s0 = opening.offset - opening.width / 2;
   const s1 = opening.offset + opening.width / 2;
   // In a curved wall, the gap follows the arc.
@@ -82,12 +80,12 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
       // Two panes next to each other, a bit apart across the wall, which overlap in the middle.
       const overlap = opening.width * 0.05;
       shape.glass.push(
-        [at(s0, -SLIDE_GAP / 2), at(opening.offset + overlap, -SLIDE_GAP / 2)],
-        [at(opening.offset - overlap, SLIDE_GAP / 2), at(s1, SLIDE_GAP / 2)],
+        [curve.at(s0, -SLIDE_GAP / 2), curve.at(opening.offset + overlap, -SLIDE_GAP / 2)],
+        [curve.at(opening.offset - overlap, SLIDE_GAP / 2), curve.at(s1, SLIDE_GAP / 2)],
       );
       return shape;
     }
-    shape.glass.push([at(s0, 0), at(s1, 0)]);
+    shape.glass.push([curve.at(s0, 0), curve.at(s1, 0)]);
   }
   if (opening.style === "fixed") return shape;
 
@@ -102,7 +100,7 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
       : [[s0, s1, opening.hinge === "a" ? -1 : 1]];
     for (const [p0, p1, way] of parts) {
       const move = way * (p1 - p0);
-      shape.leaves.push([at(p0 + move, o), at(p1 + move, o)]);
+      shape.leaves.push([curve.at(p0 + move, o), curve.at(p1 + move, o)]);
     }
     return shape;
   }
@@ -118,8 +116,8 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
       ? [[s0, s1]]
       : [[s1, s0]];
   for (const [h, c] of hinged) {
-    const hinge = at(h, face);
-    const closed = at(c, face);
+    const hinge = curve.at(h, face);
+    const closed = curve.at(c, face);
     const width = distance(hinge, closed);
     const open = scale(curve.normal(h), opening.swing * width);
     const leaf = add(hinge, open);
@@ -205,6 +203,11 @@ export function angleSweep(center: Point, a: Point, b: Point): number {
   const to = Math.atan2(b.y - center.y, b.x - center.x);
   const sweep = (to - from) % (2 * Math.PI);
   return sweep < 0 ? sweep + 2 * Math.PI : sweep;
+}
+
+/** The two arms in the order that makes the angle at `center` from the first not more than 180°. */
+export function smallerAngle(center: Point, a: Point, b: Point): [Point, Point] {
+  return angleSweep(center, a, b) > Math.PI ? [b, a] : [a, b];
 }
 
 /** The radius of a new angle dimension: half of the shorter side, from 0.2 m to 0.8 m. */

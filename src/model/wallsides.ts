@@ -302,13 +302,16 @@ export function mergeWalls(plan: Plan, wallIds: Id[]): Id | null {
   // The line goes along the first wall of the list, so that wall keeps its direction and its
   // colors. It can be anywhere on the line.
   const keep = line.walls.find((w) => w.id === wallIds[0])!;
+  // The openings of each wall before the move, so that the kept wall does not move the openings
+  // of the walls before it again.
+  const own = line.walls.map((wall) => plan.openings.filter((o) => o.wallId === wall.id));
   line.walls.forEach((wall, i) => {
     const start = getVertex(plan, line.vertices[i]);
     const [a, b] = wallEnds(plan, wall);
     const forward = wall.a === start.id;
     const before = span(first, start);
     const length = span(a, b);
-    for (const opening of plan.openings.filter((o) => o.wallId === wall.id)) {
+    for (const opening of own[i]) {
       opening.wallId = keep.id;
       opening.offset = before + (forward ? opening.offset : length - opening.offset);
       if (!forward) {

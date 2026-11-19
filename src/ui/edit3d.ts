@@ -4,10 +4,10 @@
 // of the other openings (`freeOffset`).
 
 import * as THREE from "three";
-import { distance, dot, scale, sub } from "../model/geometry";
 import { freeOffset } from "../model/openings";
-import { findOpening, findWall, moveFromOrigin, moveOrigin, wallEnds } from "../model/plan";
-import type { Item, ItemKind, Point } from "../model/types";
+import { findOpening, findWall, moveFromOrigin, moveOrigin } from "../model/plan";
+import { wallCurve, type WallCurve } from "../model/wallcurve";
+import type { Item, ItemKind } from "../model/types";
 import type { Pick } from "../view3d/view3d";
 import { app, doc, editor, view3d } from "./context";
 
@@ -40,16 +40,14 @@ type Drag =
   | {
       kind: "opening";
       id: string;
-      a: Point;
-      dir: Point;
+      curve: WallCurve;
       plane: THREE.Plane;
       along: number;
       offset: number;
     };
 
-/** The distance along the line from `a` in the direction `dir` of the world point. */
-const alongOf = (p: THREE.Vector3, a: Point, dir: Point) =>
-  dot({ x: p.x - a.x, y: p.z - a.y }, dir);
+/** The position along the center line of the wall that is nearest to the world point. */
+const alongOf = (p: THREE.Vector3, curve: WallCurve) => curve.project({ x: p.x, y: p.z });
 
 export function setupEdit3d(): void {
   let drag: Drag | null = null;
@@ -101,23 +99,22 @@ export function setupEdit3d(): void {
         const opening = findOpening(plan, pick.item.id);
         const wall = opening && findWall(plan, opening.wallId);
         if (!opening || !wall) return false;
-        const [a, b] = wallEnds(plan, wall);
-        const length = distance(a, b);
-        if (length === 0) return false;
-        const dir = scale(sub(b, a), 1 / length);
-        // The plane of the wall: vertical, through the line of the wall.
-        const normal = new THREE.Vector3(-dir.y, 0, dir.x);
+        const curve = wallCurve(plan, wall);
+        if (curve.length === 0) return false;
+        // The plane of the wall: vertical, along the center line at the opening. The point on
+        // the plane goes back to the center line, so the drag also follows a curved wall.
+        const n = curve.normal(opening.offset);
+        const at = curve.at(opening.offset);
         const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
-          normal,
-          new THREE.Vector3(a.x, 0, a.y),
+          new THREE.Vector3(n.x, 0, n.y),
+          new THREE.Vector3(at.x, 0, at.y),
         );
         drag = {
           kind: "opening",
           id: opening.id,
-          a,
-          dir,
+          curve,
           plane,
-          along: alongOf(pick.point, a, dir),
+          along: alongOf(pick.point, curve),
           offset: opening.offset,
         };
       } else {
@@ -152,8 +149,8 @@ export function setupEdit3d(): void {
         };
         doc.update((plan) => moveFromOrigin(plan, origin, delta));
       } else {
-        const { id, a, dir, along, offset } = drag;
-        const wanted = snap(offset + alongOf(hit, a, dir) - along, e.altKey);
+        const { id, curve, along, offset } = drag;
+        const wanted = snap(offset + alongOf(hit, curve) - along, e.altKey);
         doc.update((plan) => {
           const opening = findOpening(plan, id);
           if (opening) opening.offset = freeOffset(plan, opening, wanted);

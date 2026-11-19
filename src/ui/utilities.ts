@@ -19,7 +19,7 @@ import {
 } from "../model/services";
 import type { PvArray, ServiceSystem } from "../model/types";
 import { renderConflicts } from "./conflicts";
-import { $, cached, doc, editor, HINTS, shell, showStatus } from "./context";
+import { $, cached, doc, editor, shell } from "./context";
 import { pvSourceNote } from "./energy";
 import {
   button,
@@ -34,7 +34,6 @@ import {
   stats,
   table,
 } from "./panel";
-import { renderPanel } from "./selection";
 
 export const SYSTEM_ICONS: Record<ServiceSystem, IconName> = {
   water: "drop",
@@ -306,9 +305,7 @@ export function openServicesMenu(system: ServiceSystem, anchor: HTMLElement): vo
       shell.setTopic("utilities");
       const ceiling = defaultWallHeight(doc.plan) - 0.05;
       editor.startFixture(newFixture(type.type, { x: 0, y: 0 }, ceiling));
-      shell.markTool("fixture");
-      showStatus(HINTS.fixture);
-      renderPanel();
+      shell.startTool("fixture");
     });
     menu.append(item);
   }
@@ -325,9 +322,7 @@ export function openServicesMenu(system: ServiceSystem, anchor: HTMLElement): vo
       shell.closeMenus();
       shell.setTopic("utilities");
       editor.startRun(kind.kind);
-      shell.markTool("run");
-      showStatus(HINTS.run);
-      renderPanel();
+      shell.startTool("run");
     });
     menu.append(item);
   }

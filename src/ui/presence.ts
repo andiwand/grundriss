@@ -11,7 +11,7 @@ import { icon } from "../icons";
 import type { Person, ServerClient } from "../io/server";
 import { findStory } from "../model/building";
 import { dimensionShape } from "../model/drawing";
-import { itemExists } from "../model/plan";
+import { itemExists, parseCorner } from "../model/plan";
 import { curveOf } from "../model/wallcurve";
 import { findRooms } from "../model/rooms";
 import type { Id, Item, Plan, Point } from "../model/types";
@@ -473,7 +473,7 @@ function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): voi
     const b = wall && vertex(wall.b);
     if (wall && a && b) {
       // The center line of the wall, along the arc of a curved wall.
-      const curve = curveOf(a, b, wall.bulge ?? 0);
+      const curve = curveOf(a, b, wall.bulge ?? 0, wall.thickness / 2);
       shape(layer, "polyline", {
         ...stroke,
         points: pointList(curve.points(0, curve.length)),
@@ -538,10 +538,8 @@ function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): voi
     const area = plan.areas.find((x) => x.id === item.id);
     if (area) shape(layer, "polygon", { ...stroke, points: pointList(area.points) });
   } else if (item.kind === "area-corner") {
-    const at = item.id.lastIndexOf(":");
-    const p = plan.areas.find((x) => x.id === item.id.slice(0, at))?.points[
-      Number(item.id.slice(at + 1))
-    ];
+    const corner = parseCorner(item.id);
+    const p = plan.areas.find((x) => x.id === corner.id)?.points[corner.index];
     if (p) shape(layer, "circle", { ...stroke, cx: p.x, cy: p.y, r: 8 / zoom });
   } else if (item.kind === "fence") {
     const fence = plan.fences.find((x) => x.id === item.id);

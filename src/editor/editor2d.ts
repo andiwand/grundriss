@@ -16,6 +16,7 @@ import {
   dimensionShape,
   openingShape,
   planBounds,
+  smallerAngle,
   stairDrawing,
   wallOutline,
   type StairDrawing,
@@ -42,6 +43,7 @@ import {
   newTree,
   outdoorOrder,
   railingSides,
+  cleanRailings,
 } from "../model/outdoor";
 import { clearHeightLines, WOFLV } from "../model/attic";
 import {
@@ -91,6 +93,7 @@ import {
   wallMoveTargets,
   WALL_DEFAULTS,
   type MoveOrigin,
+  parseCorner,
 } from "../model/plan";
 import { findRooms, pointInPolygon, roomLabel } from "../model/rooms";
 import { conflictIds, planConflicts } from "../model/conflicts";
@@ -112,7 +115,7 @@ import type {
   Point,
 } from "../model/types";
 import { wallFaces as faceExtents } from "../model/walljoin";
-import { bulgeThrough, isCurved, wallCurve } from "../model/wallcurve";
+import { bulgeThrough, clampBulge, isCurved, wallCurve } from "../model/wallcurve";
 import { wallsAngle } from "../model/angles";
 import { lineSide, wallLine, type WallLine } from "../model/wallsides";
 
@@ -266,6 +269,8 @@ export class Editor2D {
   private pendingTap: PointerEvent | null = null;
   private chain: Snap | null = null;
   private cursor: Snap | null = null;
+  /** The pointer before the snap, so that the preview of a path closes where a click closes it. */
+  private pointer: Point = { x: 0, y: 0 };
   /** The points of the dimension tool: the two ends, then the click that sets the offset. */
   private measure: Point[] = [];
   /** The two points of the measure tool. It shows the distance and does not change the plan. */
@@ -643,8 +648,8 @@ export class Editor2D {
     // from the highest index down, because a removed corner changes the indices after it.
     const corners = items
       .filter((i) => i.kind === "roof-corner")
-      .map((i) => i.id.split(":"))
-      .map(([roofId, index]) => ({ roofId, index: Number(index) }))
+      .map((i) => parseCorner(i.id))
+      .map(({ id, index }) => ({ roofId: id, index }))
       .sort((p, q) => q.index - p.index);
     // A selection that removes nothing, for example a room or the corner of a roof with three
     // corners, makes no entry in the history.
@@ -738,12 +743,7 @@ export class Editor2D {
     const items = this.items;
     // A corner of a roof or an area: its id is the id of the owner and the index of the corner.
     const corners = (kind: Item["kind"]) =>
-      items
-        .filter((i) => i.kind === kind)
-        .map((i) => {
-          const at = i.id.lastIndexOf(":");
-          return { id: i.id.slice(0, at), index: Number(i.id.slice(at + 1)) };
-        });
+      items.filter((i) => i.kind === kind).map((i) => parseCorner(i.id));
     const roofs = items.filter((i) => i.kind === "roof").map((i) => i.id);
     const roofCorners = corners("roof-corner");
     if (roofs.length > 0 || roofCorners.length > 0) {
@@ -1168,8 +1168,7 @@ export class Editor2D {
         ? e.target.closest<SVGElement>('[data-kind="roof-insert"], [data-kind="area-insert"]')
         : null;
     if (insert && !this.doc.readOnly) {
-      const [id, index] = insert.dataset.id!.split(":");
-      const i = Number(index);
+      const { id, index: i } = parseCorner(insert.dataset.id!);
       const middle = (outline: Point[]) =>
         outline.splice(i + 1, 0, scale(add(outline[i], outline[(i + 1) % outline.length]), 0.5));
       this.doc.begin();
@@ -1188,9 +1187,9 @@ export class Editor2D {
           const area = plan.areas.find((a) => a.id === id)!;
           middle(area.points);
           // The two halves of a side with a railing both keep it.
-          const railed = area.railings.includes(i);
-          area.railings = area.railings.map((side) => (side > i ? side + 1 : side));
-          if (railed) area.railings.push(i + 1);
+          const shifted = area.railings.map((side) => (side > i ? side + 1 : side));
+          if (area.railings.includes(i)) shifted.push(i + 1);
+          area.railings = cleanRailings(shifted, area.points.length);
         });
         this.items = [{ kind: "area-corner", id: `${id}:${i + 1}` }];
         this.drag = { kind: "area-corner", areaId: id, index: i + 1 };
@@ -1270,12 +1269,12 @@ export class Editor2D {
     }
     if (hit.kind === "vertex") this.drag = { kind: "vertex", id: hit.id, target: null };
     if (hit.kind === "roof-corner") {
-      const [roofId, index] = hit.id.split(":");
-      this.drag = { kind: "roof-corner", roofId, index: Number(index) };
+      const { id, index } = parseCorner(hit.id);
+      this.drag = { kind: "roof-corner", roofId: id, index };
     }
     if (hit.kind === "area-corner") {
-      const [areaId, index] = hit.id.split(":");
-      this.drag = { kind: "area-corner", areaId, index: Number(index) };
+      const { id, index } = parseCorner(hit.id);
+      this.drag = { kind: "area-corner", areaId: id, index };
     }
     if (hit.kind === "opening") this.drag = { kind: "opening", id: hit.id };
     if (hit.kind === "dimension") this.drag = { kind: "dimension", id: hit.id };
@@ -1298,6 +1297,7 @@ export class Editor2D {
     const world = this.toWorld(e);
     const drag = this.drag;
     if (!drag) {
+      this.pointer = world;
       const snapping = ["wall", "stair", "chimney", "run"].includes(this.currentTool);
       // The third click of a dimension line sets its offset: that point does not snap.
       const ends =
@@ -1444,8 +1444,12 @@ export class Editor2D {
         this.doc.update((plan) => {
           const wall = findWall(plan, drag.id)!;
           const [a, b] = wallEnds(plan, wall);
-          let bulge = bulgeThrough(a, b, world);
-          if (!e.altKey) bulge = Math.round(bulge / GRID_STEP) * GRID_STEP;
+          // The radius of the arc stays at least the half thickness, also after the grid step.
+          const half = wall.thickness / 2;
+          let bulge = bulgeThrough(a, b, world, half);
+          if (!e.altKey) {
+            bulge = clampBulge(distance(a, b), Math.round(bulge / GRID_STEP) * GRID_STEP, half);
+          }
           if (Math.abs(bulge) < 1e-9) delete wall.bulge;
           else wall.bulge = bulge;
         });
@@ -1934,7 +1938,9 @@ export class Editor2D {
       return;
     }
     const [center, a] = this.measure;
-    const [from, to] = angleSweep(center, a, point) > Math.PI ? [point, a] : [a, point];
+    const [from, to] = smallerAngle(center, a, point);
+    // A point on the first side gives no angle.
+    if (angleSweep(center, from, to) < 1e-6) return;
     const radius = defaultAngleRadius(center, from, to);
     let id: Id = "";
     this.doc.edit((plan) => (id = addDimension(plan, from, to, radius, center).id));
@@ -2003,9 +2009,9 @@ export class Editor2D {
     const items = this.items.filter((item) => {
       if (item.kind === "roof") return roofs.some((r) => r.id === item.id);
       if (item.kind === "roof-corner") {
-        const [roofId, index] = item.id.split(":");
-        const roof = roofs.find((r) => r.id === roofId);
-        return !!roof && Number(index) < roof.outline.length;
+        const { id, index } = parseCorner(item.id);
+        const roof = roofs.find((r) => r.id === id);
+        return !!roof && index < roof.outline.length;
       }
       return itemExists(plan, item);
     });
@@ -2930,7 +2936,7 @@ export class Editor2D {
         }
       }
       if (center && a && end && distance(center, end) > 1e-9) {
-        const [from, to] = angleSweep(center, a, end) > Math.PI ? [end, a] : [a, end];
+        const [from, to] = smallerAngle(center, a, end);
         const preview = svg("g", { class: "dimension-line preview-dimension" }, group);
         this.drawDimension(
           preview,
@@ -2976,7 +2982,7 @@ export class Editor2D {
       // The first point grows when a click on it closes the path.
       const line = [...this.pathPoints];
       const cursor = this.cursor;
-      const closes = !!cursor && this.closesPath(cursor.point, cursor.point);
+      const closes = !!cursor && this.closesPath(this.pointer, cursor.point);
       if (cursor) {
         const target = closes ? this.pathPoints[0] : cursor.point;
         if (!closes)

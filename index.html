@@ -179,18 +179,16 @@
            It serves the 2D and the 3D view. On a phone, it lies over the view (style.css). -->
       <nav class="rail" id="rail" aria-label="Tools and stories">
         <div class="palette" id="tools" role="toolbar" aria-label="Tools">
-          <button data-tool="select" data-icon="select" title="Select and move (V)">
-            Select<kbd>V</kbd>
-          </button>
+          <button data-tool="select" data-icon="select" title="Select and move (V)">Select</button>
           <button data-tool="pan" data-icon="hand" title="Move the view (P, or hold Space)">
-            Pan<kbd>P</kbd>
+            Pan
           </button>
           <button
             data-tool="measure"
             data-icon="tape"
             title="Measure a distance. The plan does not change (M)"
           >
-            Measure<kbd>M</kbd>
+            Measure
           </button>
           <span class="divider"></span>
           <button
@@ -207,7 +205,7 @@
             data-icon="ruler"
             title="Set the scale of the background (C)"
           >
-            Scale<kbd>C</kbd>
+            Scale
           </button>
           <button
             data-topic="structure"
@@ -219,7 +217,7 @@
           </button>
           <span class="divider" data-topic="structure"></span>
           <button data-topic="structure" data-tool="wall" data-icon="wall" title="Draw walls (W)">
-            Wall<kbd>W</kbd>
+            Wall
           </button>
           <button
             data-topic="structure"
@@ -227,7 +225,7 @@
             data-icon="door"
             title="Put a door in a wall (D)"
           >
-            Door<kbd>D</kbd>
+            Door
           </button>
           <button
             data-topic="structure"
@@ -235,7 +233,7 @@
             data-icon="window"
             title="Put a window in a wall (N)"
           >
-            Window<kbd>N</kbd>
+            Window
           </button>
           <button
             data-topic="structure"
@@ -243,7 +241,7 @@
             data-icon="stair"
             title="Draw a stair up to the next story (S)"
           >
-            Stair<kbd>S</kbd>
+            Stair
           </button>
           <button
             data-topic="structure"
@@ -251,7 +249,7 @@
             data-icon="chimney"
             title="Put a chimney (H)"
           >
-            Chimney<kbd>H</kbd>
+            Chimney
           </button>
           <button
             data-topic="structure"
@@ -259,7 +257,7 @@
             data-icon="dimension"
             title="Draw a dimension line (L)"
           >
-            Dimension<kbd>L</kbd>
+            Dimension
           </button>
           <button
             data-topic="structure"
@@ -267,7 +265,7 @@
             data-icon="angle"
             title="Measure an angle and keep it on the plan (K)"
           >
-            Angle<kbd>K</kbd>
+            Angle
           </button>
           <button
             data-topic="outdoor"
@@ -275,7 +273,7 @@
             data-icon="terrace"
             title="Draw an outdoor area: a terrace, a balcony, a path, a lawn, or the plot (A)"
           >
-            Area<kbd>A</kbd>
+            Area
           </button>
           <button
             data-topic="outdoor"
@@ -283,10 +281,10 @@
             data-icon="fence"
             title="Draw a fence, a hedge, or a garden wall (G)"
           >
-            Fence<kbd>G</kbd>
+            Fence
           </button>
           <button data-topic="outdoor" data-tool="tree" data-icon="tree" title="Put a tree (T)">
-            Tree<kbd>T</kbd>
+            Tree
           </button>
           <button
             data-topic="utilities"
@@ -313,7 +311,7 @@
             data-menu
             title="Sockets, lights, cables, and PV (E)"
           >
-            Electricity<kbd>E</kbd>
+            Electricity
           </button>
           <button
             data-topic="utilities"
@@ -330,7 +328,7 @@
             data-icon="sofa"
             title="Open the furniture catalog (I)"
           >
-            Furniture<kbd>I</kbd>
+            Furniture
           </button>
         </div>
         <div class="stories" id="stories" aria-label="Stories"></div>
@@ -439,6 +437,7 @@
       <button id="save" role="menuitem" data-icon="save"><span>Save</span></button>
       <button id="save-as" role="menuitem" data-icon="saveAs"><span>Save as</span></button>
       <button id="versions" role="menuitem" data-icon="history"><span>Versions</span></button>
+      <div class="menu-label app-version" id="app-version" role="none"></div>
     </div>
     <div class="menu services-menu" id="services-menu" role="menu" hidden></div>
     <div class="menu" id="layers-menu" role="menu" hidden>

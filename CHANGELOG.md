@@ -4,8 +4,16 @@ The changes that a user notices.
 
 ## Unreleased
 
+- The version of the app shows at the end of the home page and in the menu of the file name.
+- Fixes: a merge of walls keeps the doors and the windows in place also when the kept wall is
+  not the first one of the line. A curved wall counts in the cost of a variant, keeps a radius
+  of at least half its thickness, and a door on it follows the arc in the 3D view. Without the
+  stories above, a chimney in 3D ends at the top of the walls. On a phone, **All stories** is
+  not under the tools any more, and a low window shows all tools of the rail. A tool in the 3D
+  view opens the 2D view again also when it is the same tool. The German app translates the
+  errors of the climate and of a damaged file.
 - Plan files are YAML now, so that a person can read them: `plan.yaml` in a `.grundriss` package,
-  the `.yaml` file of **Save as**, the files of a backup, and the revisions on a server. The app
+  the `.yaml` file of **Save as**, and the files of a backup. The app
   still opens `.json` files and older packages and backups, and a `.json` file stays JSON when
   you save it again.
 - Angles: the tool **Angle** (K) measures an angle with three clicks (the corner, then a point

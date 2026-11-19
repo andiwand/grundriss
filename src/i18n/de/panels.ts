@@ -222,10 +222,6 @@ export const PANELS: Record<string, string> = {
   Outside: "Außen",
   "Color of the room": "Farbe des Raums",
   "Color of the facade": "Farbe der Fassade",
-  Insulation: "Dämmung",
-  Outer: "Außen",
-  Inner: "Innen",
-  "U-value W/(m²K)": "U-Wert W/(m²K)",
   "An inner wall between two rooms does not lose heat.":
     "Eine Innenwand zwischen zwei Räumen verliert keine Wärme.",
   "The wall has the layers of the outer walls of the building.":

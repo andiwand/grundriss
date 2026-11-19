@@ -48,6 +48,9 @@ const PATTERNS: [RegExp, string][] = [
   [/^Cellar (\d+)$/, "Keller $1"],
   [/^(\d+)th floor$/, "$1. Obergeschoss"],
   [/^Field (\d+)$/, "Feld $1"],
+  // The reader of the file names the damaged part with the keys of the file, so only the start
+  // of its message has a translation.
+  [/^The file is damaged: /, "Die Datei ist beschädigt: "],
 ];
 
 /** The German text of a key: from the dictionary, or from a pattern of a name. */

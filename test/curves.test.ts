@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { wallsAngle } from "../src/model/angles";
 import { emptyBuilding } from "../src/model/building";
-import { angleSweep, dimensionShape, openingShape, wallOutline } from "../src/model/drawing";
+import {
+  angleSweep,
+  dimensionShape,
+  openingShape,
+  smallerAngle,
+  wallOutline,
+} from "../src/model/drawing";
 import { parseBuilding, serializeBuilding } from "../src/model/file";
 import { distance } from "../src/model/geometry";
 import {
@@ -18,7 +24,16 @@ import {
 } from "../src/model/plan";
 import { findRooms, netRoomArea } from "../src/model/rooms";
 import { mergeWalls, splitInTwo } from "../src/model/wallsides";
-import { bulgeThrough, curveOf, partBulge, wallCurve, wallTangent } from "../src/model/wallcurve";
+import {
+  bulgeThrough,
+  clampBulge,
+  curveOf,
+  maxBulge,
+  partBulge,
+  wallCurve,
+  wallTangent,
+} from "../src/model/wallcurve";
+import { layoutChanges, noLayoutChange } from "../src/model/layout";
 import { wallFaces } from "../src/model/walljoin";
 import type { Plan } from "../src/model/types";
 
@@ -274,5 +289,95 @@ describe("angles", () => {
     const right = plan.walls.find((w) => w.id !== top.id && (w.a === top.a || w.b === top.a))!;
     // The half circle goes on in the line of the wall at the corner: 180°.
     expect(wallsAngle(plan, top.id, right.id)!.degrees).toBeCloseTo(180);
+  });
+});
+
+describe("the limits of a curved wall", () => {
+  it("keeps the radius of a thick wall at least its half thickness", () => {
+    // A chord of 0.4 m allows a half circle of the radius 0.2 m, but a wall of 0.5 m needs 0.25 m.
+    expect(maxBulge(0.4)).toBeCloseTo(0.2);
+    const max = maxBulge(0.4, 0.25);
+    expect(max).toBeCloseTo(0.25 - Math.sqrt(0.25 ** 2 - 0.2 ** 2));
+    expect(curveOf({ x: 0, y: 0 }, { x: 0.4, y: 0 }, max).circle!.radius).toBeCloseTo(0.25);
+    const plan = emptyPlan();
+    const wall = addWall(
+      plan,
+      addVertex(plan, { x: 0, y: 0 }).id,
+      addVertex(plan, { x: 0.4, y: 0 }).id,
+      { thickness: 0.5, height: 2.5 },
+    )!;
+    wall.bulge = 0.2;
+    const curve = wallCurve(plan, wall);
+    expect(curve.circle!.radius).toBeGreaterThanOrEqual(0.25 - 1e-9);
+    expect(curve.bulge).toBeCloseTo(max);
+    // A thin wall keeps the half circle.
+    expect(maxBulge(0.4, 0.1)).toBeCloseTo(0.2);
+  });
+
+  it("keeps a bulge on the grid in the limits", () => {
+    // The pointer gives the largest bulge, 1.985 m; the grid step of 5 cm makes 2 m of it.
+    const chord = 3.97;
+    const rounded =
+      Math.round(bulgeThrough({ x: 0, y: 0 }, { x: chord, y: 0 }, { x: 2, y: 5 }) / 0.05) * 0.05;
+    expect(rounded).toBeCloseTo(2);
+    expect(clampBulge(chord, rounded)).toBeCloseTo(chord / 2);
+    expect(clampBulge(chord, -rounded)).toBeCloseTo(-chord / 2);
+  });
+});
+
+describe("the smaller angle", () => {
+  const center = { x: 0, y: 0 };
+  it("orders the arms so that the angle is not more than 180°", () => {
+    const [a, b] = [
+      { x: 1, y: 0 },
+      { x: 0, y: -1 },
+    ];
+    expect(smallerAngle(center, a, b)).toEqual([b, a]);
+    expect(angleSweep(center, ...smallerAngle(center, a, b))).toBeCloseTo(Math.PI / 2);
+  });
+  it("gives no angle for a point on the first side", () => {
+    expect(angleSweep(center, ...smallerAngle(center, { x: 1, y: 0 }, { x: 3, y: 0 }))).toBe(0);
+  });
+});
+
+describe("the changes of the floor plan with curved walls", () => {
+  /** A building with one wall of 4 m, and a copy of it as the variant. */
+  function walls(bulge?: number) {
+    const building = emptyBuilding();
+    const story = building.stories[0];
+    const a = addVertex(story, { x: 0, y: 0 }).id;
+    const b = addVertex(story, { x: 4, y: 0 }).id;
+    const wall = addWall(story, a, b, { thickness: 0.2, height: 2.5 })!;
+    if (bulge !== undefined) wall.bulge = bulge;
+    return { building, variant: structuredClone(building) };
+  }
+
+  it("counts a bent wall as a wall to remove and a new wall", () => {
+    const { building, variant } = walls();
+    variant.stories[0].walls[0].bulge = 1;
+    const arc = wallLength(variant.stories[0], variant.stories[0].walls[0]);
+    const changes = layoutChanges(building, variant);
+    expect(changes.removed).toBeCloseTo(4 * 2.5);
+    expect(changes.added).toBeCloseTo(arc * 2.5);
+    expect(noLayoutChange(changes)).toBe(false);
+  });
+
+  it("counts a curved wall that stays as no change, also in the other direction", () => {
+    const { building, variant } = walls(1);
+    expect(noLayoutChange(layoutChanges(building, variant))).toBe(true);
+    const wall = variant.stories[0].walls[0];
+    [wall.a, wall.b] = [wall.b, wall.a];
+    wall.bulge = -1;
+    expect(noLayoutChange(layoutChanges(building, variant))).toBe(true);
+  });
+
+  it("finds an opening on the arc of a curved wall", () => {
+    const { building, variant } = walls(1);
+    const story = variant.stories[0];
+    addOpening(story, story.walls[0].id, "window", 2);
+    // The window is new, and the wall stays, so it needs a cut.
+    const changes = layoutChanges(building, variant);
+    expect(changes.windows).toBeGreaterThan(0);
+    expect(changes.cuts).toBe(1);
   });
 });

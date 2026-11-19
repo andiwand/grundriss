@@ -63,8 +63,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
   the admin, an invite, and a new password are links for one use (`/setup/<code>`,
   `/invite/<code>`, `/reset/<code>`), which go on to the app with the code in the fragment. A
   request that changes something must have the `Origin` of the server. The data of the server is
-  in `data.yaml`; the revisions are plan files in YAML (older ones in JSON), with each large image
-  once in `blobs/`. Each
+  in `data.yaml`; the revisions are plan files in JSON (fast for each patch), with each large
+  image once in `blobs/`. The API takes and gives the plans as JSON. Each
   account has a space and a number of plans; a revision counts for the owner of its plan. All
   tabs that can write edit an open plan at the same time: each tab sends the
   change since the last revision that it knows as a patch (`src/model/patch.ts`: the objects by

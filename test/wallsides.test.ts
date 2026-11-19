@@ -233,6 +233,29 @@ describe("walls in one line", () => {
     expect(p.vertices.map((v) => v.x).sort()).toEqual([0, 3]);
   });
 
+  it("keeps the openings in place when the kept wall is not the first of the line", () => {
+    const p = plan([
+      [P(0, 0), P(2, 0)],
+      [P(2, 0), P(5, 0)],
+    ]);
+    const [w1, w2] = p.walls.map((w) => w.id);
+    const door = {
+      kind: "door" as const,
+      width: 0.8,
+      height: 2,
+      sill: 0,
+      style: "hinged" as const,
+    };
+    const more = { leaves: 1 as const, hinge: "a" as const, swing: 1 as const };
+    p.openings.push({ id: "a", wallId: w1, offset: 1, ...door, ...more });
+    p.openings.push({ id: "b", wallId: w2, offset: 1, ...door, ...more });
+    expect(mergeWalls(p, [w2, w1])).toBe(w2);
+    expect(p.openings.map((o) => [o.wallId, o.offset])).toEqual([
+      [w2, 1],
+      [w2, 3],
+    ]);
+  });
+
   it("does not merge walls of other thickness", () => {
     const p = plan([[P(0, 0), P(2, 0)]]);
     const other = plan([[P(2, 0), P(5, 0)]], 0.3);

@@ -37,6 +37,15 @@ export const OPENING_DEFAULTS: Record<
   window: { width: 1.2, height: 1.2, sill: 0.9 },
 };
 
+/**
+ * The owner and the index of a corner in the id of a selection, for example "roof-1:2" of a
+ * corner of a roof or an area.
+ */
+export function parseCorner(id: string): { id: Id; index: number } {
+  const at = id.lastIndexOf(":");
+  return { id: id.slice(0, at), index: Number(id.slice(at + 1)) };
+}
+
 export function newId(prefix: string): Id {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
