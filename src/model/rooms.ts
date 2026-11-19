@@ -2,14 +2,20 @@
 
 import { fmt } from "./format";
 import { centroid, closestOnSegment, signedArea } from "./geometry";
-import type { Id, Plan, Point, RoomInfo } from "./types";
+import type { Id, Plan, Point, RoomInfo, Wall } from "./types";
+import { isCurved, wallCurve, wallTangent } from "./wallcurve";
 
 export interface Room {
   /** An id from the vertices of the room. It stays the same while the walls move. */
   key: string;
   vertexIds: Id[];
-  /** The polygon on the center lines of the walls. */
+  /**
+   * The polygon on the center lines of the walls. A curved wall adds the points of its arc, so
+   * the polygon can have more points than `vertexIds`.
+   */
   polygon: Point[];
+  /** The id of the wall of each side of the polygon: from the point i to the point i + 1. */
+  sides: Id[];
   /** The area inside the center lines, in square meters. */
   area: number;
   /** A point well inside the room, for the label. */
@@ -21,7 +27,49 @@ export interface Room {
 interface Face {
   cycle: Id[];
   polygon: Point[];
+  sides: Id[];
   area: number;
+}
+
+/** The walls of the plan by their two vertices: `from>to`, in both directions. */
+function wallsByEnds(plan: Plan): Map<string, Wall> {
+  const walls = new Map<string, Wall>();
+  for (const wall of plan.walls) {
+    walls.set(`${wall.a}>${wall.b}`, wall);
+    walls.set(`${wall.b}>${wall.a}`, wall);
+  }
+  return walls;
+}
+
+/**
+ * The polygon of a cycle of vertices on the center lines of the walls, with the wall of each
+ * side. A curved wall adds the points of its arc between its vertices.
+ */
+function ringOf(
+  plan: Plan,
+  cycle: Id[],
+  walls: Map<string, Wall>,
+): { polygon: Point[]; sides: Id[] } {
+  const position = new Map(plan.vertices.map((v) => [v.id, v]));
+  const polygon: Point[] = [];
+  const sides: Id[] = [];
+  cycle.forEach((id, k) => {
+    const p = position.get(id)!;
+    const wall = walls.get(`${id}>${cycle[(k + 1) % cycle.length]}`);
+    if (!wall || !isCurved(wall)) {
+      polygon.push({ x: p.x, y: p.y });
+      sides.push(wall?.id ?? "");
+      return;
+    }
+    const curve = wallCurve(plan, wall);
+    const points = curve.points(0, curve.length);
+    if (wall.a !== id) points.reverse();
+    for (const q of points.slice(0, -1)) {
+      polygon.push(q);
+      sides.push(wall.id);
+    }
+  });
+  return { polygon, sides };
 }
 
 /**
@@ -34,16 +82,18 @@ interface Face {
 function faces(plan: Plan): Face[] {
   const position = new Map(plan.vertices.map((v) => [v.id, v]));
   const neighbors = new Map<Id, Id[]>();
+  const walls = wallsByEnds(plan);
   for (const wall of plan.walls) {
     if (!position.has(wall.a) || !position.has(wall.b)) continue;
     neighbors.set(wall.a, [...(neighbors.get(wall.a) ?? []), wall.b]);
     neighbors.set(wall.b, [...(neighbors.get(wall.b) ?? []), wall.a]);
   }
+  // The order of the walls around a vertex comes from their directions at the vertex, so a
+  // curved wall has its place by its tangent, not by its other end.
   for (const [id, list] of neighbors) {
-    const center = position.get(id)!;
     const angle = (n: Id) => {
-      const p = position.get(n)!;
-      return Math.atan2(p.y - center.y, p.x - center.x);
+      const u = wallTangent(plan, walls.get(`${id}>${n}`)!, id);
+      return Math.atan2(u.y, u.x);
     };
     list.sort((p, q) => angle(p) - angle(q));
   }
@@ -69,11 +119,8 @@ function faces(plan: Plan): Face[] {
         to = next;
       }
       if (cycle.length < 3) continue;
-      const polygon = cycle.map((id) => {
-        const p = position.get(id)!;
-        return { x: p.x, y: p.y };
-      });
-      result.push({ cycle, polygon, area: signedArea(polygon) });
+      const { polygon, sides } = ringOf(plan, cycle, walls);
+      result.push({ cycle, polygon, sides, area: signedArea(polygon) });
     }
   }
   return result;
@@ -83,10 +130,11 @@ function faces(plan: Plan): Face[] {
 export function findRooms(plan: Plan): Room[] {
   const rooms: Room[] = faces(plan)
     .filter((face) => face.area > 1e-6)
-    .map(({ cycle, polygon, area }) => ({
+    .map(({ cycle, polygon, sides, area }) => ({
       key: [...cycle].sort().join("|"),
       vertexIds: cycle,
       polygon,
+      sides,
       area,
       labelAt: interiorPoint(polygon),
       info: null,
@@ -224,7 +272,6 @@ export function planOutline(plan: Plan): Point[] | null {
   // A wall that sticks out (a dead end) appears twice in the walk: out to its free end and back.
   // It is not part of a roof, so the function removes each such spike.
   const ids = [...best.cycle];
-  const polygon = [...best.polygon];
   for (let i = 0; ids.length >= 3 && i < ids.length;) {
     const n = ids.length;
     if (ids[(i + n - 1) % n] !== ids[(i + 1) % n]) {
@@ -232,12 +279,11 @@ export function planOutline(plan: Plan): Point[] | null {
       continue;
     }
     // Remove the free end at `i` and the second copy of the vertex before it, at `i + 1`.
-    for (const k of [Math.max(i, (i + 1) % n), Math.min(i, (i + 1) % n)]) {
-      ids.splice(k, 1);
-      polygon.splice(k, 1);
-    }
+    for (const k of [Math.max(i, (i + 1) % n), Math.min(i, (i + 1) % n)]) ids.splice(k, 1);
     i = Math.max(0, i - 2);
   }
+  // The points of the outline, with the arcs of the curved walls.
+  const polygon = ringOf(plan, ids, wallsByEnds(plan)).polygon;
   // An inner wall that meets the outer wall puts a corner on a straight side. A roof needs one
   // side for each straight run, so the function removes these corners.
   for (let i = 0; polygon.length >= 3 && i < polygon.length;) {
@@ -264,9 +310,7 @@ export function netRoomArea(story: Plan, room: Room): number {
   if (n < 3) return room.area;
   const sign = Math.sign(signedArea(points)) || 1;
   const thickness = (i: number) => {
-    const a = room.vertexIds[i];
-    const b = room.vertexIds[(i + 1) % n];
-    const wall = story.walls.find((w) => (w.a === a && w.b === b) || (w.a === b && w.b === a));
+    const wall = story.walls.find((w) => w.id === room.sides[i]);
     return wall ? wall.thickness / 2 : 0;
   };
   // Each side as a line n · p = c, moved inward.

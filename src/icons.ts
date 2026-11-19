@@ -26,6 +26,9 @@ const ICONS = {
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   tape: '<rect x="3" y="6" width="13" height="13" rx="3"/><circle cx="9.5" cy="12.5" r="2.5"/><path d="M16 17h5v-2"/>',
   dimension: '<path d="M4 8v8M20 8v8M4 12h16"/><path d="m7 9-3 3 3 3M17 9l3 3-3 3"/>',
+  angle: '<path d="M4 20h16M4 20 16 6"/><path d="M11 20a7 7 0 0 0-2.3-5.2"/>',
+  curve:
+    '<path d="M4 18C6 9 18 9 20 18"/><circle cx="4" cy="18" r="1.5"/><circle cx="20" cy="18" r="1.5"/>',
   flipHinge: '<path d="M12 4v16"/><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
   flipSwing: '<path d="M4 12h16"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/>',
   export: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',

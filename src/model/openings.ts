@@ -1,8 +1,8 @@
 // The rules for the place of a door or a window on its wall: the part of the wall that is free
 // for an opening, a place without overlap with the other openings, and the side of the room.
 
-import { add, distance, perpendicular, scale, sub } from "./geometry";
-import { findWall, wallEnds, wallLength } from "./plan";
+import { findWall, wallLength } from "./plan";
+import { wallCurve } from "./wallcurve";
 import { findRooms, pointInPolygon, type Room } from "./rooms";
 import type { Opening, Plan, Swing, Wall } from "./types";
 import { wallFaces } from "./walljoin";
@@ -72,14 +72,10 @@ export function roomSide(
 ): Swing | null {
   const wall = findWall(plan, opening.wallId);
   if (!wall) return null;
-  const [a, b] = wallEnds(plan, wall);
-  const length = distance(a, b);
-  if (length === 0) return null;
-  const dir = scale(sub(b, a), 1 / length);
-  const at = add(a, scale(dir, opening.offset));
-  const side = perpendicular(dir);
+  const curve = wallCurve(plan, wall);
+  if (curve.length === 0) return null;
   const inRoom = (sign: number) => {
-    const p = add(at, scale(side, sign * (wall.thickness / 2 + 0.05)));
+    const p = curve.at(opening.offset, sign * (wall.thickness / 2 + 0.05));
     return rooms.some((room) => pointInPolygon(p, room.polygon));
   };
   const right = inRoom(1);

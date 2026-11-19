@@ -6,7 +6,8 @@
 // y goes along the depth. The back is at -y and the front is at +y. z goes up from the floor.
 
 import { add, distance, perpendicular, scale, sub } from "./geometry";
-import { newId, wallEnds } from "./plan";
+import { newId } from "./plan";
+import { wallCurve } from "./wallcurve";
 import type { Furniture, FurnitureSource, Model, Plan, Point } from "./types";
 
 export type Category =
@@ -614,14 +615,18 @@ export function snapToWall(
 export function wallFaces(plan: Plan): { a: Point; b: Point; normal: Point }[] {
   const faces: { a: Point; b: Point; normal: Point }[] = [];
   for (const wall of plan.walls) {
-    const [a, b] = wallEnds(plan, wall);
-    const length = distance(a, b);
-    if (length === 0) continue;
-    const normal = perpendicular(scale(sub(b, a), 1 / length));
+    const curve = wallCurve(plan, wall);
+    if (curve.length === 0) continue;
+    // A curved face is a line of short chords, each with its own normal.
     for (const side of [1, -1]) {
-      const n = scale(normal, side);
-      const offset = scale(n, wall.thickness / 2);
-      faces.push({ a: add(a, offset), b: add(b, offset), normal: n });
+      const points = curve.points(0, curve.length, (side * wall.thickness) / 2);
+      for (let i = 1; i < points.length; i++) {
+        const [a, b] = [points[i - 1], points[i]];
+        const length = distance(a, b);
+        if (length < 1e-9) continue;
+        const normal = scale(perpendicular(scale(sub(b, a), 1 / length)), side);
+        faces.push({ a, b, normal });
+      }
     }
   }
   return faces;

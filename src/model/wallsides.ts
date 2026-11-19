@@ -12,6 +12,7 @@
 
 import { cross, direction as unit, distance as span, dot, perpendicular } from "./geometry";
 import { getVertex, splitWall, wallEnds } from "./plan";
+import { isCurved, wallCurve, wallTangent } from "./wallcurve";
 import { findRooms, pointInPolygon } from "./rooms";
 import type { Dimension, Id, Plan, Point, Wall } from "./types";
 import { MAX_MITER, meet, STRAIGHT } from "./walljoin";
@@ -49,11 +50,12 @@ interface Move {
 
 /**
  * The walls as one line, or null if they are not in one straight line, or do not join end to
- * end. The line goes in the direction of the first wall of the list, from its `a` to its `b`.
+ * end. A curved wall is not part of a line. The line goes in the direction of the first wall of
+ * the list, from its `a` to its `b`.
  */
 export function wallLine(plan: Plan, wallIds: Id[]): WallLine | null {
   const found = wallIds.map((id) => plan.walls.find((w) => w.id === id));
-  if (found.length === 0 || found.some((w) => !w)) return null;
+  if (found.length === 0 || found.some((w) => !w || isCurved(w))) return null;
   const list = found as Wall[];
   const count = new Map<Id, number>();
   for (const w of list) for (const v of [w.a, w.b]) count.set(v, (count.get(v) ?? 0) + 1);
@@ -124,7 +126,8 @@ export function lineSide(plan: Plan, line: WallLine, side: Side): SideRun | null
         .filter((w) => !seen.has(w.id) && (w.a === vertexId || w.b === vertexId))
         .map((w) => {
           const to = getVertex(plan, w.a === vertexId ? w.b : w.a);
-          return { wall: w, to, u: unit(vertex, to), half: w.thickness / 2 };
+          // A curved wall leaves the vertex in the direction of its arc there.
+          return { wall: w, to, u: wallTangent(plan, w, vertexId), half: w.thickness / 2 };
         });
       if (others.length === 0) return { vertexId, extra, half, t: 0 };
       // The next wall around the vertex from the line toward the face (as in `wallFaces`).
@@ -332,8 +335,9 @@ export function mergeWalls(plan: Plan, wallIds: Id[]): Id | null {
 export function splitInTwo(plan: Plan, wallId: Id): [Id, Id] | null {
   const wall = plan.walls.find((w) => w.id === wallId);
   if (!wall) return null;
-  const [a, b] = wallEnds(plan, wall);
-  const length = span(a, b);
+  // The positions are along the center line: on the arc of a curved wall.
+  const curve = wallCurve(plan, wall);
+  const length = curve.length;
   if (length < 0.02) return null;
   const covers = (at: number) =>
     plan.openings.find((o) => o.wallId === wallId && Math.abs(o.offset - at) < o.width / 2 + 0.005);
@@ -350,8 +354,7 @@ export function splitInTwo(plan: Plan, wallId: Id): [Id, Id] | null {
         : after;
   }
   if (at <= 0.01 || at >= length - 0.01 || covers(at)) return null;
-  const point = { x: a.x + ((b.x - a.x) * at) / length, y: a.y + ((b.y - a.y) * at) / length };
-  const vertex = splitWall(plan, wallId, point);
+  const vertex = splitWall(plan, wallId, curve.at(at));
   const first = plan.walls.find((w) => w.b === vertex.id && w.a === wall.a)!;
   const second = plan.walls.find((w) => w.a === vertex.id && w.b === wall.b)!;
   return [first.id, second.id];
@@ -366,7 +369,7 @@ export const OUTSIDE_OFFSET = 0.8;
  * room gets its line in the room, and a face outside gets its line outside. A face that more
  * walls share (a facade of walls in one line) gets one line, and so does a length that a room
  * has twice in the same direction. The lines are not in the plan. `which` chooses the lines in
- * the rooms, the lines outside, or both.
+ * the rooms, the lines outside, or both. A curved wall gets no line.
  */
 export function wallDimensions(
   plan: Plan,
@@ -377,6 +380,8 @@ export function wallDimensions(
   const dimensions: Dimension[] = [];
   const key = (p: Point) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
   for (const wall of plan.walls) {
+    // A straight dimension line does not fit a curved wall.
+    if (isCurved(wall)) continue;
     for (const side of [1, -1] as const) {
       const run = sideRun(plan, wall, side);
       if (!run || run.length < 0.2) continue;

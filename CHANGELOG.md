@@ -4,6 +4,16 @@ The changes that a user notices.
 
 ## Unreleased
 
+- Angles: the tool **Angle** (K) measures an angle with three clicks (the corner, then a point
+  on each side) and keeps it on the plan as an arc with the degrees. Drag the arc to change its
+  radius; **Other side** in the panel gives the angle on the other side. The exports draw it.
+- Two selected walls show the angle between them, on the plan and in the panel, also when they
+  do not meet. **Add angle dimension** keeps it on the plan.
+- Curved walls: drag the handle in the middle of a selected wall to bend it into an arc, or use
+  **Curve the wall** and the **Bulge** in the panel. A curved wall has its arc in 2D, in 3D, in
+  the exports, in the area of its room, and in the energy model. Doors and windows follow the
+  arc. **Make the wall straight** makes it straight again.
+
 ## 0.7.1 – 2026-11-18
 
 - Server: on the page of the account, the fields and the buttons of each card end at the right

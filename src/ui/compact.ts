@@ -57,6 +57,7 @@ const DRAWING: Tool[] = [
   "wall",
   "measure",
   "dimension",
+  "angle",
   "run",
   "rectify",
   "calibrate",

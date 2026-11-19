@@ -8,7 +8,8 @@
 import { findStory, storyAbove, wallTop } from "./building";
 import { DEFAULT_COLORS } from "./colors";
 import { closestOnSegment, intersectionArea, signedArea } from "./geometry";
-import { newId, wallEnds } from "./plan";
+import { newId } from "./plan";
+import { wallCurve } from "./wallcurve";
 import { findRooms, planOutline, pointInPolygon } from "./rooms";
 import {
   presetSides,
@@ -113,8 +114,8 @@ export function roofsInView(building: Building, activeId: Id, all: boolean): Roo
   const rooms = findRooms(active).map((r) => r.polygon);
   // The middle of each wall, also of a wall that closes no room yet.
   const middles = active.walls.map((wall) => {
-    const [a, b] = wallEnds(active, wall);
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const curve = wallCurve(active, wall);
+    return curve.at(curve.length / 2);
   });
   return building.roofs.filter((roof) => {
     const story = findStory(building, roof.storyId);

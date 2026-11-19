@@ -267,7 +267,9 @@ internet.
    points snap to the corners and the faces of the walls. The measure does not change the plan,
    so it works also in a plan that you can only view. Select **Dimension** (L) to add a
    dimension line to the plan: click the two ends, then click where the line goes. The ends
-   snap to the corners and the faces of the walls, like the points of **Measure**.
+   snap to the corners and the faces of the walls, like the points of **Measure**. Select
+   **Angle** (K) to add an angle: click the corner, then a point on each side. Drag the arc to
+   change its radius; **Other side** in the panel measures the angle on the other side.
 7. With **Select**, click or drag a box to select objects, and drag them to move them. When you
    drag one wall, the next walls keep their angles. The panel on the right shows the values of
    the selection.
@@ -278,6 +280,9 @@ internet.
    Select walls in one straight line (Shift+click) to see and type their lengths like one wall,
    and the length of each part. A new length of a part moves the parts after it. If no other
    wall meets the line between its ends, **Merge into one wall** makes one wall of them.
+   Select two walls to see the angle between them, also when they do not meet.
+   A selected wall has a handle in its middle: drag it to bend the wall into an arc. The panel
+   shows the length of the arc and the **Bulge**, and **Make the wall straight** undoes it.
    **Direction** turns the selected wall, or the selected walls together: drag the line of the
    small dial, or type the angle (0° to the right, 90° up). A wall has no front, so the angle is
    from 0° to 180°. **Straighten the wall** turns it to the nearest of 0°, 90°, 180°, and 270°.
@@ -322,7 +327,7 @@ internet.
 | Key                      | Action                                            |
 | ------------------------ | ------------------------------------------------- |
 | V, P, W, D, N, C         | Select, Pan, Wall, Door, Window, Scale            |
-| M, L                     | Measure, Dimension                                |
+| M, L, K                  | Measure, Dimension, Angle                         |
 | Shift+click              | Add an object to the selection, or remove it      |
 | Drag on the empty plan   | Select the objects in a box                       |
 | Shift (wall tool)        | Keep the direction at a multiple of 45°           |

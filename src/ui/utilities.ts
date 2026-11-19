@@ -3,7 +3,7 @@ import { type IconName } from "../icons";
 import { defaultWallHeight } from "../model/building";
 import { isOuterWall, roomHeatLoss, uValue, wallLayers } from "../model/energy";
 import { fmt } from "../model/format";
-import { wallEnds } from "../model/plan";
+import { wallCurve } from "../model/wallcurve";
 import { defaultRack, faceInfo, FLAT_TILT, newPvField, pvLayout, pvSummary } from "../model/pv";
 import { buildingQuantities, circuitQuantities } from "../model/quantities";
 import { findRooms, netRoomArea } from "../model/rooms";
@@ -383,12 +383,16 @@ export function drawInsulation(group: SVGGElement, zoom: number): void {
   const story = doc.plan;
   for (const wall of story.walls) {
     if (!isOuterWall(story, wall)) continue;
-    const [a, b] = wallEnds(story, wall);
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", String(a.x));
-    line.setAttribute("y1", String(a.y));
-    line.setAttribute("x2", String(b.x));
-    line.setAttribute("y2", String(b.y));
+    const curve = wallCurve(story, wall);
+    const line = document.createElementNS(ns, "polyline");
+    line.setAttribute(
+      "points",
+      curve
+        .points(0, curve.length)
+        .map((p) => `${p.x},${p.y}`)
+        .join(" "),
+    );
+    line.setAttribute("fill", "none");
     line.setAttribute("stroke", uColor(uValue(wallLayers(doc.building, wall), "wall")));
     line.setAttribute("stroke-width", String(wall.thickness * 0.6));
     line.setAttribute("class", "insulation-wall");

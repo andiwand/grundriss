@@ -104,7 +104,13 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - The 3D view only reads the building. Its meshes have `userData.item` and their story group
   `userData.storyId`; `View3D.pickAt` finds the object under the pointer, and `View3D.edit`
   (set by `src/ui/edit3d.ts`) gets the clicks and the drags and changes the document.
-- Dimension lines (`Dimension`) have their own two points. They do not follow the walls.
+- Dimension lines (`Dimension`) have their own two points. They do not follow the walls. An
+  angle dimension has a `center` too, and `offset` is the radius of its arc; `dimensionShape`
+  gives the arc as `segments`. `wallsAngle` in `angles.ts` gives the angle of two walls.
+- A curved wall has a `bulge`: its center line is a circular arc. `wallCurve` in
+  `wallcurve.ts` gives a position along the wall (`s`, on the arc) and across it (`o`) for
+  straight and curved walls alike. Code that puts something on a wall uses it, not the line
+  from `a` to `b`. The rooms add the points of the arcs to their polygon (`Room.sides`).
 - The selection of the editor is a list of `Item` (a kind and an id). The functions in
   `src/model/plan.ts` copy, paste, move, and remove items.
 - Furniture belongs to a story. A piece is generic (a type of `src/model/furniture.ts`) or uses
@@ -171,6 +177,8 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 | `src/model/pv.ts`          | The layout of PV panels on the roof, racks on flat roofs, and the yield.                                      |
 | `src/model/climate.ts`     | The stored climate: the series, the sun position, the irradiance on faces, PV, HDD.                           |
 | `src/model/colors.ts`      | The colors of the wall sides (own, room, or facade) and the defaults of the colors.                           |
+| `src/model/wallcurve.ts`   | The center line of a wall: straight or a circular arc, positions along and across it.                         |
+| `src/model/angles.ts`      | The angle between two walls.                                                                                  |
 | `src/model/walljoin.ts`    | The ends of the two faces of a wall at its joins: flush, miter, or T.                                         |
 | `src/model/wallsides.ts`   | Lengths of a wall or a line of walls, pins, merge, split, align, and the wall dimensions.                     |
 | `src/model/heating.ts`     | The heating per year: a monthly balance, the heating system, hot water, cost, CO₂.                            |

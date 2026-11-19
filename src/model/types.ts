@@ -15,7 +15,6 @@ export interface Vertex extends Point {
   pinned?: boolean;
 }
 
-/** A straight wall between two vertices. The vertices are on the center line of the wall. */
 /**
  * A note on an object of the plan: a text and photos, for example a defect, a year, or a
  * material. A photo is an image as a data URL. The app makes a large photo smaller when it
@@ -26,12 +25,19 @@ export interface Note {
   photos: string[];
 }
 
+/** A wall between two vertices. The vertices are on the center line of the wall. */
 export interface Wall {
   /** A note with a text and photos, or nothing. */
   note?: Note;
   id: Id;
   a: Id;
   b: Id;
+  /**
+   * The bulge of a curved wall: the distance from the middle of the line from `a` to `b` to the
+   * middle of the center line, + on the side of `perpendicular(b - a)`. The center line is then a
+   * circular arc (src/model/wallcurve.ts). 0 or nothing is a straight wall.
+   */
+  bulge?: number;
   thickness: number;
   height: number;
   /**
@@ -95,12 +101,18 @@ export interface Opening {
 /**
  * A dimension line that the user puts on the plan. It measures the distance from `a` to `b`. The
  * line is at the distance `offset` from the points, on the side of `perpendicular(b - a)`.
+ *
+ * An angle dimension has a `center`. It measures the angle at the center from the ray to `a` to
+ * the ray to `b`, clockwise on the screen (`angleSweep` in drawing.ts). Its arc has the radius
+ * `offset`.
  */
 export interface Dimension {
   id: Id;
   a: Point;
   b: Point;
   offset: number;
+  /** The vertex of an angle dimension, or nothing for a distance. */
+  center?: Point;
 }
 
 /** The scanned or photographed plan under the drawing. */

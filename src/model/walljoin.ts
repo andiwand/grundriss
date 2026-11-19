@@ -11,10 +11,12 @@
 //   small polygon around the vertex open. The body of each wall fills its part of it: the
 //   triangle from the ends of its two faces to the vertex (`WallFaces.hub`).
 //
-// The positions are distances along the wall from its vertex `a`.
+// The positions are distances along the wall from its vertex `a`. A curved wall uses the
+// direction of its center line at each end (`wallTangent`). Near the end, a position along the
+// tangent is close to the same position along the arc, so the joins use them alike.
 
-import { cross, direction as unit, dot, perpendicular } from "./geometry";
-import { wallEnds } from "./plan";
+import { cross, dot, perpendicular } from "./geometry";
+import { wallCurve, wallTangent } from "./wallcurve";
 import type { Plan, Point, Wall } from "./types";
 
 export type JoinKind = "free" | "straight" | "corner" | "tee" | "other";
@@ -61,10 +63,8 @@ export function meet(
 
 /** The faces of the wall and the kinds of its joins. */
 export function wallFaces(plan: Plan, wall: Wall): WallFaces {
-  const [a, b] = wallEnds(plan, wall);
-  const length = Math.hypot(b.x - a.x, b.y - a.y);
-  const d = unit(a, b);
-  const n = perpendicular(d);
+  const curve = wallCurve(plan, wall);
+  const length = curve.length;
   const half = wall.thickness / 2;
   const right: [number, number] = [0, length];
   const left: [number, number] = [0, length];
@@ -72,16 +72,17 @@ export function wallFaces(plan: Plan, wall: Wall): WallFaces {
   const body = { right: [0, length] as [number, number], left: [0, length] as [number, number] };
   const hub: [boolean, boolean] = [false, false];
 
-  const position = new Map(plan.vertices.map((v) => [v.id, v]));
   /** The direction from the vertex along the other wall, and its half thickness. */
-  const away = (other: Wall, vertexId: string) => {
-    const from = position.get(vertexId)!;
-    const to = position.get(other.a === vertexId ? other.b : other.a)!;
-    return { u: unit(from, to), half: other.thickness / 2 };
-  };
+  const away = (other: Wall, vertexId: string) => ({
+    u: wallTangent(plan, other, vertexId),
+    half: other.thickness / 2,
+  });
 
   for (const end of [0, 1] as const) {
     const vertexId = end === 0 ? wall.a : wall.b;
+    // The direction of the wall at this end, from a to b, and the side "right" there.
+    const d = curve.tangent(end === 0 ? 0 : length);
+    const n = perpendicular(d);
     // The direction from the vertex into this wall.
     const u = end === 0 ? d : { x: -d.x, y: -d.y };
     const others = plan.walls

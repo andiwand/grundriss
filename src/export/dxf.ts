@@ -231,7 +231,7 @@ function writeDxf(
     }
     for (const dimension of plan.dimensions) {
       const shape = dimensionShape(dimension);
-      for (const [a, b] of [shape.line, ...shape.extensions, ...shape.ticks]) {
+      for (const [a, b] of [...shape.segments, ...shape.extensions, ...shape.ticks]) {
         line(L.DIMENSIONS, a, b);
       }
       const at = {

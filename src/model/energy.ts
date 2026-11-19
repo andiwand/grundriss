@@ -28,11 +28,12 @@ import {
   stripArea,
 } from "./attic";
 import { findStory, storyAbove, storyBelow } from "./building";
-import { intersectionArea } from "./geometry";
+import { intersectionArea, scale } from "./geometry";
 import { material } from "./insulation";
 import { roofGeometries } from "./roof";
 import { findRooms, netRoomArea, pointInPolygon, type Room } from "./rooms";
 import type { Building, Envelope, Id, Layer, Point, Story, Wall } from "./types";
+import { wallCurve } from "./wallcurve";
 
 /** The surface resistances in m²K/W: inside and outside. */
 export const SURFACE_RESISTANCE = {
@@ -274,12 +275,18 @@ function lossOf(building: Building, story: Story, room: Room, perWall: Map<Id, n
     if (!wall || (perWall.get(wall.id) ?? 0) > 1) continue;
     const a = position.get(wall.a)!;
     const b = position.get(wall.b)!;
+    // The positions along a curved wall are on its arc. The strips take the height on the
+    // line from a to b, at the same part of the length, and keep the length of the arc.
+    const curve = wallCurve(story, wall);
+    const length = curve.length;
+    const chord = Math.hypot(b.x - a.x, b.y - a.y);
+    const k = length > 1e-9 ? chord / length : 1;
     const strip = (from: number, to: number, sill?: number, top?: number) =>
-      stripArea(ceiling, a, b, from, to, sill, top);
-    // The direction of the outside of the wall: away from the room.
-    const length = Math.hypot(b.x - a.x, b.y - a.y);
-    let normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
-    const middle = { x: (a.x + b.x) / 2 + normal.x * 0.01, y: (a.y + b.y) / 2 + normal.y * 0.01 };
+      k > 1e-9 ? stripArea(ceiling, a, b, from * k, to * k, sill, top) / k : 0;
+    // The direction of the outside of the wall: away from the room. A curved wall faces in the
+    // direction of the middle of its arc.
+    let normal = scale(curve.normal(length / 2), -1);
+    const middle = curve.at(length / 2, -0.01);
     if (pointInPolygon(middle, room.polygon)) normal = { x: -normal.x, y: -normal.y };
     const facing = azimuthOf(normal, building.north);
     let openingArea = 0;

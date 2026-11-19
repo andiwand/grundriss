@@ -8,8 +8,7 @@
 //
 // A roof has the color of its top and the color of its underside (`Roof.color`, `Roof.underside`).
 
-import { distance, perpendicular } from "./geometry";
-import { wallEnds } from "./plan";
+import { wallCurve } from "./wallcurve";
 import { findRooms, pointInPolygon, type Room } from "./rooms";
 import type { Building, Story, Wall } from "./types";
 
@@ -39,12 +38,9 @@ export function roomOnSide(
   side: WallSide,
   rooms: Room[] = findRooms(story),
 ): Room | null {
-  const [a, b] = wallEnds(story, wall);
-  const length = distance(a, b);
-  if (length < 1e-9) return null;
-  const n = perpendicular({ x: (b.x - a.x) / length, y: (b.y - a.y) / length });
-  const d = side * (wall.thickness / 2 + 0.05);
-  const p = { x: (a.x + b.x) / 2 + n.x * d, y: (a.y + b.y) / 2 + n.y * d };
+  const curve = wallCurve(story, wall);
+  if (curve.length < 1e-9) return null;
+  const p = curve.at(curve.length / 2, side * (wall.thickness / 2 + 0.05));
   // The smallest room that contains the point: a room inside another room is nearer.
   return (
     rooms

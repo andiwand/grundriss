@@ -62,6 +62,27 @@ export const PANELS: Record<string, string> = {
   "Drag the dimension line to change its offset.":
     "Ziehen Sie die Maßlinie, um ihren Abstand zu ändern.",
 
+  // selection.ts: an angle dimension, and the angle between two walls.
+  Angle: "Winkel",
+  angle: "Winkel",
+  Radius: "Radius",
+  "Other side": "Andere Seite",
+  "Drag the arc to change its radius.": "Ziehen Sie den Bogen, um seinen Radius zu ändern.",
+  "angle between the walls": "Winkel zwischen den Wänden",
+  "The walls are parallel.": "Die Wände sind parallel.",
+  "Add angle dimension": "Winkelmaß hinzufügen",
+
+  // selection.ts: a curved wall.
+  "Curve the wall": "Wand biegen",
+  "length of the arc": "Länge des Bogens",
+  "distance of the ends": "Abstand der Enden",
+  "radius of the center line": "Radius der Mittellinie",
+  Bulge: "Stich",
+  "The bulge is the distance from the line between the ends to the middle of the wall. Drag the handle in the middle of the wall to bend it.":
+    "Der Stich ist der Abstand von der Linie zwischen den Enden zur Mitte der Wand. Ziehen Sie den Griff in der Mitte der Wand, um sie zu biegen.",
+  "Make the wall straight": "Wand gerade machen",
+  "Drag to bend the wall": "Ziehen, um die Wand zu biegen",
+
   // selection.ts: a room.
   Room: "Raum",
   "area inside the walls": "Fläche innerhalb der Wände",

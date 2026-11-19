@@ -4,6 +4,8 @@
 
 - Manual tracing on a scan, its scale, walls, doors, windows, and the file (0.1.0).
 - Editing: multiple selection, copy and paste, door hinges, dimensions, and angle snapping.
+- Angles: an angle dimension (`Dimension.center`), the angle between two selected walls, and
+  curved walls as circular arcs (`Wall.bulge`, `src/model/wallcurve.ts`).
 - Export: SVG, PDF, DXF, glTF, and the `.grundriss` package.
 - Assisted tracing with OpenCV.js, and a recognition model (U-Net, synthetic plans) in ONNX
   Runtime Web.
@@ -251,6 +253,13 @@ step.
 - **Furniture**: the app does not check furniture under a roof. A tall piece under the slope
   goes through the roof without a warning. A compound name without spaces ("gothicbed") can go
   to the wrong group of the catalog.
+- **Curved walls**: a curved wall is a circular arc; other curves (an ellipse, a spline) are not
+  possible. The joins use the direction of the arc at the vertex, so a thick wall at a sharp
+  bend can have a small step. A curved wall has no lengths of its sides and no automatic
+  dimension lines, is not part of a line of walls (merge, align), and the energy model gives
+  it one direction, the one of the middle of its arc. A door or a window in it is straight
+  between its ends, and its sill and head are flat. The 3D drag of an opening and the floor
+  plan of a variant use the line between the ends.
 - **Recognition**: the model learned only from synthetic plans. It does not find walls that are
   drawn as two thin lines.
 - **Climate**: the typical year is the mean of each hour of 10 years, so it has no cloudy or

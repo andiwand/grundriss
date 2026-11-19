@@ -21,12 +21,12 @@ import {
 import { genericBlocks, type Block, type Finish } from "../model/furniture";
 import { wallSideColor } from "../model/colors";
 import { openingShape } from "../model/drawing";
-import { distance, perpendicular } from "../model/geometry";
-import { wallEnds } from "../model/plan";
+import { distance } from "../model/geometry";
 import { pvPanels } from "../model/pv";
 import { roofCeiling, roofGeometries, roofsInView, type Vec3 } from "../model/roof";
 import { WINDOW_LIFT } from "../model/roofshape";
 import { findRooms, pointInPolygon, type Room } from "../model/rooms";
+import { wallCurve } from "../model/wallcurve";
 import { wallFaces } from "../model/walljoin";
 import { runKind } from "../model/services";
 import type {
@@ -1099,24 +1099,27 @@ function addWall(
   ceiling: (p: Point) => number | null,
   rooms: Room[],
 ): void {
-  const [a, b] = wallEnds(story, wall);
-  const length = distance(a, b);
+  const curve = wallCurve(story, wall);
+  const length = curve.length;
   if (length < 1e-6) return;
-  const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
-  const n = perpendicular(d);
+  /** The direction of the wall and the right side at s: they turn along a curved wall. */
+  const d = (s: number) => curve.tangent(s);
+  const n = (s: number) => curve.normal(s);
   const half = wall.thickness / 2;
   const faces = wallFaces(story, wall);
   const start = Math.min(faces.right[0], faces.left[0]);
   const end = Math.max(faces.right[1], faces.left[1]);
   /** The world point at s along the wall, at o across it (+ is the right side), at height y. */
-  const at = (s: number, o: number, y: number) =>
-    new THREE.Vector3(a.x + d.x * s + n.x * o, base + y, a.y + d.y * s + n.y * o);
+  const at = (s: number, o: number, y: number) => {
+    const p = curve.at(s, o);
+    return new THREE.Vector3(p.x, base + y, p.y);
+  };
 
   // The highest top of the wall at s: the wall height, or the roof over one of the faces.
   const limit = (s: number): number => {
     let top = height;
     for (const o of [-half, half]) {
-      const z = ceiling({ x: a.x + d.x * s + n.x * o, y: a.y + d.y * s + n.y * o });
+      const z = ceiling(curve.at(s, o));
       if (z !== null) top = Math.min(top, z - base - ROOF_INSET);
     }
     return top;
@@ -1145,6 +1148,8 @@ function addWall(
     const steps = Math.max(1, Math.ceil((end - start) / ROOF_STEP));
     for (let i = 1; i < steps; i++) cuts.add(start + ((end - start) * i) / steps);
   }
+  // A curved wall is a line of short flat columns.
+  for (const p of curve.points(start, end)) cuts.add(curve.project(p));
   const grid = [...cuts]
     .sort((p, q) => p - q)
     .filter((s, i, all) => i === 0 || s - all[i - 1] > 1e-6);
@@ -1192,7 +1197,8 @@ function addWall(
             : u0 > y0
               ? [at(s0, o, y0), at(s0 + ((s1 - s0) * (u0 - y0)) / (u0 - u1), o, y0), at(s0, o, u0)]
               : [at(s1, o, y0), at(s1, o, u1), at(s1 - ((s1 - s0) * (u1 - y0)) / (u1 - u0), o, y0)];
-        body.polygon(index, points, new THREE.Vector3(n.x * sideSign, 0, n.y * sideSign));
+        const normal = n((s0 + s1) / 2);
+        body.polygon(index, points, new THREE.Vector3(normal.x * sideSign, 0, normal.y * sideSign));
       }
     }
     // The edge lines of the face: the top, and the ends that are corners or free ends.
@@ -1290,7 +1296,7 @@ function addWall(
       body.polygon(
         REST,
         [at(s, half, h.sill), at(s, half, head), at(s, -half, head), at(s, -half, h.sill)],
-        new THREE.Vector3(d.x * sign, 0, d.y * sign),
+        new THREE.Vector3(d(s).x * sign, 0, d(s).y * sign),
       );
     }
   }
@@ -1306,7 +1312,7 @@ function addWall(
     body.polygon(
       REST,
       [at(e, half, 0), at(e, half, top(e)), at(e, -half, top(e)), at(e, -half, 0)],
-      new THREE.Vector3(d.x * sign, 0, d.y * sign),
+      new THREE.Vector3(d(e).x * sign, 0, d(e).y * sign),
     );
     body.line([at(e, half, top(e)), at(e, -half, top(e))]);
   }
@@ -1418,21 +1424,14 @@ function openingRects(building: Building): Vec3[][] {
     for (const opening of story.openings) {
       const wall = story.walls.find((w) => w.id === opening.wallId);
       if (!wall) continue;
-      const [a, b] = wallEnds(story, wall);
-      const length = distance(a, b);
-      if (length < 1e-6) continue;
-      const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
-      const n = perpendicular(d);
+      const curve = wallCurve(story, wall);
+      if (curve.length < 1e-6) continue;
       const z0 = story.elevation + opening.sill;
       const z1 = z0 + opening.height;
       const s0 = opening.offset - opening.width / 2;
       const s1 = opening.offset + opening.width / 2;
       for (const o of [wall.thickness / 2, -wall.thickness / 2]) {
-        const at = (s: number, z: number) => ({
-          x: a.x + d.x * s + n.x * o,
-          y: a.y + d.y * s + n.y * o,
-          z,
-        });
+        const at = (s: number, z: number) => ({ ...curve.at(s, o), z });
         rects.push([at(s0, z0), at(s1, z0), at(s1, z1), at(s0, z1)]);
       }
     }

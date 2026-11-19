@@ -5,7 +5,8 @@
 import { fmt } from "./format";
 import { add, cross, distance, perpendicular, scale, sub } from "./geometry";
 import { chimneyOutline, stairShape, type StairShape } from "./building";
-import { findWall, wallEnds } from "./plan";
+import { findWall } from "./plan";
+import { wallCurve } from "./wallcurve";
 import { wallFaces } from "./walljoin";
 import type { Chimney, Dimension, Opening, OpeningKind, Plan, Point, Stair, Wall } from "./types";
 
@@ -15,20 +16,16 @@ import type { Chimney, Dimension, Opening, OpeningKind, Plan, Point, Stair, Wall
  * Where three or more walls meet, the body also has the vertex, so the joint has no hole.
  */
 export function wallOutline(plan: Plan, wall: Wall): Point[] {
-  const [a, b] = wallEnds(plan, wall);
-  const length = distance(a, b);
-  if (length === 0) return [];
-  const dir = scale(sub(b, a), 1 / length);
-  const normal = scale(perpendicular(dir), wall.thickness / 2);
+  const curve = wallCurve(plan, wall);
+  if (curve.length === 0) return [];
+  const half = wall.thickness / 2;
   const { body, hub } = wallFaces(plan, wall);
-  const at = (s: number) => add(a, scale(dir, s));
+  // A curved face is a line of short chords.
   return [
-    add(at(body.right[0]), normal),
-    add(at(body.right[1]), normal),
-    ...(hub[1] ? [b] : []),
-    sub(at(body.left[1]), normal),
-    sub(at(body.left[0]), normal),
-    ...(hub[0] ? [a] : []),
+    ...curve.points(body.right[0], body.right[1], half),
+    ...(hub[1] ? [curve.b] : []),
+    ...curve.points(body.left[1], body.left[0], -half),
+    ...(hub[0] ? [curve.a] : []),
   ];
 }
 
@@ -66,22 +63,15 @@ const SLIDE_GAP = 0.03;
 export function openingShape(plan: Plan, opening: Opening): OpeningShape | null {
   const wall = findWall(plan, opening.wallId);
   if (!wall) return null;
-  const [a, b] = wallEnds(plan, wall);
-  const length = distance(a, b);
-  if (length === 0) return null;
-  const dir = scale(sub(b, a), 1 / length);
-  const side = perpendicular(dir);
+  const curve = wallCurve(plan, wall);
+  if (curve.length === 0) return null;
   const half = wall.thickness / 2;
-  /** The point at s along the wall from `a`, at o across it (+ is the side of `side`). */
-  const at = (s: number, o: number) => add(a, add(scale(dir, s), scale(side, o)));
+  /** The point at s along the wall from `a`, at o across it (+ is the side of `normal`). */
+  const at = (s: number, o: number) => curve.at(s, o);
   const s0 = opening.offset - opening.width / 2;
   const s1 = opening.offset + opening.width / 2;
-  const gap = [
-    at(s0, half + 0.01),
-    at(s1, half + 0.01),
-    at(s1, -half - 0.01),
-    at(s0, -half - 0.01),
-  ];
+  // In a curved wall, the gap follows the arc.
+  const gap = [...curve.points(s0, s1, half + 0.01), ...curve.points(s1, s0, -half - 0.01)];
   const shape: OpeningShape = { kind: opening.kind, gap, glass: [], leaves: [], arcs: [] };
   const window = opening.kind === "window";
   const face = opening.swing * half;
@@ -130,8 +120,8 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
   for (const [h, c] of hinged) {
     const hinge = at(h, face);
     const closed = at(c, face);
-    const width = Math.abs(c - h);
-    const open = scale(side, opening.swing * width);
+    const width = distance(hinge, closed);
+    const open = scale(curve.normal(h), opening.swing * width);
     const leaf = add(hinge, open);
     // The arc turns from the open leaf to the closed leaf. The sign of the cross product gives
     // the direction of the turn.
@@ -143,8 +133,13 @@ export function openingShape(plan: Plan, opening: Opening): OpeningShape | null 
 }
 
 export interface DimensionShape {
-  /** The dimension line, at the offset from the measured points. */
+  /** The ends of the dimension line, at the offset from the measured points. */
   line: [Point, Point];
+  /**
+   * The dimension line as segments: one for a distance, and the short chords of the arc for an
+   * angle.
+   */
+  segments: [Point, Point][];
   /** The lines from the measured points to the dimension line, and a bit past it. */
   extensions: [Point, Point][];
   /** Short slashes at 45 degrees at the two ends of the dimension line. */
@@ -156,7 +151,10 @@ export interface DimensionShape {
   /** The angle of the text in degrees, from -90 to 90, so that the text is never upside down. */
   angle: number;
   text: string;
+  /** The measured distance, or the length of the arc of an angle. */
   length: number;
+  /** The measured angle in degrees, only for an angle dimension. */
+  degrees?: number;
 }
 
 /** The length past the dimension line of an extension line, and the half length of a tick. */
@@ -164,6 +162,8 @@ export const DIMENSION_OVERSHOOT = 0.1;
 export const DIMENSION_TICK = 0.08;
 
 export function dimensionShape(dimension: Dimension): DimensionShape {
+  if (dimension.center)
+    return angleShape(dimension.center, dimension.a, dimension.b, dimension.offset);
   const { a, b, offset } = dimension;
   const length = distance(a, b);
   const dir = length === 0 ? { x: 1, y: 0 } : scale(sub(b, a), 1 / length);
@@ -179,6 +179,7 @@ export function dimensionShape(dimension: Dimension): DimensionShape {
   if (angle <= -90) angle += 180;
   return {
     line: [p, q],
+    segments: [[p, q]],
     extensions: [
       [a, add(p, past)],
       [b, add(q, past)],
@@ -195,6 +196,76 @@ export function dimensionShape(dimension: Dimension): DimensionShape {
   };
 }
 
+/**
+ * The angle at `center` from the ray to `a` to the ray to `b`, in radians from 0 to 2π. It turns
+ * in the direction of a growing `atan2` in the plan axes, which is clockwise on the screen.
+ */
+export function angleSweep(center: Point, a: Point, b: Point): number {
+  const from = Math.atan2(a.y - center.y, a.x - center.x);
+  const to = Math.atan2(b.y - center.y, b.x - center.x);
+  const sweep = (to - from) % (2 * Math.PI);
+  return sweep < 0 ? sweep + 2 * Math.PI : sweep;
+}
+
+/** The radius of a new angle dimension: half of the shorter side, from 0.2 m to 0.8 m. */
+export function defaultAngleRadius(center: Point, a: Point, b: Point): number {
+  const side = Math.min(distance(center, a), distance(center, b));
+  return Math.round(Math.min(0.8, Math.max(0.2, side / 2)) * 20) / 20;
+}
+
+/** The text of an angle in degrees. */
+export function angleText(degrees: number): string {
+  // A whole number of degrees has no decimals: "90°", but "37.5°".
+  const rounded = Math.round(degrees * 10) / 10;
+  return `${fmt(rounded, Number.isInteger(rounded) ? 0 : 1)}°`;
+}
+
+/**
+ * The shape of an angle dimension: an arc of the radius `radius` around `center`, from the ray
+ * to `a` to the ray to `b` (see `angleSweep`). An arm that is shorter than the radius gets an
+ * extension line up to the arc.
+ */
+export function angleShape(center: Point, a: Point, b: Point, radius: number): DimensionShape {
+  const r = Math.max(Math.abs(radius), 1e-3);
+  const from = Math.atan2(a.y - center.y, a.x - center.x);
+  const sweep = angleSweep(center, a, b);
+  const ray = (angle: number) => ({ x: Math.cos(angle), y: Math.sin(angle) });
+  const on = (angle: number, distance = r) => add(center, scale(ray(angle), distance));
+  const steps = Math.max(2, Math.ceil(sweep / (Math.PI / 36)));
+  const points = Array.from({ length: steps + 1 }, (_, i) => on(from + (sweep * i) / steps));
+  const segments = points.slice(1).map((p, i) => [points[i], p] as [Point, Point]);
+  const extensions: [Point, Point][] = [];
+  for (const [arm, angle] of [
+    [a, from],
+    [b, from + sweep],
+  ] as const) {
+    const length = distance(center, arm);
+    if (length < r) extensions.push([on(angle, length), on(angle, r + DIMENSION_OVERSHOOT)]);
+  }
+  // A tick at each end, across the arc at 45 degrees, like the ticks of a distance.
+  const tick = (angle: number) => {
+    const d = scale(add(ray(angle), ray(angle + Math.PI / 2)), DIMENSION_TICK / Math.SQRT2);
+    const p = on(angle);
+    return [sub(p, d), add(p, d)] as [Point, Point];
+  };
+  const middle = from + sweep / 2;
+  const normal = ray(middle);
+  const degrees = (sweep * 180) / Math.PI;
+  return {
+    line: [points[0], points[points.length - 1]],
+    segments,
+    extensions,
+    ticks: [tick(from), tick(from + sweep)],
+    textAt: on(middle),
+    normal,
+    // The text of an angle stands upright, so that it is easy to read at any place of the arc.
+    angle: 0,
+    text: angleText(degrees),
+    length: sweep * r,
+    degrees,
+  };
+}
+
 /** The box around all points of the plan: vertices, wall bodies, and dimension lines. */
 export function planBounds(
   plan: Plan,
@@ -208,7 +279,7 @@ export function planBounds(
   }
   for (const dimension of plan.dimensions) {
     const shape = dimensionShape(dimension);
-    points.push(...shape.extensions.flat());
+    points.push(...shape.extensions.flat(), ...shape.segments.flat());
   }
   // The rise does not change the outline of a stair, so any rise works here.
   for (const stair of plan.stairs ?? []) points.push(...stairShape(stair, 1).outline);

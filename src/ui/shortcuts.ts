@@ -18,6 +18,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ["N", "Window"],
       ["M", "Measure"],
       ["L", "Dimension"],
+      ["K", "Angle"],
       ["S", "Stair"],
       ["H", "Chimney"],
       ["A", "Outdoor area"],

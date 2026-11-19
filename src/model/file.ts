@@ -5,6 +5,9 @@
 // value when a file does not have it. Examples: `hinge`, `swing`, `style`, and `leaves` of an
 // opening, `dimensions`, and the `revision` header of the building.
 //
+// `Wall.bulge` and `Dimension.center` are such fields too: an old app shows a curved wall as a
+// straight wall, and an angle dimension as a dimension line from `a` to `b`.
+//
 // `location` and `climate` are such fields: a file without them gets null for both.
 //
 // Version 3 has values that version 2 does not know: the systems "water" and "comms", the roof
@@ -663,7 +666,7 @@ function parsePlanData(data: Data, prefix: string): Plan {
 
   const walls: Wall[] = list(data, "walls").map((w, i) => {
     const where = `${prefix}wall ${i}`;
-    const wall = {
+    const wall: Wall = {
       id: string(w, "id", where),
       a: string(w, "a", where),
       b: string(w, "b", where),
@@ -677,6 +680,10 @@ function parsePlanData(data: Data, prefix: string): Plan {
     };
     if (!vertexIds.has(wall.a) || !vertexIds.has(wall.b)) {
       throw new Error(`The file is damaged: ${where} refers to a vertex that does not exist.`);
+    }
+    // A curved wall. An old app reads it as a straight wall, so it needs no new version.
+    if (typeof w.bulge === "number" && Number.isFinite(w.bulge) && w.bulge !== 0) {
+      wall.bulge = w.bulge;
     }
     return wall;
   });
@@ -709,12 +716,14 @@ function parsePlanData(data: Data, prefix: string): Plan {
 
   const dimensions: Dimension[] = list(data, "dimensions").map((d, i) => {
     const where = `${prefix}dimension ${i}`;
-    return {
+    const dimension: Dimension = {
       id: string(d, "id", where),
       a: pointOf(d.a, `${where}, point a`),
       b: pointOf(d.b, `${where}, point b`),
       offset: number(d, "offset", where),
     };
+    if (d.center !== undefined) dimension.center = pointOf(d.center, `${where}, center`);
+    return dimension;
   });
 
   const stairs: Stair[] = list(data, "stairs").map((d, i) => {

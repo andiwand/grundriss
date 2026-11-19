@@ -47,6 +47,9 @@ export const APP: Record<string, string> = {
   "Move the view (P, or hold Space)": "Ansicht verschieben (P oder Leertaste halten)",
   Pan: "Verschieben",
   "Draw a dimension line (L)": "Maßlinie zeichnen (L)",
+  "Measure an angle and keep it on the plan (K)": "Einen Winkel messen und im Plan behalten (K)",
+  "Click the corner of the angle, then a point on each side. The points snap to the corners and the faces of the walls. Drag the arc to change its radius. Shift: 45° steps. Alt: no snap.":
+    "Klicken Sie auf den Scheitel des Winkels und dann auf einen Punkt auf jedem Schenkel. Die Punkte rasten an den Ecken und den Flächen der Wände ein. Ziehen Sie den Bogen, um seinen Radius zu ändern. Umschalt: 45°-Schritte. Alt: ohne Einrasten.",
   "Measure a distance. The plan does not change (M)":
     "Einen Abstand messen. Der Plan ändert sich nicht (M)",
   Measure: "Messen",

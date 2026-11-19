@@ -4,7 +4,6 @@
 import {
   add,
   clamp,
-  closestOnSegment,
   distance,
   length as vectorLength,
   perpendicular,
@@ -12,6 +11,7 @@ import {
   sub,
 } from "./geometry";
 import { anchorRoomInfo, findRoom } from "./rooms";
+import { partBulge, wallCurve } from "./wallcurve";
 import type {
   Chimney,
   Clip,
@@ -89,9 +89,9 @@ export function wallEnds(plan: Plan, wall: Wall): [Vertex, Vertex] {
   return [getVertex(plan, wall.a), getVertex(plan, wall.b)];
 }
 
+/** The length of the center line of the wall, along the arc of a curved wall. */
 export function wallLength(plan: Plan, wall: Wall): number {
-  const [a, b] = wallEnds(plan, wall);
-  return distance(a, b);
+  return wallCurve(plan, wall).length;
 }
 
 /** The number of walls that touch the vertex. */
@@ -108,11 +108,13 @@ export function nearestWall(
   let best: { wall: Wall; t: number; point: Point } | null = null;
   let bestDistance = tolerance;
   for (const wall of plan.walls) {
-    const [a, b] = wallEnds(plan, wall);
-    const hit = closestOnSegment(p, a, b);
-    if (hit.distance < bestDistance) {
-      bestDistance = hit.distance;
-      best = { wall, t: hit.t, point: hit.point };
+    const curve = wallCurve(plan, wall);
+    const s = curve.project(p);
+    const point = curve.at(s);
+    const d = distance(p, point);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = { wall, t: curve.length === 0 ? 0 : s / curve.length, point };
     }
   }
   return best;
@@ -152,14 +154,18 @@ export function addWall(
  */
 export function splitWall(plan: Plan, wallId: Id, p: Point): Vertex {
   const wall = getWall(plan, wallId);
-  const [a, b] = wallEnds(plan, wall);
-  const hit = closestOnSegment(p, a, b);
-  const at = hit.t * distance(a, b);
-  const vertex = addVertex(plan, hit.point);
+  const curve = wallCurve(plan, wall);
+  const at = curve.project(p);
+  const vertex = addVertex(plan, curve.at(at));
   const first: Wall = { ...wall, id: newId("w"), b: vertex.id };
   // The note stays with the first part, so that it is not there twice.
   const { note: _note, ...rest } = wall;
   const second: Wall = { ...rest, id: newId("w"), a: vertex.id };
+  // The parts of a curved wall stay on its arc.
+  if (curve.circle) {
+    first.bulge = partBulge(curve, 0, at);
+    second.bulge = partBulge(curve, at, curve.length);
+  }
   plan.walls.splice(plan.walls.indexOf(wall), 1, first, second);
   for (const opening of plan.openings) {
     if (opening.wallId !== wallId) continue;
@@ -173,8 +179,16 @@ export function splitWall(plan: Plan, wallId: Id, p: Point): Vertex {
   return vertex;
 }
 
-export function addDimension(plan: Plan, a: Point, b: Point, offset: number): Dimension {
-  const dimension = { id: newId("d"), a: { ...a }, b: { ...b }, offset };
+/** Adds a dimension line, or an angle dimension with a `center`. */
+export function addDimension(
+  plan: Plan,
+  a: Point,
+  b: Point,
+  offset: number,
+  center?: Point,
+): Dimension {
+  const dimension: Dimension = { id: newId("d"), a: { ...a }, b: { ...b }, offset };
+  if (center) dimension.center = { x: center.x, y: center.y };
   plan.dimensions.push(dimension);
   return dimension;
 }
@@ -392,8 +406,8 @@ export function itemVertices(plan: Plan, items: Item[]): Set<Id> {
  */
 export interface MoveOrigin {
   vertices: Map<Id, Point>;
-  /** The two points of the dimension lines and the stairs. */
-  dimensions: Map<Id, { a: Point; b: Point }>;
+  /** The two points of the dimension lines and the stairs, and the center of an angle. */
+  dimensions: Map<Id, { a: Point; b: Point; center?: Point }>;
   stairs: Map<Id, { a: Point; b: Point }>;
   /** The centers of the chimneys and the furniture. */
   chimneys: Map<Id, Point>;
@@ -426,7 +440,10 @@ export function moveOrigin(plan: Plan, items: Item[]): MoveOrigin {
   const find = <T extends { id: Id }>(list: T[], id: Id) => list.find((x) => x.id === id);
   for (const { kind, id } of items) {
     const dimension = kind === "dimension" ? find(plan.dimensions, id) : undefined;
-    if (dimension) origin.dimensions.set(id, { a: { ...dimension.a }, b: { ...dimension.b } });
+    if (dimension) {
+      const { a, b, center } = dimension;
+      origin.dimensions.set(id, { a: { ...a }, b: { ...b }, center: center && { ...center } });
+    }
     const stair = kind === "stair" ? find(plan.stairs, id) : undefined;
     if (stair) origin.stairs.set(id, { a: { ...stair.a }, b: { ...stair.b } });
     const chimney = kind === "chimney" ? find(plan.chimneys, id) : undefined;
@@ -470,6 +487,7 @@ export function moveFromOrigin(plan: Plan, origin: MoveOrigin, delta: Point): vo
     if (!dimension) continue;
     dimension.a = add(start.a, delta);
     dimension.b = add(start.b, delta);
+    if (start.center) dimension.center = add(start.center, delta);
   }
   for (const [id, start] of origin.stairs) {
     const stair = findStair(plan, id);
@@ -565,6 +583,7 @@ export function pasteClip(plan: Plan, clip: Clip, delta: Point): Item[] {
       add(dimension.a, delta),
       add(dimension.b, delta),
       dimension.offset,
+      dimension.center && add(dimension.center, delta),
     );
     items.push({ kind: "dimension", id: copy.id });
   }

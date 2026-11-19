@@ -420,3 +420,58 @@ test("shows a water pipe while a finger draws it on the phone", async ({ page })
   await page.locator("#tool-done").tap();
   await expect(page.locator("#plan-2d .run-preview")).toHaveCount(0);
 });
+
+test("measures an angle, shows the angle of two walls, and bends a wall", async ({ page }) => {
+  await openApp(page);
+  test.skip(await isPhone(page), "The test draws with a mouse, so it runs on the desktop only.");
+  await page.locator(".project-start", { hasText: "New plan" }).click();
+  await page.locator("#empty-wall").click();
+  for (const [x, y] of [
+    [150, 250],
+    [450, 250],
+    [450, 500],
+    [150, 500],
+    [150, 250],
+  ]) {
+    await clickPlan(page, x, y);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#plan-2d .room-label")).toHaveCount(1);
+  const area = () => page.locator("#plan-2d .room-label").first().textContent();
+  const before = await area();
+
+  // The angle tool: the corner, then a point on each side.
+  await page.keyboard.press("k");
+  await clickPlan(page, 150, 250);
+  await clickPlan(page, 300, 250);
+  await clickPlan(page, 150, 400);
+  await expect(page.locator("#plan-2d .dimensions .measure")).toHaveText("90°");
+  await expect(page.locator("#panel")).toContainText("Angle");
+  await page.locator("#panel button", { hasText: "Other side" }).click();
+  await expect(page.locator("#plan-2d .dimensions .measure")).toHaveText("270°");
+
+  // Two walls: the panel and the plan show the angle between them.
+  await page.keyboard.press("v");
+  await page.keyboard.press("Escape");
+  await clickPlan(page, 300, 250);
+  await page.keyboard.down("Shift");
+  await clickPlan(page, 450, 375);
+  await page.keyboard.up("Shift");
+  await expect(page.locator("#panel")).toContainText("angle between the walls");
+  await expect(page.locator("#plan-2d .walls-angle .measure")).toHaveText("90°");
+
+  // One wall: the handle in its middle bends it, and the room grows.
+  await page.keyboard.press("Escape");
+  await clickPlan(page, 300, 250);
+  const handle = page.locator('#plan-2d [data-kind="wall-bend"]');
+  await expect(handle).toHaveCount(1);
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y - 60, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator("#panel")).toContainText("length of the arc");
+  await expect.poll(area).not.toBe(before);
+  await page.locator("#panel button", { hasText: "Make the wall straight" }).click();
+  await expect.poll(area).toBe(before);
+});

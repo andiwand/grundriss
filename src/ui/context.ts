@@ -37,6 +37,9 @@ export const HINTS: Record<Tool, string> = {
   dimension: t(
     "Click the two ends of the distance, then click where the dimension line goes. The ends snap to the corners and the faces of the walls. Shift: 45° steps. Alt: no snap.",
   ),
+  angle: t(
+    "Click the corner of the angle, then a point on each side. The points snap to the corners and the faces of the walls. Drag the arc to change its radius. Shift: 45° steps. Alt: no snap.",
+  ),
   stair: t(
     "Click the bottom of the stair, then the top of its run. The stair goes up to the next story.",
   ),

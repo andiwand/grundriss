@@ -11,7 +11,11 @@ import { fmt } from "../model/format";
 import { findFurniture, genericType } from "../model/furniture";
 import { distance } from "../model/geometry";
 import { summerOverheating } from "../model/overheating";
+import { wallsAngle } from "../model/angles";
+import { angleText, defaultAngleRadius, dimensionShape } from "../model/drawing";
+import { isCurved, maxBulge, wallCurve } from "../model/wallcurve";
 import {
+  addDimension,
   findChimney,
   findDimension,
   findOpening,
@@ -21,6 +25,7 @@ import {
   removeOpening,
   removeVertex,
   removeWall,
+  wallLength,
 } from "../model/plan";
 import { roomReadiness } from "../model/radiators";
 import {
@@ -51,6 +56,7 @@ import {
   runLength,
 } from "../model/services";
 import type {
+  Dimension,
   Id,
   Item,
   ItemKind,
@@ -61,6 +67,7 @@ import type {
   ServiceSystem,
   StairKind,
   Story,
+  Wall,
 } from "../model/types";
 import { $, app, cached, doc, editor, panel, shell, showStatus } from "./context";
 import { renderEnergyTopic } from "./energy";
@@ -326,6 +333,10 @@ function renderMany(items: Item[]): void {
   );
   paragraph(t("Drag the selection or use the arrow keys to move it."), "note");
   if (items.every((item) => item.kind === "wall")) {
+    wallsAngleFields(
+      doc.plan,
+      items.map((item) => item.id),
+    );
     directionFields(
       doc.plan,
       items.map((item) => item.id),
@@ -435,11 +446,49 @@ function alignButton(items: Item[]): void {
 function renderDimension(plan: Story, id: Id): void {
   const dimension = findDimension(plan, id);
   if (!dimension) return;
+  if (dimension.center) {
+    renderAngle(dimension, id);
+    return;
+  }
   heading(t("Dimension"), "dimension");
   stats([[`${fmt(distance(dimension.a, dimension.b), 3)} m`, t("length"), true]]);
   numberOf(t("Offset"), dimension, "offset", editOf(findDimension, id), { min: -1e6 });
   paragraph(t("Drag the dimension line to change its offset."), "note");
   deleteButton();
+}
+
+/** An angle dimension: the angle, the radius of the arc, and the other side of the angle. */
+function renderAngle(dimension: Dimension, id: Id): void {
+  const edit = editOf(findDimension, id);
+  heading(t("Angle"), "angle");
+  stats([[angleText(dimensionShape(dimension).degrees ?? 0), t("angle"), true]]);
+  numberOf(t("Radius"), dimension, "offset", edit, { min: 0.05 });
+  // The two sides change places, so the arc goes around the other side: 360° minus the angle.
+  button(t("Other side"), () => edit((d) => ([d.a, d.b] = [d.b, d.a])), { icon: "rotate" });
+  paragraph(t("Drag the arc to change its radius."), "note");
+  deleteButton();
+}
+
+/** The angle between two selected walls, and a button that keeps it as an angle dimension. */
+function wallsAngleFields(plan: Story, ids: Id[]): void {
+  if (ids.length !== 2) return;
+  const angle = wallsAngle(plan, ids[0], ids[1]);
+  if (!angle) return;
+  stats([[angleText(angle.degrees), t("angle between the walls"), true]]);
+  const { center, a, b } = angle;
+  if (!center) {
+    paragraph(t("The walls are parallel."), "note");
+    return;
+  }
+  button(
+    t("Add angle dimension"),
+    () => {
+      let id: Id = "";
+      doc.edit((p) => (id = addDimension(p, a, b, defaultAngleRadius(center, a, b), center).id));
+      editor.select({ kind: "dimension", id });
+    },
+    { icon: "angle" },
+  );
 }
 
 function renderRoom(plan: Story, id: Id): void {
@@ -1013,10 +1062,18 @@ function renderWall(plan: Story, id: Id): void {
   const edit = editOf(findWall, id);
   heading(t("Wall"), "wall");
   const rooms = findRooms(plan);
-  lengthFields(plan, [id], rooms);
-  directionFields(plan, [id]);
+  if (isCurved(wall)) curveFields(plan, wall, edit);
+  else {
+    lengthFields(plan, [id], rooms);
+    directionFields(plan, [id]);
+  }
   numberOf(t("Thickness"), wall, "thickness", edit);
   numberOf(t("Height"), wall, "height", edit);
+  if (!isCurved(wall)) {
+    button(t("Curve the wall"), () => edit((w) => (w.bulge = wallLength(plan, w) / 6)), {
+      icon: "curve",
+    });
+  }
   // The two parts stay selected, so that the panel shows the length of each part.
   button(
     t("Split into two walls"),
@@ -1073,6 +1130,36 @@ function renderWall(plan: Story, id: Id): void {
     remove: () => doc.edit((plan) => removeWall(plan, id)),
     removeText: t("Delete wall"),
   });
+}
+
+/**
+ * A curved wall: the length of the arc, the distance of its ends, and the bulge. The editor
+ * also bends the wall with the handle in the middle.
+ */
+function curveFields(plan: Story, wall: Wall, edit: Edit<Wall>): void {
+  const curve = wallCurve(plan, wall);
+  const chord = distance(curve.a, curve.b);
+  stats([
+    [`${fmt(curve.length, 3)} m`, t("length of the arc")],
+    [`${fmt(chord, 3)} m`, t("distance of the ends")],
+  ]);
+  if (curve.circle) {
+    stats([[`${fmt(curve.circle.radius, 3)} m`, t("radius of the center line"), true]]);
+  }
+  numberField(
+    t("Bulge"),
+    wall.bulge ?? 0,
+    (value) =>
+      edit((w) => (w.bulge = Math.max(-maxBulge(chord), Math.min(maxBulge(chord), value)))),
+    { min: -maxBulge(chord), max: maxBulge(chord) },
+  );
+  paragraph(
+    t(
+      "The bulge is the distance from the line between the ends to the middle of the wall. Drag the handle in the middle of the wall to bend it.",
+    ),
+    "note",
+  );
+  button(t("Make the wall straight"), () => edit((w) => delete w.bulge), { icon: "wall" });
 }
 
 function renderOpening(plan: Story, id: Id): void {

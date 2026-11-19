@@ -1634,6 +1634,19 @@ body.wide:not(.compact) #panel > section .field.stacked {
   opacity: 0.8;
 }
 
+/* The angle between two selected walls. */
+.walls-angle {
+  pointer-events: none;
+}
+
+.walls-angle line:not(.hit) {
+  stroke: var(--accent);
+}
+
+.walls-angle .measure {
+  fill: var(--accent);
+}
+
 .overlay .marquee {
   fill: var(--accent-soft);
   stroke: var(--accent);
@@ -2712,6 +2725,15 @@ body.compact .story-chip {
   stroke-width: 1;
   stroke-dasharray: 2 2;
   cursor: copy;
+}
+
+/* The handle in the middle of a selected wall that bends it into an arc. */
+.bend-handle .bend {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
 }
 
 /* A row of the table of the sides of a roof: the number, the kind, the pitch, the overhang. */
@@ -4482,6 +4504,7 @@ body.read-only #stories .add,
 body.read-only #empty-state,
 body.read-only #tool-done,
 body.read-only .roof-outline .insert,
+body.read-only .bend-handle,
 body.read-only #panel .actions:not(:has(button:not([hidden]))) {
   display: none !important;
 }

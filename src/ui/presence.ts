@@ -10,7 +10,9 @@ import { t } from "../i18n";
 import { icon } from "../icons";
 import type { Person, ServerClient } from "../io/server";
 import { findStory } from "../model/building";
+import { dimensionShape } from "../model/drawing";
 import { itemExists } from "../model/plan";
+import { curveOf } from "../model/wallcurve";
 import { findRooms } from "../model/rooms";
 import type { Id, Item, Plan, Point } from "../model/types";
 import { $, app, doc, editor, shell, showStatus, type Topic, type View, view3d } from "./context";
@@ -470,12 +472,11 @@ function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): voi
     const a = wall && vertex(wall.a);
     const b = wall && vertex(wall.b);
     if (wall && a && b) {
-      shape(layer, "line", {
+      // The center line of the wall, along the arc of a curved wall.
+      const curve = curveOf(a, b, wall.bulge ?? 0);
+      shape(layer, "polyline", {
         ...stroke,
-        x1: a.x,
-        y1: a.y,
-        x2: b.x,
-        y2: b.y,
+        points: pointList(curve.points(0, curve.length)),
         "stroke-width": wall.thickness + 10 / zoom,
       });
     }
@@ -528,7 +529,11 @@ function drawItem(layer: SVGGElement, plan: Plan, item: Item, zoom: number): voi
     }
   } else if (item.kind === "dimension") {
     const d = plan.dimensions.find((x) => x.id === item.id);
-    if (d) shape(layer, "line", { ...stroke, x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y });
+    // An angle dimension shows its arc.
+    if (d) {
+      const line = dimensionShape(d).segments.flatMap(([p, q], i) => (i === 0 ? [p, q] : [q]));
+      shape(layer, "polyline", { ...stroke, points: pointList(line) });
+    }
   } else if (item.kind === "area") {
     const area = plan.areas.find((x) => x.id === item.id);
     if (area) shape(layer, "polygon", { ...stroke, points: pointList(area.points) });

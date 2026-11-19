@@ -476,7 +476,7 @@ function pageContent(
   ops.push("0.184 0.420 1 RG 0.184 0.420 1 rg 0.4 w");
   for (const dimension of pageDimensions(plan, options)) {
     const shape = dimensionShape(dimension);
-    for (const [a, b] of [shape.line, ...shape.extensions, ...shape.ticks]) line(a, b);
+    for (const [a, b] of [...shape.segments, ...shape.extensions, ...shape.ticks]) line(a, b);
     // The text stands on the side of the line that is away from the measured points.
     const gap = (TEXT_SIZE * 0.8) / k;
     const at = {

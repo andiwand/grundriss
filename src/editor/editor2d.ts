@@ -11,6 +11,8 @@ import {
 } from "../model/building";
 import {
   chimneySymbol,
+  angleSweep,
+  defaultAngleRadius,
   dimensionShape,
   openingShape,
   planBounds,
@@ -110,6 +112,8 @@ import type {
   Point,
 } from "../model/types";
 import { wallFaces as faceExtents } from "../model/walljoin";
+import { bulgeThrough, isCurved, wallCurve } from "../model/wallcurve";
+import { wallsAngle } from "../model/angles";
 import { lineSide, wallLine, type WallLine } from "../model/wallsides";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -128,6 +132,7 @@ const TAP_TOOLS: Tool[] = [
   "window",
   "measure",
   "dimension",
+  "angle",
   "stair",
   "fixture",
   "run",
@@ -155,6 +160,8 @@ export type Tool =
   | "window"
   | "measure"
   | "dimension"
+  /** An angle dimension: the corner, then a point on each side. */
+  | "angle"
   | "stair"
   | "chimney"
   | "furniture"
@@ -185,6 +192,8 @@ type Drag =
   | { kind: "vertex"; id: Id; target: Snap | null }
   | { kind: "wall"; id: Id; startWorld: Point; origin: [Point, Point] }
   | { kind: "opening"; id: Id }
+  /** The handle in the middle of a wall bends it into an arc. */
+  | { kind: "bend"; id: Id }
   | { kind: "dimension"; id: Id }
   | { kind: "move"; startWorld: Point; origin: MoveOrigin }
   | { kind: "furniture"; id: Id; grab: Point }
@@ -769,10 +778,9 @@ export class Editor2D {
           continue;
         }
         // An opening moves along its wall. The component of `delta` along the wall moves it.
-        const [a, b] = wallEnds(plan, wall);
-        const length = distance(a, b);
-        if (length > 0) {
-          const wanted = opening.offset + dot(delta, scale(sub(b, a), 1 / length));
+        const curve = wallCurve(plan, wall);
+        if (curve.length > 0) {
+          const wanted = opening.offset + dot(delta, curve.tangent(opening.offset));
           opening.offset = freeOffset(plan, opening, wanted);
         }
       }
@@ -1045,6 +1053,7 @@ export class Editor2D {
         break;
       }
       case "dimension":
+      case "angle":
       case "stair":
         this.addMeasurePoint(world, e);
         break;
@@ -1145,6 +1154,13 @@ export class Editor2D {
    * box that selects the objects in it. A finger on a touch screen pans the plan.
    */
   private selectDown(e: PointerEvent, world: Point): void {
+    const bend =
+      e.target instanceof Element ? e.target.closest<SVGElement>('[data-kind="wall-bend"]') : null;
+    if (bend && !this.doc.readOnly) {
+      this.doc.begin();
+      this.drag = { kind: "bend", id: bend.dataset.id! };
+      return;
+    }
     // A "+" handle of the outline of a roof or an area adds a corner in the middle of its side,
     // and drags it.
     const insert =
@@ -1284,7 +1300,9 @@ export class Editor2D {
     if (!drag) {
       const snapping = ["wall", "stair", "chimney", "run"].includes(this.currentTool);
       // The third click of a dimension line sets its offset: that point does not snap.
-      const ends = this.currentTool === "dimension" && this.measure.length < 2;
+      const ends =
+        (this.currentTool === "dimension" && this.measure.length < 2) ||
+        this.currentTool === "angle";
       this.cursor =
         this.currentTool === "measure" || ends
           ? this.measureSnap(world, e)
@@ -1376,9 +1394,7 @@ export class Editor2D {
       case "opening":
         this.doc.update((plan) => {
           const opening = findOpening(plan, drag.id)!;
-          const [a, b] = wallEnds(plan, findWall(plan, opening.wallId)!);
-          const length = distance(a, b);
-          const along = closestOnSegment(world, a, b).t * length;
+          const along = wallCurve(plan, findWall(plan, opening.wallId)!).project(world);
           const offset = e.altKey ? along : Math.round(along / GRID_STEP) * GRID_STEP;
           opening.offset = freeOffset(plan, opening, offset);
         });
@@ -1424,10 +1440,22 @@ export class Editor2D {
           Object.assign(piece, this.placeAt(piece, sub(world, drag.grab), e.altKey));
         });
         break;
+      case "bend":
+        this.doc.update((plan) => {
+          const wall = findWall(plan, drag.id)!;
+          const [a, b] = wallEnds(plan, wall);
+          let bulge = bulgeThrough(a, b, world);
+          if (!e.altKey) bulge = Math.round(bulge / GRID_STEP) * GRID_STEP;
+          if (Math.abs(bulge) < 1e-9) delete wall.bulge;
+          else wall.bulge = bulge;
+        });
+        break;
       case "dimension":
         this.doc.update((plan) => {
           const dimension = findDimension(plan, drag.id)!;
-          dimension.offset = this.measureOffset(dimension.a, dimension.b, world, e.altKey);
+          dimension.offset = dimension.center
+            ? this.angleRadius(dimension.center, world, e.altKey)
+            : this.measureOffset(dimension.a, dimension.b, world, e.altKey);
         });
         break;
     }
@@ -1677,11 +1705,12 @@ export class Editor2D {
     if (best) return best;
     for (const wall of plan.walls) {
       if (exclude && (wall.a === exclude || wall.b === exclude)) continue;
-      const [a, b] = wallEnds(plan, wall);
-      const hit = closestOnSegment(world, a, b);
-      if (hit.distance < bestDistance) {
-        bestDistance = hit.distance;
-        best = { point: hit.point, wallId: wall.id };
+      const curve = wallCurve(plan, wall);
+      const point = curve.at(curve.project(world));
+      const d = distance(world, point);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = { point, wallId: wall.id };
       }
     }
     if (best) return best;
@@ -1762,9 +1791,11 @@ export class Editor2D {
    * it is. The dimension tool snaps to the grid where no wall is near.
    */
   private measureSnap(world: Point, keys: { altKey: boolean; shiftKey: boolean }): Snap {
-    const dimension = this.currentTool === "dimension";
+    const angle = this.currentTool === "angle";
+    const dimension = this.currentTool === "dimension" || angle;
     const points = dimension ? this.measure : this.ruler;
-    const start = points.length === 1 ? points[0] : undefined;
+    // The sides of an angle start at its corner, the first point.
+    const start = points.length === 1 || (angle && points.length > 0) ? points[0] : undefined;
     const free = (value: number) => value;
     const step = dimension ? (value: number) => Math.round(value / GRID_STEP) * GRID_STEP : free;
     if (start && keys.shiftKey)
@@ -1850,22 +1881,24 @@ export class Editor2D {
     if (this.rulerTargets?.plan !== plan) {
       const points: Point[] = [];
       const lines: [Point, Point][] = [];
+      /** The chords of a line along the wall: one for a straight wall, more on a curve. */
+      const chords = (line: Point[]) => {
+        for (let i = 1; i < line.length; i++) lines.push([line[i - 1], line[i]]);
+      };
       for (const wall of plan.walls) {
-        const [a, b] = wallEnds(plan, wall);
-        const length = distance(a, b);
-        if (length < 1e-9) continue;
-        const d = scale(sub(b, a), 1 / length);
-        const n = scale(perpendicular(d), wall.thickness / 2);
+        const curve = wallCurve(plan, wall);
+        if (curve.length < 1e-9) continue;
+        const half = wall.thickness / 2;
         const faces = faceExtents(plan, wall);
-        points.push({ x: a.x, y: a.y }, { x: b.x, y: b.y });
-        lines.push([a, b]);
+        points.push({ x: curve.a.x, y: curve.a.y }, { x: curve.b.x, y: curve.b.y });
+        chords(curve.points(0, curve.length));
         for (const [side, [from, to]] of [
           [1, faces.right],
           [-1, faces.left],
         ] as const) {
-          const face = (t: number) => add(add(a, scale(d, t)), scale(n, side));
-          points.push(face(from), face(to));
-          lines.push([face(from), face(to)]);
+          const face = curve.points(from, to, side * half);
+          points.push(face[0], face[face.length - 1]);
+          chords(face);
         }
       }
       this.rulerTargets = { plan, points, lines };
@@ -1882,8 +1915,39 @@ export class Editor2D {
     return free ? offset : Math.round(offset / GRID_STEP) * GRID_STEP;
   }
 
+  /** The radius of the arc of an angle dimension around `center` through the point `p`. */
+  private angleRadius(center: Point, p: Point, free: boolean): number {
+    const radius = Math.max(distance(center, p), GRID_STEP);
+    return free ? radius : Math.max(GRID_STEP, Math.round(radius / GRID_STEP) * GRID_STEP);
+  }
+
+  /**
+   * The angle tool: the corner, then a point on each side. It measures the angle that is not
+   * more than 180°; the panel can change it to the other side.
+   */
+  private addAnglePoint(world: Point, e: PointerEvent): void {
+    const point = this.measureSnap(world, e).point;
+    if (this.measure.some((p) => distance(p, point) < 1e-6)) return;
+    if (this.measure.length < 2) {
+      this.measure.push(point);
+      this.render();
+      return;
+    }
+    const [center, a] = this.measure;
+    const [from, to] = angleSweep(center, a, point) > Math.PI ? [point, a] : [a, point];
+    const radius = defaultAngleRadius(center, from, to);
+    let id: Id = "";
+    this.doc.edit((plan) => (id = addDimension(plan, from, to, radius, center).id));
+    this.measure = [];
+    this.select({ kind: "dimension", id });
+  }
+
   /** The dimension tool: a click on each end, and a third click that sets the offset. */
   private addMeasurePoint(world: Point, e: PointerEvent): void {
+    if (this.currentTool === "angle") {
+      this.addAnglePoint(world, e);
+      return;
+    }
     if (this.measure.length < 2) {
       const point = (
         this.currentTool === "dimension" ? this.measureSnap(world, e) : this.snap(world, e)
@@ -1917,14 +1981,14 @@ export class Editor2D {
     let id: Id = "";
     this.doc.edit((plan) => {
       const wall = findWall(plan, hit.wall.id)!;
-      const [a, b] = wallEnds(plan, wall);
-      const opening = addOpening(plan, wall.id, kind, hit.t * distance(a, b));
+      const curve = wallCurve(plan, wall);
+      const opening = addOpening(plan, wall.id, kind, hit.t * curve.length);
       // The opening goes to the nearest free place on the wall, so that it does not overlap
       // another opening.
       opening.offset = freeOffset(plan, opening, opening.offset);
       // A door opens to the side of the wall where the user clicked. A window opens into the
       // room, like most windows.
-      const side = perpendicular(sub(b, a));
+      const side = curve.normal(hit.t * curve.length);
       const clicked = dot(sub(world, hit.point), side) < 0 ? -1 : 1;
       opening.swing = kind === "window" ? (roomSide(plan, opening) ?? clicked) : clicked;
       if (kind === "window" && opening.width > WIDE_WINDOW) opening.leaves = 2;
@@ -1999,6 +2063,7 @@ export class Editor2D {
     this.renderRoof();
     this.renderTrees(plan);
     if (this.currentTool === "select" || this.currentTool === "wall") this.renderVertices(plan);
+    if (this.currentTool === "select") this.renderBendHandle(plan);
     for (const draw of this.overlays.values()) {
       draw(svg("g", { class: "extra" }, this.content), this.zoom);
     }
@@ -2668,15 +2733,44 @@ export class Editor2D {
   private drawDimension(parent: Element, shape: ReturnType<typeof dimensionShape>): void {
     const line = (p: Point, q: Point, className: string) =>
       svg("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: className }, parent);
-    const [p, q] = shape.line;
     // A wide line without color makes the dimension line easy to hit with the pointer.
-    line(p, q, "hit");
-    line(p, q, "main");
+    for (const [p, q] of shape.segments) line(p, q, "hit");
+    for (const [p, q] of shape.segments) line(p, q, "main");
     for (const [s, e] of shape.extensions) line(s, e, "extension");
     for (const [s, e] of shape.ticks) line(s, e, "tick");
     const at = add(shape.textAt, scale(shape.normal, 9 / this.zoom));
     const text = this.label(parent, at, shape.text, "measure");
     text.setAttribute("transform", `rotate(${shape.angle} ${at.x} ${at.y})`);
+  }
+
+  /**
+   * The handle in the middle of the one selected wall. A drag of it bends the wall into an arc
+   * through the pointer; a drag back onto the line makes it straight.
+   */
+  private renderBendHandle(plan: Plan): void {
+    if (this.doc.readOnly || this.items.length !== 1 || this.items[0].kind !== "wall") return;
+    const wall = findWall(plan, this.items[0].id);
+    if (!wall) return;
+    const curve = wallCurve(plan, wall);
+    if (curve.length * this.zoom < 40) return;
+    const middle = curve.at(curve.length / 2);
+    const group = svg("g", { class: "bend-handle" }, this.content);
+    svg(
+      "circle",
+      {
+        cx: middle.x,
+        cy: middle.y,
+        r: 6 / this.zoom,
+        class: "bend",
+        "data-kind": "wall-bend",
+        "data-id": wall.id,
+      },
+      group,
+    ).append(
+      Object.assign(document.createElementNS(SVG_NS, "title"), {
+        textContent: t("Drag to bend the wall"),
+      }),
+    );
   }
 
   private renderVertices(plan: Plan): void {
@@ -2705,11 +2799,38 @@ export class Editor2D {
       svg("circle", { cx: vertex.x, cy: vertex.y, r: 5 / this.zoom, class: "pinned" }, group);
     }
     if (this.items.length > 0 && this.items.every((item) => item.kind === "wall")) {
-      const line = wallLine(
-        plan,
-        this.items.map((item) => item.id),
-      );
-      if (line) this.drawLineLengths(group, plan, line);
+      const walls = this.items.map((item) => findWall(plan, item.id));
+      if (walls.some((wall) => wall && isCurved(wall))) {
+        // A curved wall shows the length of its arc beside its middle.
+        for (const wall of walls) {
+          if (!wall || !isCurved(wall)) continue;
+          const curve = wallCurve(plan, wall);
+          const s = curve.length / 2;
+          const away = Math.sign(wall.bulge ?? 1) * (wall.thickness / 2 + 18 / this.zoom);
+          this.label(group, curve.at(s, away), `${fmt(curve.length, 2)} m`, "dimension");
+        }
+      } else {
+        const line = wallLine(
+          plan,
+          this.items.map((item) => item.id),
+        );
+        if (line) this.drawLineLengths(group, plan, line);
+      }
+      // Two walls show the angle between them.
+      if (this.items.length === 2) {
+        const angle = wallsAngle(plan, this.items[0].id, this.items[1].id);
+        if (angle?.center) {
+          const { center, a, b } = angle;
+          const shape = dimensionShape({
+            id: "",
+            a,
+            b,
+            center,
+            offset: defaultAngleRadius(center, a, b),
+          });
+          this.drawDimension(svg("g", { class: "dimension-line walls-angle" }, group), shape);
+        }
+      }
     }
     if (this.drag?.kind === "marquee") {
       const { start, end } = this.drag;
@@ -2731,7 +2852,9 @@ export class Editor2D {
     // dimension still shows, so that the user sees where the next tap ends it.
     if (!this.cursor) {
       if (this.currentTool === "wall" && this.chain) marker(this.chain.point);
-      if (["stair", "dimension"].includes(this.currentTool)) this.measure.forEach((p) => marker(p));
+      if (["stair", "dimension", "angle"].includes(this.currentTool)) {
+        this.measure.forEach((p) => marker(p));
+      }
     }
     if (this.currentTool === "wall" && this.cursor) {
       const p = this.cursor.point;
@@ -2788,6 +2911,37 @@ export class Editor2D {
         const offset = cursor ? this.measureOffset(a, b, cursor.point, false) : 0;
         const preview = svg("g", { class: "dimension-line preview-dimension" }, group);
         this.drawDimension(preview, dimensionShape({ id: "", a, b, offset }));
+      }
+    }
+    if (this.currentTool === "angle") {
+      const cursor = this.cursor;
+      if (cursor) {
+        marker(
+          cursor.point,
+          cursor.on === "point" ? "on-vertex" : cursor.on === "line" ? "on-wall" : "",
+        );
+      }
+      for (const p of this.measure) marker(p);
+      const [center, a] = this.measure;
+      const end = cursor?.point;
+      for (const p of [a, end]) {
+        if (center && p) {
+          svg("line", { x1: center.x, y1: center.y, x2: p.x, y2: p.y, class: "preview" }, group);
+        }
+      }
+      if (center && a && end && distance(center, end) > 1e-9) {
+        const [from, to] = angleSweep(center, a, end) > Math.PI ? [end, a] : [a, end];
+        const preview = svg("g", { class: "dimension-line preview-dimension" }, group);
+        this.drawDimension(
+          preview,
+          dimensionShape({
+            id: "",
+            a: from,
+            b: to,
+            center,
+            offset: defaultAngleRadius(center, from, to),
+          }),
+        );
       }
     }
     if (this.currentTool === "fixture" && this.placingFixture && this.cursor) {

@@ -264,7 +264,7 @@ export function planToSvg(plan: Plan, options: SvgOptions = {}): string {
   );
   for (const dimension of plan.dimensions) {
     const shape = dimensionShape(dimension);
-    const segments = [shape.line, ...shape.extensions, ...shape.ticks];
+    const segments = [...shape.segments, ...shape.extensions, ...shape.ticks];
     for (const [s, e] of segments) {
       out.push(`<line x1="${n(s.x)}" y1="${n(s.y)}" x2="${n(e.x)}" y2="${n(e.y)}"/>`);
     }
