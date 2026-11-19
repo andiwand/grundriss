@@ -34,7 +34,7 @@ import type { Building } from "../model/types";
 import { $, app, doc, editor, shell, showStatus } from "./context";
 import { resetLocation } from "./energy";
 import { button, iconButton, textInput } from "./controls";
-import { dialog, note } from "./dialog";
+import { dialog, footer, note } from "./dialog";
 import { setSuggestions } from "./tracing";
 import { localSource, showVersions } from "./versions";
 
@@ -392,12 +392,27 @@ export function load(
  * goes away only after the user chose a file.
  */
 export async function openFile(): Promise<void> {
+  let name: string | null = null;
   try {
     const file = await openPlanFile();
-    if (file) await openFileData(file.bytes, file.name, file.handle);
+    if (!file) return;
+    name = file.name;
+    await openFileData(file.bytes, file.name, file.handle);
   } catch (error) {
-    showStatus(errorText(error), true);
+    showOpenError(name, error);
   }
+}
+
+/**
+ * Says in a dialog that a file did not open, and why. The status line alone is easy to miss, and
+ * the app stays on the page where the user was.
+ */
+export function showOpenError(name: string | null, error: unknown): void {
+  const { element, body } = dialog(t("The file did not open"));
+  if (name) note(body, t("{name} did not open.", { name }), "dialog-note strong");
+  note(body, errorText(error));
+  footer(element);
+  showStatus(errorText(error), true);
 }
 
 /**

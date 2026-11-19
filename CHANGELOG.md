@@ -16,6 +16,8 @@ The changes that a user notices.
   the `.yaml` file of **Save as**, and the files of a backup. The app
   still opens `.json` files and older packages and backups, and a `.json` file stays JSON when
   you save it again.
+- A file that does not open shows a dialog with the reason. Before, the reason was only in the
+  status line at the bottom, and it looked as if nothing happened.
 - Angles: the tool **Angle** (K) measures an angle with three clicks (the corner, then a point
   on each side) and keeps it on the plan as an arc with the degrees. Drag the arc to change its
   radius; **Other side** in the panel gives the angle on the other side. The exports draw it.

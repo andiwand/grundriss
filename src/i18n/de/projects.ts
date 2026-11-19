@@ -13,6 +13,8 @@ export const PROJECTS: Record<string, string> = {
 
   // Open a plan
   "Opened {name}.": "{name} geöffnet.",
+  "The file did not open": "Die Datei wurde nicht geöffnet",
+  "{name} did not open.": "{name} wurde nicht geöffnet.",
   "The project is not in the browser any more.": "Das Projekt ist nicht mehr im Browser.",
   "Example house": "Beispielhaus",
   "Opened the example house. A change saves it as a project in the browser.":

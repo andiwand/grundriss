@@ -36,6 +36,7 @@ import {
   projectName,
   renderHome,
   scheduleAutosave,
+  showOpenError,
   startProjects,
   storageOk,
   storeProject,
@@ -1332,7 +1333,7 @@ launchQueue?.setConsumer(async ({ files }) => {
     const file = await handle.getFile();
     await openFileData(new Uint8Array(await file.arrayBuffer()), file.name, handle);
   } catch (error) {
-    showStatus(errorText(error), true);
+    showOpenError(handle.name, error);
   }
 });
 

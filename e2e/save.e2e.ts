@@ -59,3 +59,22 @@ test("does not attach a completed save to another document", async ({ page }) =>
   await expect(page.locator("#file-title")).toHaveText("plan.grundriss");
   await expect(page.locator("#plan-2d .room-label")).toHaveCount(0);
 });
+
+test("says in a dialog why a file did not open", async ({ page }) => {
+  await openApp(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator(".start-row .project-start", { hasText: "Open a file" }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: "broken.grundriss",
+    mimeType: "application/zip",
+    buffer: Buffer.from("not a zip file"),
+  });
+  const dialog = page.locator("dialog.app-dialog", { hasText: "The file did not open" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("broken.grundriss did not open.");
+  await expect(dialog).toContainText("The file is not a Grundriss plan.");
+  await dialog.getByRole("button", { name: "Close" }).last().click();
+  await expect(dialog).toHaveCount(0);
+});
