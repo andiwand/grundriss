@@ -4,6 +4,8 @@ The changes that a user notices.
 
 ## Unreleased
 
+## 0.8.0 – 2026-11-19
+
 - The version of the app shows at the end of the home page and in the menu of the file name.
 - Fixes: a merge of walls keeps the doors and the windows in place also when the kept wall is
   not the first one of the line. A curved wall counts in the cost of a variant, keeps a radius
