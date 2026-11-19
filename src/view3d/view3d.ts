@@ -983,6 +983,11 @@ const ROOF_STEP = 0.05;
  * roof (ROOF_THICKNESS), so that the top of the wall and its lines do not show through the roof.
  */
 const ROOF_INSET = 0.1;
+/**
+ * A wall takes the height of a roof this far inside its faces. A roof against a wall of a higher
+ * story ends at the face of the wall (`againstWalls`), and the face is not under it.
+ */
+const FACE_INSET = 0.001;
 
 /** The materials of the colors of walls and roofs, by the color. */
 const colorMaterials = new Map<string, THREE.MeshStandardMaterial>();
@@ -1118,7 +1123,7 @@ function addWall(
   // The highest top of the wall at s: the wall height, or the roof over one of the faces.
   const limit = (s: number): number => {
     let top = height;
-    for (const o of [-half, half]) {
+    for (const o of [FACE_INSET - half, half - FACE_INSET]) {
       const z = ceiling(curve.at(s, o));
       if (z !== null) top = Math.min(top, z - base - ROOF_INSET);
     }

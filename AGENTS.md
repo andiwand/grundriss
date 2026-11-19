@@ -18,7 +18,9 @@ One document model is the single source of truth. The 2D editor and the 3D view 
 - A `Building` has stories, roofs, and the north direction. A roof has its own outline and a
   `RoofSide` for each side; `roofshape.ts` makes its faces without the building. The outline is
   on the center lines of the walls; `roofInput` in `roof.ts` moves it out to the outer face of
-  the walls, and the eaves go up to the floor of the story above. A `Story` is a `Plan` (the floor
+  the walls, and the eaves go up to the floor of the story above. A side against a wall of a
+  higher story, for example of a lean-to roof (`againstWalls`), moves in to the face of that wall
+  instead, so that the walls of that story stay out of the roof. A `Story` is a `Plan` (the floor
   plan of one story) with an id, a name, an elevation, and a height. Stairs and chimneys belong
   to the story where they start. A stair goes up to the next story. A chimney goes up through
   the stories above.

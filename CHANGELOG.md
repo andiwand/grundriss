@@ -4,6 +4,11 @@ The changes that a user notices.
 
 ## Unreleased
 
+- A roof of a lower story against a higher part of the house, for example a lean-to roof, ends
+  at the face of the wall of the higher part. Before, it went into that wall, and the 3D view
+  cut the walls of the higher story down to the roof. Put a point on the outline where the
+  higher part ends, so that the roof covers the walls of its own part there.
+
 ## 0.8.0 – 2026-11-19
 
 - The version of the app shows at the end of the home page and in the menu of the file name.

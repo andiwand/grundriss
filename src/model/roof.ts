@@ -9,7 +9,7 @@ import { findStory, storyAbove, wallTop } from "./building";
 import { DEFAULT_COLORS } from "./colors";
 import { closestOnSegment, intersectionArea, signedArea } from "./geometry";
 import { newId } from "./plan";
-import { wallCurve } from "./wallcurve";
+import { isCurved, wallCurve } from "./wallcurve";
 import { findRooms, planOutline, pointInPolygon } from "./rooms";
 import {
   presetSides,
@@ -18,7 +18,7 @@ import {
   type RoofInput,
   type Vec3,
 } from "./roofshape";
-import type { Building, Id, Point, Roof, RoofKind, Story } from "./types";
+import type { Building, Id, Point, Roof, RoofKind, RoofSide, Story } from "./types";
 
 export type { Vec3 } from "./roofshape";
 
@@ -36,35 +36,147 @@ export function roofBase(building: Building, story: Story): number {
 
 /**
  * The input of the engine for a roof of the building. The eaves are at `roofBase`, or at the
- * base of the roof if it has one. The outline of the roof is on the center lines of the walls, but a real roof sits on the outer
- * face of the walls. So the engine gets the outline moved out by half the thickness of the
- * thickest wall of the story. Else the outer half of each wall comes up through the roof.
+ * base of the roof if it has one. The outline of the roof is on the center lines of the walls,
+ * but a real roof sits on the outer face of the walls. So the engine gets each side moved out by
+ * half the thickness of the thickest wall of the story. Else the outer half of each wall comes up
+ * through the roof. A side against a wall of a higher story (`againstWalls`) moves in to the face
+ * of that wall instead, and has no overhang. Else the roof goes into that wall.
  */
 export function roofInput(building: Building, roof: Roof): RoofInput {
   const story = findStory(building, roof.storyId);
   const base = roof.base ?? (story ? roofBase(building, story) : 0);
   const thickness = story ? Math.max(0, ...story.walls.map((w) => w.thickness)) : 0;
-  const outline = offsetOutline(roof.outline, thickness / 2);
+  const n = roof.outline.length;
+  const against = story ? againstWalls(building, roof, story) : null;
+  const wall = (i: number) => against?.sides[((i % n) + n) % n] ?? 0;
+  const distances = roof.outline.map((_, i) => (wall(i) > 0 ? -wall(i) / 2 : thickness / 2));
+  // Where a side against a wall goes on in a side on the same line, the step between the two
+  // moved sides is at the outer face of the wall of the higher story that ends there.
+  const steps = roof.outline.map((_, i) => {
+    if (wall(i - 1) > 0 === wall(i) > 0) return 0;
+    const end = against?.ends[i] ?? 0;
+    return wall(i - 1) > 0 ? end : -end;
+  });
+  const { outline, from } = offsetSides(roof.outline, distances, steps);
+  const sides = from.map((j): RoofSide => {
+    if (j < 0) return { kind: "gable", pitch: 0, overhang: 0 };
+    const side = roof.sides[j];
+    return side && wall(j) > 0 ? { ...side, overhang: 0 } : side;
+  });
   // The offset of a dormer or a window counts from the start of its side on the center lines.
   // The moved side starts at another point, so the offset changes by the distance between them.
-  const n = roof.outline.length;
   const shift = <T extends { side: number; offset: number }>(item: T): T => {
     const a = roof.outline[item.side];
     const b = roof.outline[(item.side + 1) % n];
     const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
     if (length === 0) return item;
-    const moved = outline[item.side];
+    const index = from.indexOf(item.side);
+    const moved = outline[index];
     const delta = ((a.x - moved.x) * (b.x - a.x) + (a.y - moved.y) * (b.y - a.y)) / length;
-    return { ...item, offset: item.offset + delta };
+    return { ...item, side: index, offset: item.offset + delta };
   };
   return {
     outline,
-    sides: roof.sides,
+    sides,
     base,
     flat: roof.flat,
     dormers: roof.dormers.map(shift),
     windows: roof.windows.map(shift),
   };
+}
+
+/** A point of a wall closer than this to the line of a side of a roof is on that line. */
+const ON_SIDE = 0.02;
+
+/**
+ * The sides of a roof that are against a wall of a higher story, for example the side of a
+ * lean-to roof on the ground floor next to the part of the house with two stories. A side is
+ * against the walls of a story above if they cover at least half of the side, and the story is
+ * on the outer side of the side. A story above inside the roof, for example an attic, is not:
+ * the roof covers its walls.
+ *
+ * `sides[i]` is the thickness of the wall that side i is against, or 0. `ends[i]` is half the
+ * thickness of a wall of such a story that ends at point i across the outline, or 0: where a
+ * side against a wall goes on in a side on the same line, the roof steps at the outer face of
+ * that wall.
+ */
+export function againstWalls(
+  building: Building,
+  roof: Roof,
+  story: Story,
+): { sides: number[]; ends: number[] } {
+  const outline = roof.outline;
+  const n = outline.length;
+  const sides = new Array<number>(n).fill(0);
+  const ends = new Array<number>(n).fill(0);
+  if (n < 3) return { sides, ends };
+  const sign = signedArea(outline) >= 0 ? 1 : -1;
+  const walls: { a: Point; b: Point; thickness: number }[] = [];
+  for (const upper of building.stories) {
+    if (upper.elevation <= story.elevation + 1e-6) continue;
+    const footprint = planOutline(upper);
+    // A story over the roof, for example an attic, is under the roof.
+    if (!footprint || Math.abs(intersectionArea(footprint, outline)) >= 0.5) continue;
+    const straight = upper.walls
+      .filter((wall) => !isCurved(wall))
+      .map((wall) => {
+        const curve = wallCurve(upper, wall);
+        return { a: curve.at(0), b: curve.at(curve.length), thickness: wall.thickness };
+      });
+    for (let i = 0; i < n; i++) {
+      const a = outline[i];
+      const b = outline[(i + 1) % n];
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      if (length < 1e-6) continue;
+      const dir = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+      const out = { x: sign * dir.y, y: -sign * dir.x };
+      const across = (p: Point) => (p.x - a.x) * out.x + (p.y - a.y) * out.y;
+      const along = (p: Point) => (p.x - a.x) * dir.x + (p.y - a.y) * dir.y;
+      let covered = 0;
+      let thickness = 0;
+      let longest: { length: number; middle: number; thickness: number } | null = null;
+      for (const wall of straight) {
+        if (Math.abs(across(wall.a)) > ON_SIDE || Math.abs(across(wall.b)) > ON_SIDE) continue;
+        const s0 = Math.max(0, Math.min(along(wall.a), along(wall.b)));
+        const s1 = Math.min(length, Math.max(along(wall.a), along(wall.b)));
+        if (s1 - s0 < 1e-6) continue;
+        covered += s1 - s0;
+        thickness = Math.max(thickness, wall.thickness);
+        if (!longest || s1 - s0 > longest.length)
+          longest = { length: s1 - s0, middle: (s0 + s1) / 2, thickness: wall.thickness };
+      }
+      if (!longest || covered < length / 2) continue;
+      // The story must be on the outer side of the wall, not on the side of the roof.
+      const d = longest.thickness / 2 + 0.05;
+      const probe = {
+        x: a.x + longest.middle * dir.x + d * out.x,
+        y: a.y + longest.middle * dir.y + d * out.y,
+      };
+      if (!pointInPolygon(probe, footprint)) continue;
+      sides[i] = Math.max(sides[i], thickness);
+      walls.push(...straight);
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const before = sides[(i + n - 1) % n];
+    if (before > 0 === sides[i] > 0) continue;
+    const j = before > 0 ? (i + n - 1) % n : i;
+    const a = outline[j];
+    const b = outline[(j + 1) % n];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const p = outline[i];
+    for (const wall of walls) {
+      const at = [wall.a, wall.b].find((q) => Math.hypot(q.x - p.x, q.y - p.y) <= ON_SIDE);
+      const wallLength = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y);
+      if (!at || wallLength < 1e-6) continue;
+      // Only a wall across the side: a wall on the side ends at the step itself.
+      const cos =
+        ((wall.b.x - wall.a.x) * (b.x - a.x) + (wall.b.y - wall.a.y) * (b.y - a.y)) /
+        (wallLength * length);
+      if (Math.abs(cos) < 0.5) ends[i] = Math.max(ends[i], wall.thickness / 2);
+    }
+  }
+  return { sides, ends };
 }
 
 /**
@@ -365,30 +477,75 @@ export function storyBox(story: Story): Point[] | null {
  * sides meet. The polygon can go in either direction.
  */
 export function offsetOutline(points: Point[], d: number): Point[] {
+  if (points.length < 3 || d === 0) return points.map((p) => ({ ...p }));
+  return offsetSides(
+    points,
+    points.map(() => d),
+  ).outline;
+}
+
+/**
+ * The polygon with each side i moved out by `d[i]`, or in for a negative distance. Each corner
+ * goes to the point where the two moved sides meet. Where two sides on one line move by
+ * different distances, a short step joins them. `steps[i]` moves the step at point i along the
+ * line: toward side i for a positive distance, toward side i - 1 for a negative one. `from[k]`
+ * is the side of `points` that side k of `outline` comes from, or -1 for a step. The polygon can
+ * go in either direction.
+ */
+export function offsetSides(
+  points: Point[],
+  d: number[],
+  steps: number[] = [],
+): { outline: Point[]; from: number[] } {
   const n = points.length;
-  if (n < 3 || d === 0) return points.map((p) => ({ ...p }));
+  if (n < 3) return { outline: points.map((p) => ({ ...p })), from: points.map((_, i) => i) };
   const sign = signedArea(points) >= 0 ? 1 : -1;
-  // The outward normal of the side from i to i + 1. A side of zero length, for example from a
-  // repeated point, has no normal: the nearest side in the direction `step` gives it, so that
-  // both copies of a repeated point go to the same corner.
-  const normal = (i: number, step: 1 | -1): Point => {
+  // The outward normal and the direction of the side from i to i + 1. A side of zero length,
+  // for example from a repeated point, has none: the nearest side in the direction `step` gives
+  // them, so that both copies of a repeated point go to the same corner.
+  const side = (i: number, step: 1 | -1): { normal: Point; dir: Point; index: number } => {
     for (let k = 0; k < n; k++) {
       const j = (((i + step * k) % n) + n) % n;
       const p = points[j];
       const q = points[(j + 1) % n];
       const length = Math.hypot(q.x - p.x, q.y - p.y);
-      if (length > 1e-9)
-        return { x: (sign * (q.y - p.y)) / length, y: (sign * -(q.x - p.x)) / length };
+      if (length > 1e-9) {
+        const dir = { x: (q.x - p.x) / length, y: (q.y - p.y) / length };
+        return { normal: { x: sign * dir.y, y: -sign * dir.x }, dir, index: j };
+      }
     }
-    return { x: 0, y: 0 };
+    return { normal: { x: 0, y: 0 }, dir: { x: 0, y: 0 }, index: ((i % n) + n) % n };
   };
-  return points.map((p, i) => {
-    const n1 = normal(i - 1, -1);
-    const n2 = normal(i, 1);
+  const outline: Point[] = [];
+  const from: number[] = [];
+  points.forEach((p, i) => {
+    const s1 = side(i - 1, -1);
+    const s2 = side(i, 1);
+    const n1 = s1.normal;
+    const n2 = s2.normal;
+    const d1 = d[s1.index] ?? 0;
+    const d2 = d[s2.index] ?? 0;
     const cos = n1.x * n2.x + n1.y * n2.y;
-    // A spike (the sides go back on themselves) has no meeting point: use the first normal.
-    if (cos < -0.99) return { x: p.x + d * n1.x, y: p.y + d * n1.y };
-    const k = d / (1 + cos);
-    return { x: p.x + k * (n1.x + n2.x), y: p.y + k * (n1.y + n2.y) };
+    if (cos < -0.99) {
+      // A spike (the sides go back on themselves) has no meeting point: use the first normal.
+      outline.push({ x: p.x + d1 * n1.x, y: p.y + d1 * n1.y });
+    } else if (Math.abs(d1 - d2) < 1e-9) {
+      const k = d1 / (1 + cos);
+      outline.push({ x: p.x + k * (n1.x + n2.x), y: p.y + k * (n1.y + n2.y) });
+    } else if (cos > 1 - 1e-6) {
+      // Two sides on one line with different distances: a step joins them.
+      const shift = steps[i] ?? 0;
+      const q = { x: p.x + shift * s2.dir.x, y: p.y + shift * s2.dir.y };
+      outline.push({ x: q.x + d1 * n1.x, y: q.y + d1 * n1.y });
+      from.push(-1);
+      outline.push({ x: q.x + d2 * n2.x, y: q.y + d2 * n2.y });
+    } else {
+      // The point x with x · n1 = p · n1 + d1 and x · n2 = p · n2 + d2.
+      const a = (d1 - d2 * cos) / (1 - cos * cos);
+      const b = (d2 - d1 * cos) / (1 - cos * cos);
+      outline.push({ x: p.x + a * n1.x + b * n2.x, y: p.y + a * n1.y + b * n2.y });
+    }
+    from.push(i);
   });
+  return { outline, from };
 }

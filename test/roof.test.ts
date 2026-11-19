@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { addStoryOnTop, buildingTop, emptyBuilding } from "../src/model/building";
 import {
+  againstWalls,
   newRoof,
   offsetOutline,
+  offsetSides,
   roofCeiling,
   roofGeometryOf,
   roofBounds,
@@ -140,6 +142,103 @@ describe("roofs of a building", () => {
     // Both copies of a repeated point go to the same corner.
     const repeated = offsetOutline([square[0], ...square], 0.1);
     close(repeated, [expected[0], ...expected]);
+  });
+
+  it("moves each side by its own distance, with a step between two sides on one line", () => {
+    const close = (points: { x: number; y: number }[], want: { x: number; y: number }[]) => {
+      expect(points).toHaveLength(want.length);
+      points.forEach((p, i) => {
+        expect(p.x).toBeCloseTo(want[i].x);
+        expect(p.y).toBeCloseTo(want[i].y);
+      });
+    };
+    const square = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 4 },
+      { x: 0, y: 4 },
+    ];
+    // The side x = 0 (side 3) moves in by 0.1, the others out by 0.2.
+    const moved = offsetSides(square, [0.2, 0.2, 0.2, -0.1]);
+    close(moved.outline, [
+      { x: 0.1, y: -0.2 },
+      { x: 4.2, y: -0.2 },
+      { x: 4.2, y: 4.2 },
+      { x: 0.1, y: 4.2 },
+    ]);
+    expect(moved.from).toEqual([0, 1, 2, 3]);
+    // A point on the side x = 0 splits it in two sides on one line. The step at the point moves
+    // 0.3 toward side 4.
+    const split = offsetSides(
+      [...square, { x: 0, y: 2 }],
+      [0.2, 0.2, 0.2, -0.1, 0.2],
+      [0, 0, 0, 0, 0.3],
+    );
+    close(split.outline, [
+      { x: -0.2, y: -0.2 },
+      { x: 4.2, y: -0.2 },
+      { x: 4.2, y: 4.2 },
+      { x: 0.1, y: 4.2 },
+      { x: 0.1, y: 1.7 },
+      { x: -0.2, y: 1.7 },
+    ]);
+    expect(split.from).toEqual([0, 1, 2, 3, -1, 4]);
+  });
+
+  it("ends a lean-to roof at the face of the wall of the higher story next to it", () => {
+    // A house of 16 × 9 m. The upper story is 10 × 6 m in the corner at (0, 0). The lean-to roof
+    // on the ground floor is east of the upper story, and it goes south past its corner.
+    const building = boxHouse(16, 9, null);
+    const ground = building.stories[0];
+    const upper = addStoryOnTop(building);
+    upper.walls = [];
+    upper.vertices = [];
+    wallsAround(upper, [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 6 },
+      { x: 0, y: 6 },
+    ]);
+    const roof = { ...newRoof(building, ground, "shed")!, id: "lean-to" };
+    roof.outline = [
+      { x: 10, y: 0 },
+      { x: 16, y: 0 },
+      { x: 16, y: 9 },
+      { x: 10, y: 9 },
+      { x: 10, y: 6 },
+    ];
+    roof.sides = roof.outline.map(() => ({ kind: "gable", pitch: 15, overhang: 0.3 }));
+    roof.sides[1] = { kind: "eave", pitch: 15, overhang: 0.3 };
+    building.roofs.push(roof);
+    // Only the side x = 10 from y = 6 to y = 0 is against the upper story. The south wall of the
+    // upper story ends at its start, across it.
+    expect(againstWalls(building, roof, ground)).toEqual({
+      sides: [0, 0, 0, 0, 0.2],
+      ends: [0.1, 0, 0, 0, 0.1],
+    });
+    const ceiling = roofCeiling(building, upper);
+    // The faces of the east wall and of the south wall of the upper story are not under the roof.
+    expect(ceiling({ x: 10.099, y: 3 })).toBeNull();
+    expect(ceiling({ x: 10.05, y: 6.099 })).toBeNull();
+    // Next to them, the roof is there.
+    expect(ceiling({ x: 10.11, y: 3 })).not.toBeNull();
+    expect(ceiling({ x: 10.05, y: 6.11 })).not.toBeNull();
+    // South of the upper story, the roof covers the wall of the ground floor at x = 10.
+    expect(ceiling({ x: 9.95, y: 8 })).not.toBeNull();
+    // The side against the wall has no overhang, and the roof does not go under the upper story.
+    const geometry = roofGeometryOf(building, roof);
+    const north = geometry.eaves.filter((p) => p.y < 6);
+    expect(Math.min(...north.map((p) => p.x))).toBeCloseTo(10.1);
+  });
+
+  it("keeps an attic under the roof of the story below", () => {
+    const building = boxHouse(10, 6, "gable");
+    const ground = building.stories[0];
+    const attic = addStoryOnTop(building);
+    expect(againstWalls(building, building.roofs[0], ground).sides).toEqual([0, 0, 0, 0]);
+    // The walls of the attic are on the outline of the roof, and the roof covers them.
+    expect(roofCeiling(building, attic)({ x: 0.099, y: 3 })).not.toBeNull();
+    expect(roofCeiling(building, attic)({ x: 5, y: 0.099 })).not.toBeNull();
   });
 
   it("puts a dormer at its offset from the start of its side on the center lines", () => {
